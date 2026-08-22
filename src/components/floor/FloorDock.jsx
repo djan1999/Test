@@ -1,6 +1,7 @@
 import { tokens } from "../../styles/tokens.js";
 import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
 import { kitchenSnapshot, kitchenDelta, mergeKitchenAlert } from "../../utils/kitchenAlerts.js";
+import { groupDrinks, qtySuffix } from "../../utils/drinkQuantities.js";
 import { restrictionCode } from "./FloorMap.jsx";
 
 const FONT = tokens.font;
@@ -57,6 +58,10 @@ export default function FloorDock({
   assignments = {},
   optionalExtras = [],
   optionalPairings = [],
+  selectedSeat = null,      // chair tap → this guest's board seat (resolved by caller)
+  selectedSeatNo = null,    // the tapped chair's floor position (card shows even
+                            // when no board seat backs it yet)
+  onClearSeat,              // () => back from the guest card to the table view
   onToggleStrip,            // () => flip this label's SET strip (leftover cleanup)
   onAnnounce,               // () => SET → KITCHEN for this board table (may be undefined)
   onUnannounce,             // () => clear the kitchen banner + strip
@@ -161,6 +166,67 @@ export default function FloorDock({
           <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: "0.10em", textTransform: "uppercase", color: tokens.ink[3] }}>×{bt.guests}</span>
         ) : null}
       </div>
+
+      {/* guest card — a chair tap opens the tapped position's quick-access
+          picture: gender, water, pairing, aperitifs, extras, restrictions.
+          Read-only here; edits stay on the board card / details sheet. */}
+      {live && selectedSeatNo != null && (
+        <div style={{ padding: "10px 12px", borderBottom: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[50] }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+            <span style={{ ...lbl, color: tokens.ink[1], fontWeight: 700 }}>
+              [GUEST · P{selectedSeat ? selectedSeat.id : selectedSeatNo}{selectedSeat?.gender === "Mr" ? " — MR" : selectedSeat?.gender === "Mrs" ? " — MRS" : ""}]
+            </span>
+            <span style={{ flex: 1 }} />
+            {onClearSeat && (
+              <button onClick={() => onClearSeat()} aria-label="Close guest card" style={{
+                fontFamily: FONT, fontSize: 10, fontWeight: 700, lineHeight: 1, padding: "4px 8px",
+                border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, background: tokens.neutral[0],
+                color: tokens.ink[2], cursor: "pointer", touchAction: "manipulation",
+              }}>✕</button>
+            )}
+          </div>
+          {!selectedSeat ? (
+            <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: "0.10em", textTransform: "uppercase", color: tokens.ink[3] }}>
+              NO GUEST DATA AT THIS CHAIR YET
+            </div>
+          ) : (() => {
+            const water = selectedSeat.water && selectedSeat.water !== "—" ? String(selectedSeat.water).toUpperCase() : null;
+            const pairing = selectedSeat.pairing && selectedSeat.pairing !== "—" ? String(selectedSeat.pairing).toUpperCase() : null;
+            const shared = selectedSeat.pairingSharedWith != null ? ` ½P${selectedSeat.pairingSharedWith}` : "";
+            const aps = groupDrinks(selectedSeat.aperitifs)
+              .map(({ item, qty }) => `${String(item?.name || "?").toUpperCase()}${qtySuffix(qty)}`);
+            const seatExtras = (optionalExtras || [])
+              .filter((d) => !!(selectedSeat.extras?.[d.key] || selectedSeat.extras?.[d.id])?.ordered)
+              .map((d) => String(d.name).toUpperCase());
+            const seatRestr = restr.filter((r) => Number(r.pos) === Number(selectedSeat.id) && r.note);
+            const guestRow = (label, value) => (
+              <div style={{ display: "flex", gap: 8, alignItems: "baseline", padding: "2px 0" }}>
+                <span style={{ ...lbl, minWidth: 56 }}>{label}</span>
+                <span style={{ fontFamily: FONT, fontSize: 10, color: value ? tokens.ink[1] : tokens.ink[4], textTransform: "uppercase" }}>
+                  {value || "—"}
+                </span>
+              </div>
+            );
+            return (
+              <div>
+                {guestRow("WATER", water)}
+                {guestRow("PAIRING", pairing ? pairing + shared : null)}
+                {guestRow("APERITIF", aps.length ? aps.join(" · ") : null)}
+                {guestRow("EXTRAS", seatExtras.length ? seatExtras.join(" · ") : null)}
+                {seatRestr.length > 0 && (
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: "3px 0 0" }}>
+                    {seatRestr.map((r, k) => (
+                      <span key={k} style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, color: tokens.signal.alert }}>
+                        [{restrictionCode(r.note)}]
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
 
       {!live ? (
         <div>
