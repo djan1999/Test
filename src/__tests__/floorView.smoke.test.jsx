@@ -108,25 +108,21 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(within(dock).queryByText("SET")).toBeNull(); // the old strip SET is gone
   });
 
-  it("terrace tab: occupied sheet shows waters by position (no name) + MOVE; free table assigns", () => {
-    const { container, handlers, getByText } = setup();
+  it("terrace tap: ONE surface — the dock carries the party actions, no sheet (22.08)", () => {
+    const { container, handlers, getByText, queryByText } = setup();
     fireEvent.click(getByText("TERRACE"));
     expect(container.textContent).not.toContain("WEISS"); // no names on the floor
     expect(container.textContent).toContain("T9");        // the party's identity = its dining table
     expect(container.textContent).toContain("XC");        // the party's seat notes travel to the terrace table
     expect(container.textContent).not.toContain("LAST BITE"); // retired concept — stamp on r1 renders nothing
     fireEvent.click(findTable(container, "T23"));
-    expect(container.textContent).toContain("×4");        // pax lives in the sheet header
-    // the sheet: waters by seat position + pairings, reservation name omitted
-    // (the ✕ close button anchors the sheet — "P1" now also lives in the dock)
-    const sheet = getByText("✕").parentElement.parentElement;
-    expect(sheet.textContent).toContain("XC");
-    expect(sheet.textContent).toContain("Non-Alc");
-    expect(sheet.textContent).toContain("P2");
-    expect(sheet.textContent).not.toContain("WEISS");
-    fireEvent.click(getByText(/MOVE TO T9/));
+    expect(queryByText("✕")).toBeNull();                  // the old bottom sheet is gone
+    const dock = getByText("[TABLE DOCK]").parentElement;
+    expect(dock.textContent).toContain("×4");             // pax in the dock header
+    expect(dock.textContent).not.toContain("WEISS");
+    fireEvent.click(within(dock).getByText(/MOVE TO T9/));
     expect(handlers.onMove).toHaveBeenCalledWith(reservations[0]);
-    // free table → booked-party picker (MURN waits, HORVAT is mid-move)
+    // free table → the assign picker in the dock (MURN waits, HORVAT is mid-move)
     fireEvent.click(findTable(container, "T21"));
     fireEvent.click(getByText(/MURN ×2/));
     expect(handlers.onAssign).toHaveBeenCalledWith(reservations[1], "T21");
@@ -145,17 +141,28 @@ describe("FloorView (FOH FLOOR surface)", () => {
 });
 
 describe("terrace CHANGE TABLE (re-seat on the terrace)", () => {
-  it("occupied sheet arms the move; tapping a free table re-assigns, occupied tables refuse", () => {
+  it("dock CHANGE TABLE arms the move; a free table re-seats, the party's OWN table refuses", () => {
     const { container, handlers, getByText } = setup();
     fireEvent.click(getByText("TERRACE"));
-    fireEvent.click(findTable(container, "T23")); // WEISS's table
+    fireEvent.click(findTable(container, "T23")); // WEISS's table → dock
     fireEvent.click(getByText("CHANGE TABLE"));
-    expect(container.textContent).toContain("TAP A FREE TABLE FOR WEISS ×4");
-    fireEvent.click(findTable(container, "T23")); // still occupied — refused
+    expect(container.textContent).toContain("TAP A TABLE FOR WEISS ×4");
+    fireEvent.click(findTable(container, "T23")); // its own table — nothing to swap with
     expect(handlers.onAssign).not.toHaveBeenCalled();
     fireEvent.click(findTable(container, "T25")); // free → re-seat
     expect(handlers.onAssign).toHaveBeenCalledWith(reservations[0], "T25");
-    expect(container.textContent).not.toContain("TAP A FREE TABLE");
+    expect(container.textContent).not.toContain("TAP A TABLE FOR");
+  });
+
+  it("CHANGE TABLE onto an OCCUPIED table swaps the two parties (22.08)", () => {
+    const { container, handlers, getByText } = setup();
+    fireEvent.click(getByText("TERRACE"));
+    fireEvent.click(findTable(container, "T23")); // WEISS (on T23)
+    fireEvent.click(getByText("CHANGE TABLE"));
+    fireEvent.click(findTable(container, "T24")); // HORVAT's table → swap, not refuse
+    expect(handlers.onAssign).toHaveBeenCalledWith(reservations[0], "T24");
+    expect(handlers.onAssign).toHaveBeenCalledWith(reservations[2], "T23");
+    expect(container.textContent).not.toContain("TAP A TABLE FOR");
   });
 
   it("CANCEL disarms without assigning", () => {
@@ -165,7 +172,7 @@ describe("terrace CHANGE TABLE (re-seat on the terrace)", () => {
     fireEvent.click(getByText("CHANGE TABLE"));
     fireEvent.click(getByText("CANCEL"));
     fireEvent.click(findTable(container, "T25"));
-    expect(handlers.onAssign).not.toHaveBeenCalled(); // free-table tap = plain sheet again
+    expect(handlers.onAssign).not.toHaveBeenCalled(); // free-table tap = plain dock select again
   });
 });
 
@@ -178,7 +185,11 @@ describe("stranded terrace parties (no reachable tile)", () => {
     fireEvent.click(getByText(/MOVE TO T6/));
     expect(handlers.onMove).toHaveBeenCalledWith(stranded);
     fireEvent.click(getByText("CHANGE TABLE"));
-    expect(container.textContent).toContain("TAP A FREE TABLE FOR ZUPAN ×3");
+    expect(container.textContent).toContain("TAP A TABLE FOR ZUPAN ×3");
+    // a stranded party has no live tile to hand the other party — occupied
+    // stays refused for them, never a swap
+    fireEvent.click(findTable(container, "T23"));
+    expect(handlers.onAssign).not.toHaveBeenCalled();
     fireEvent.click(findTable(container, "T25")); // free tile → re-assign
     expect(handlers.onAssign).toHaveBeenCalledWith(stranded, "T25");
   });
@@ -198,45 +209,52 @@ describe("stranded terrace parties (no reachable tile)", () => {
   });
 });
 
-describe("terrace SET → KITCHEN (same handshake as the dining room)", () => {
-  it("an occupied party's sheet sends SET for the next course AND turns the strip on", () => {
+describe("terrace SET → KITCHEN (same handshake as the dining room, from the dock)", () => {
+  const MENU = [
+    { position: 1, course_key: "amuse", menu: { name: "Amuse" }, is_active: true, is_snack: false, optional_flag: "", course_category: "main" },
+  ];
+
+  it("the dock's set button announces the party's next course AND turns the strip on", () => {
     const onSend = vi.fn();
-    const { container, handlers, getByText } = setup({ onSendSetToKitchen: onSend });
+    const { container, handlers, getByText } = setup({ menuCourses: MENU, onSendSetToKitchen: onSend });
     fireEvent.click(getByText("TERRACE"));
-    fireEvent.click(findTable(container, "T23")); // WEISS's table
-    getByText(/MOVE TO T9/); // still the party sheet…
-    fireEvent.click(getByText("SET → KITCHEN"));
-    // …and SET informs the kitchen: the party's board table (T9) gets the
+    fireEvent.click(findTable(container, "T23")); // WEISS's table → dock
+    fireEvent.click(getByText(/SET → KITCHEN · Amuse/));
+    // SET informs the kitchen: the party's board table (T9) gets the
     // courseReady handshake, exactly like a dining SEND
     expect(onSend).toHaveBeenCalledWith([9]);
     expect(handlers.onCycleStatus).toHaveBeenCalledWith("terrace_main", "T23");
     expect(container.textContent).toContain("SET → KITCHEN ✓");
   });
 
-  it("an already-SET party offers UNSET instead — no double-send", () => {
+  it("an announced party's button reads UNSET — it clears, never double-sends", () => {
     const onSend = vi.fn();
+    const onUnsetKitchen = vi.fn();
+    const announced = tables.map((t) =>
+      t.id === 9 ? { ...t, courseReady: { key: "amuse", index: 1, name: "Amuse" } } : t);
     const { container, handlers, getByText, queryByText } = setup({
       floorStatus: { terrace_main: { T23: "SET" } },
+      tables: announced,
+      menuCourses: MENU,
       onSendSetToKitchen: onSend,
+      onUnsetKitchen,
     });
     fireEvent.click(getByText("TERRACE"));
-    expect(container.textContent).toContain("SET"); // strip on the T23 tile
     fireEvent.click(findTable(container, "T23"));
-    expect(queryByText("SET → KITCHEN")).toBeNull();
-    // the dock behind the scrim carries its own UNSET — press the sheet's
-    const sheet = getByText("✕").parentElement.parentElement;
-    fireEvent.click(within(sheet).getByText("UNSET"));
+    expect(queryByText(/SET → KITCHEN ·/)).toBeNull(); // no second set press
+    fireEvent.click(getByText(/UNSET · Amuse/));
+    expect(onUnsetKitchen).toHaveBeenCalledWith(9);
     expect(handlers.onCycleStatus).toHaveBeenCalledWith("terrace_main", "T23");
     expect(onSend).not.toHaveBeenCalled();
   });
 
-  it("a free terrace table has NO set control ('set for bites' is retired)", () => {
-    const { container, getByText, queryByText } = setup({ onSendSetToKitchen: vi.fn() });
+  it("a free terrace table has NO set control — its dock is the assign picker", () => {
+    const { container, getByText, queryByText } = setup({ menuCourses: MENU, onSendSetToKitchen: vi.fn() });
     fireEvent.click(getByText("TERRACE"));
     fireEvent.click(findTable(container, "T25")); // free
-    getByText("ASSIGN PARTY"); // the sheet is purely the assign picker
+    getByText("[ASSIGN PARTY]");
     expect(queryByText("SET FOR BITES")).toBeNull();
-    expect(queryByText("SET → KITCHEN")).toBeNull();
+    expect(queryByText(/SET → KITCHEN ·/)).toBeNull();
   });
 
   it("a leftover strip on a now-free table still offers UNSET so it can't get stuck", () => {
@@ -246,9 +264,7 @@ describe("terrace SET → KITCHEN (same handshake as the dining room)", () => {
     });
     fireEvent.click(getByText("TERRACE"));
     fireEvent.click(findTable(container, "T25"));
-    // the sheet's UNSET (the dock offers its own for the same leftover strip)
-    const sheet = getByText("✕").parentElement.parentElement;
-    fireEvent.click(within(sheet).getByText("UNSET"));
+    fireEvent.click(getByText("UNSET")); // the dock's cleanup — the one surface
     expect(handlers.onCycleStatus).toHaveBeenCalledWith("terrace_main", "T25");
   });
 });
@@ -550,33 +566,24 @@ describe("FOH table dock (quick access beside the map)", () => {
     expect(upd.mock.calls.find((c) => c[1] === "kitchenSent")).toBeTruthy();
   });
 
-  it("a chair tap opens that guest's quick-access picture in the dock (22.08)", () => {
-    const EXTRAS = [{ key: "cheese", id: "cheese", name: "Cheese", pairings: ["—"] }];
-    const withGuest = tables.map((t) => t.id === 1 ? {
-      ...t,
-      restrictions: [{ pos: 1, note: "gluten" }],
-      seats: [
-        { id: 1, water: "XC", pairing: "Wine", gender: "Mrs",
-          aperitifs: [{ name: "Negroni" }, { name: "Negroni" }],
-          extras: { cheese: { ordered: true, pairing: "—" } }, floorPositions: {} },
-        { id: 2, water: "—", pairing: "", floorPositions: {} },
-      ],
-    } : t);
-    const { container, handlers, getByText } = setup({ tables: withGuest, menuCourses, optionalExtras: EXTRAS });
-    const seat = findTable(container, "T1").querySelector('[data-seat="0"]');
-    fireEvent.click(seat);
-    // the chair tap selects the GUEST — it neither toggles nor reads as a table tap
+  it("a chair tap opens the board's QUICK ACCESS card in a side panel (22.08)", () => {
+    const upd = vi.fn();
+    const { container, handlers, getByText, queryByText } = setup({
+      tables: withFired, menuCourses, upd, updSeat: vi.fn(),
+    });
+    fireEvent.click(findTable(container, "T1").querySelector('[data-seat="0"]'));
+    // the chair tap selects — it neither toggles nor reads as a table tap
     expect(handlers.onCycleStatus).not.toHaveBeenCalled();
-    const dock = dockOf(getByText);
-    expect(dock.textContent).toContain("[GUEST · P1 — MRS]");
-    expect(dock.textContent).toContain("XC");
-    expect(dock.textContent).toContain("WINE");
-    expect(dock.textContent).toMatch(/NEGRONI\s*×2/);
-    expect(dock.textContent).toContain("CHEESE");
-    expect(dock.textContent).toContain("[GLU]");
-    // a table-body tap returns the dock to the table view
+    getByText("[QUICK ACCESS · T1]");
+    // the REAL board card renders in the panel — same editor as board mode
+    expect(container.textContent).toContain("NOVAK");
+    // ✕ closes it; the dock stays on the table
+    fireEvent.click(getByText("✕"));
+    expect(queryByText("[QUICK ACCESS · T1]")).toBeNull();
+    expect(dockOf(getByText).textContent).toContain("T1");
+    // a table-body tap never opens it
     fireEvent.click(findTable(container, "T1"));
-    expect(dockOf(getByText).textContent).not.toContain("[GUEST");
+    expect(queryByText("[QUICK ACCESS · T1]")).toBeNull();
   });
 
   it("the terrace dock follows the tapped party too — same info on both floors", () => {

@@ -479,7 +479,7 @@ describe("app harness — terrace floor view through the real App", () => {
     // a RETURN with the party's dining table, never as a bare waiting party
     // (the double-seat hazard the old rule guarded stays covered by the mark).
     fireEvent.click(findSvgTable(container, "T24"));
-    await screen.findByText("ASSIGN PARTY", {}, { timeout: 5000 });
+    await screen.findByText("[ASSIGN PARTY]", {}, { timeout: 5000 }); // the picker lives in the dock now
     const entry = screen.getByText(/^Bruno Harness ×3/); // exact case: the uppercase assign FLASH may linger — only the picker entry matters
     expect(entry.textContent).toContain("↩");
     expect(entry.textContent).toContain("T2-3"); // his dining table, via the label fallback
