@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
 import { kitchenSnapshot, kitchenDelta, mergeKitchenAlert } from "../../utils/kitchenAlerts.js";
+import { fmt } from "../../utils/tableHelpers.js";
 import { restrictionCode } from "./FloorMap.jsx";
 
 const FONT = tokens.font;
@@ -66,12 +68,24 @@ export default function FloorDock({
   onOpenDetail,             // (boardId) => raise the board's table sheet
   upd,                      // (boardId, field, value|updater) — extras + alert writes
   isMobile = false,
+  wide = false,             // fullscreen: the dock takes the extra pixels —
+                            // larger type, taller list, roomier buttons
 }) {
   const bt = boardTable;
   const live = !!bt?.active || (mapKind === "terrace" && !!bt);
 
+  // The dock's own last fire, for UNDO — same contract as the kitchen
+  // ticket's lastActionRef: undo puts the ticket back exactly as it stood,
+  // consumed SET included. State (not a ref): the UNDO button must appear
+  // the moment the fire is pressed, not on the next upstream re-render.
+  const [lastFire, setLastFire] = useState(null); // { boardId, key, clearedSet }
+
+  const pad = wide ? "12px 14px" : "10px 12px";
+  const padTight = wide ? "10px 14px" : "8px 12px";
+
   const box = (children) => (
-    <div style={{ width: isMobile ? "100%" : 260, flexShrink: 0 }}>
+    // the caller's column owns the width (260 normal, wider in fullscreen)
+    <div style={{ width: "100%" }}>
       <div style={{ ...lbl, marginBottom: 6 }}>[TABLE DOCK]</div>
       <div style={{ background: tokens.neutral[0], border: `1px solid ${tokens.ink[4]}` }}>
         {children}
@@ -136,6 +150,33 @@ export default function FloorDock({
     }));
   };
 
+  // FIRE / UNDO from the floor — the kitchen ticket's semantics exactly
+  // (KitchenBoard fire/unfire): functional kitchenLog update, firing the
+  // course the SET asked for clears the banner (the strip then self-clears
+  // via App's courseReady-resolve watcher), and UNDO restores both. Here the
+  // SET button stays the big one and FIRE the small one — the kitchen's
+  // proportions, inverted, because on the floor SET is the frequent gesture.
+  const fireNext = () => {
+    if (!upd || !bt || !nextFire) return;
+    const key = nextFire.key;
+    upd(bt.id, "kitchenLog", (prev) => ({ ...(prev || {}), [key]: { firedAt: fmt(new Date()) } }));
+    const clearedSet = bt.courseReady?.key === key ? bt.courseReady : null;
+    if (clearedSet) upd(bt.id, "courseReady", null);
+    setLastFire({ boardId: bt.id, key, clearedSet });
+  };
+  const canUndo = !!(upd && bt && lastFire && lastFire.boardId === bt.id);
+  const undoFire = () => {
+    if (!canUndo) return;
+    const last = lastFire;
+    upd(bt.id, "kitchenLog", (prev) => {
+      const next = { ...(prev || {}) };
+      delete next[last.key];
+      return next;
+    });
+    if (last.clearedSet) upd(bt.id, "courseReady", last.clearedSet);
+    setLastFire(null);
+  };
+
   const status = strip === "SET" ? "SET"
     : announced ? "ANNOUNCED"
     : bt?.active ? "SEATED"
@@ -151,8 +192,8 @@ export default function FloorDock({
   return box(
     <>
       {/* header */}
-      <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "10px 12px", borderBottom: `1px solid ${tokens.ink[4]}` }}>
-        <span style={{ fontFamily: FONT, fontSize: 16, fontWeight: 700, letterSpacing: "0.08em", color: tokens.ink[0] }}>{label}</span>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: pad, borderBottom: `1px solid ${tokens.ink[4]}` }}>
+        <span style={{ fontFamily: FONT, fontSize: wide ? 18 : 16, fontWeight: 700, letterSpacing: "0.08em", color: tokens.ink[0] }}>{label}</span>
         <span style={{
           fontFamily: FONT, fontSize: 8, fontWeight: 700, letterSpacing: "0.12em",
           textTransform: "uppercase", color: statusTone,
@@ -202,7 +243,7 @@ export default function FloorDock({
       ) : (
         <>
           {/* course readout */}
-          <div style={{ padding: "10px 12px", borderBottom: `1px solid ${tokens.ink[5]}` }}>
+          <div style={{ padding: pad, borderBottom: `1px solid ${tokens.ink[5]}` }}>
             <div style={{ ...lbl, marginBottom: 6 }}>
               [COURSE{total ? ` · C${firedCount}/${total}` : ""}]
             </div>
@@ -247,24 +288,40 @@ export default function FloorDock({
             </div>
           </div>
 
-          {/* actions — never below the fold; ONE set button, dish name on it */}
-          <div style={{ padding: "10px 12px", borderBottom: `1px solid ${tokens.ink[5]}` }}>
+          {/* actions — never below the fold; ONE set button, dish name on it.
+              SET big, FIRE small (the kitchen's proportions, inverted). */}
+          <div style={{ padding: pad, borderBottom: `1px solid ${tokens.ink[5]}` }}>
             {(onAnnounce || onUnannounce) && (
               announced ? (
                 <button
                   onClick={() => onUnannounce && onUnannounce()}
                   disabled={!onUnannounce}
-                  style={{ ...actionBtn(false, !onUnannounce), display: "block", width: "100%", textAlign: "center", fontWeight: 700, marginBottom: 6 }}
+                  style={{ ...actionBtn(false, !onUnannounce), ...(wide ? { fontSize: 10, padding: "12px 12px" } : {}), display: "block", width: "100%", textAlign: "center", fontWeight: 700, marginBottom: 6 }}
                 >UNSET · {nextFire?.name || ""}</button>
               ) : (
                 <button
                   disabled={!onAnnounce || !nextFire}
                   onClick={() => onAnnounce && onAnnounce()}
-                  style={{ ...actionBtn(true, !onAnnounce || !nextFire), display: "block", width: "100%", textAlign: "center", marginBottom: 6 }}
+                  style={{ ...actionBtn(true, !onAnnounce || !nextFire), ...(wide ? { fontSize: 10, padding: "12px 12px" } : {}), display: "block", width: "100%", textAlign: "center", marginBottom: 6 }}
                 >
                   {!nextFire ? "MENU COMPLETE" : `SET → KITCHEN · ${nextFire.name}`}
                 </button>
               )
+            )}
+            {upd && (
+              <div style={{ display: "flex", gap: 0, marginBottom: 6 }}>
+                <button
+                  disabled={!nextFire}
+                  onClick={fireNext}
+                  style={{ ...actionBtn(false, !nextFire), flex: 1, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                >{nextFire ? `FIRE · ${nextFire.name}` : "FIRE"}</button>
+                {canUndo && (
+                  <button onClick={undoFire}
+                    style={{ ...actionBtn(false, false), textAlign: "center", marginLeft: -1, color: tokens.signal.warn, borderColor: tokens.signal.warn }}>
+                    UNDO
+                  </button>
+                )}
+              </div>
             )}
             {onOpenDetail && bt && (
               <button onClick={() => onOpenDetail(bt.id)} style={{ ...actionBtn(false, false), display: "block", width: "100%", textAlign: "center" }}>DETAILS →</button>
@@ -296,9 +353,12 @@ export default function FloorDock({
             )}
           </div>
 
-          {/* full course list — the one scrolling region */}
-          {visible.length > 0 && (
-            <div style={{ padding: "8px 12px", borderBottom: `1px solid ${tokens.ink[5]}`, maxHeight: 140, overflowY: "auto" }}>
+          {/* full course list — the one scrolling region. The TERRACE dock
+              skips it (per Djan, 22.08 — the readout's squares + NOW/NEXT
+              carry the state; the list is the dining room's) so the party
+              actions fit without scrolling. */}
+          {mapKind !== "terrace" && visible.length > 0 && (
+            <div style={{ padding: padTight, borderBottom: `1px solid ${tokens.ink[5]}`, maxHeight: wide ? 220 : 140, overflowY: "auto" }}>
               {visible.map((c) => {
                 const isNow = current && c.key === current.key;
                 const isNext = nextFire && c.key === nextFire.key;
@@ -323,7 +383,7 @@ export default function FloorDock({
           {/* restrictions — the chairs carry them too; the dock repeats the
               tags so the runner never has to squint at the map */}
           {restrTags.length > 0 && (
-            <div style={{ padding: "8px 12px", borderBottom: `1px solid ${tokens.ink[5]}` }}>
+            <div style={{ padding: padTight, borderBottom: `1px solid ${tokens.ink[5]}` }}>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "baseline" }}>
                 <span style={lbl}>[RESTRICTIONS]</span>
                 {restrTags.map((r, k) => (
@@ -337,7 +397,7 @@ export default function FloorDock({
 
           {/* extras — the quick cheese/beetroot gesture + its own Send */}
           {extrasVisible.length > 0 && seats.length > 0 && upd && (
-            <div style={{ padding: "8px 12px" }}>
+            <div style={{ padding: padTight }}>
               <div style={{ ...lbl, marginBottom: 5 }}>[EXTRAS]</div>
               {extrasVisible.map((dish) => (
                 <div key={dish.key || dish.id} style={{ display: "flex", gap: 5, alignItems: "center", padding: "2px 0", flexWrap: "wrap" }}>

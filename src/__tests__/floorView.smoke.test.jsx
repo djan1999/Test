@@ -385,17 +385,17 @@ describe("seat swap — drag a chair onto another chair of the same table", () =
     expect(onSwapSeats).not.toHaveBeenCalled();
   });
 
-  it("a plain tap on a chair still resolves as the table tap (dock focus intact)", () => {
+  it("a plain tap on a chair (no drag) opens that seat's quick access, never a swap", () => {
     const onSwapSeats = vi.fn();
-    const { container, handlers, getByText } = setup({ onSwapSeats });
+    const { container, handlers, getByText } = setup({ onSwapSeats, upd: vi.fn(), updSeat: vi.fn() });
     mockBox(container);
     const seat = findTable(container, "T1").querySelector('[data-seat="0"]');
     fireEvent.pointerDown(seat, { clientX: 22, clientY: 50 });
     fireEvent.pointerUp(seat, { clientX: 22, clientY: 50 });
-    fireEvent.click(seat); // bubbles to the table group
+    fireEvent.click(seat); // the tap that follows the aborted drag
     expect(onSwapSeats).not.toHaveBeenCalled();
-    expect(handlers.onCycleStatus).not.toHaveBeenCalled(); // taps never toggle now
-    expect(getByText("[TABLE DOCK]").parentElement.textContent).toContain("T1");
+    expect(handlers.onCycleStatus).not.toHaveBeenCalled(); // taps never toggle
+    getByText("[QUICK ACCESS · T1 · P1]");
   });
 });
 
@@ -566,7 +566,7 @@ describe("FOH table dock (quick access beside the map)", () => {
     expect(upd.mock.calls.find((c) => c[1] === "kitchenSent")).toBeTruthy();
   });
 
-  it("a chair tap opens the board's QUICK ACCESS card in a side panel (22.08)", () => {
+  it("a chair tap swaps the dock column to that ONE seat's quick access (22.08)", () => {
     const upd = vi.fn();
     const { container, handlers, getByText, queryByText } = setup({
       tables: withFired, menuCourses, upd, updSeat: vi.fn(),
@@ -574,16 +574,55 @@ describe("FOH table dock (quick access beside the map)", () => {
     fireEvent.click(findTable(container, "T1").querySelector('[data-seat="0"]'));
     // the chair tap selects — it neither toggles nor reads as a table tap
     expect(handlers.onCycleStatus).not.toHaveBeenCalled();
-    getByText("[QUICK ACCESS · T1]");
-    // the REAL board card renders in the panel — same editor as board mode
-    expect(container.textContent).toContain("NOVAK");
-    // ✕ closes it; the dock stays on the table
+    // the column IS the panel now — one surface, scoped to the tapped seat
+    getByText("[QUICK ACCESS · T1 · P1]");
+    expect(queryByText("[TABLE DOCK]")).toBeNull();
+    expect(container.textContent).toContain("NOVAK"); // the REAL board card
+    // ✕ brings the table dock back
     fireEvent.click(getByText("✕"));
-    expect(queryByText("[QUICK ACCESS · T1]")).toBeNull();
-    expect(dockOf(getByText).textContent).toContain("T1");
-    // a table-body tap never opens it
+    getByText("[TABLE DOCK]");
+    // another chair re-scopes the panel to ITS position
+    fireEvent.click(findTable(container, "T1").querySelector('[data-seat="1"]'));
+    getByText("[QUICK ACCESS · T1 · P2]");
+    // a table-body tap returns to the table dock
     fireEvent.click(findTable(container, "T1"));
-    expect(queryByText("[QUICK ACCESS · T1]")).toBeNull();
+    getByText("[TABLE DOCK]");
+    expect(queryByText(/\[QUICK ACCESS/)).toBeNull();
+  });
+
+  it("FIRE (small) fires the next course from the floor; UNDO puts it back", () => {
+    const upd = vi.fn();
+    const { container, getByText, queryByText } = setup({ tables: withFired, menuCourses, upd });
+    fireEvent.click(findTable(container, "T1"));
+    fireEvent.click(within(dockOf(getByText)).getByText(/FIRE · Brioche/));
+    const logCall = upd.mock.calls.find((c) => c[1] === "kitchenLog");
+    expect(logCall[0]).toBe(1);
+    const applied = logCall[2]({ amuse: { firedAt: "19:47" } });
+    expect(applied.brioche.firedAt).toBeTruthy();
+    expect(applied.amuse).toBeTruthy(); // functional update keeps earlier fires
+    expect(upd.mock.calls.some((c) => c[1] === "courseReady")).toBe(false); // nothing was announced
+    // UNDO appears after the dock's own fire, and removes exactly that course
+    upd.mockClear();
+    fireEvent.click(within(dockOf(getByText)).getByText("UNDO"));
+    const undoCall = upd.mock.calls.find((c) => c[1] === "kitchenLog");
+    expect(undoCall[2]({ amuse: { firedAt: "19:47" }, brioche: { firedAt: "20:31" } }))
+      .toEqual({ amuse: { firedAt: "19:47" } });
+    expect(within(dockOf(getByText)).queryByText("UNDO")).toBeNull(); // consumed
+  });
+
+  it("firing the announced course clears the banner; UNDO restores it (kitchen semantics)", () => {
+    const announced = withFired.map((t) =>
+      t.id === 1 ? { ...t, courseReady: { key: "brioche", index: 2, name: "Brioche" } } : t);
+    const upd = vi.fn();
+    const { container, getByText } = setup({
+      tables: announced, menuCourses, upd, onUnsetKitchen: vi.fn(),
+    });
+    fireEvent.click(findTable(container, "T1"));
+    fireEvent.click(within(dockOf(getByText)).getByText(/FIRE · Brioche/));
+    expect(upd).toHaveBeenCalledWith(1, "courseReady", null); // the fire consumed the SET
+    upd.mockClear();
+    fireEvent.click(within(dockOf(getByText)).getByText("UNDO"));
+    expect(upd).toHaveBeenCalledWith(1, "courseReady", { key: "brioche", index: 2, name: "Brioche" });
   });
 
   it("the terrace dock follows the tapped party too — same info on both floors", () => {

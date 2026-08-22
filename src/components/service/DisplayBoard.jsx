@@ -30,7 +30,10 @@ const WATER_QUICK = ["XC", "XW", "OC", "OW"];
 
 // Extracted as a stable module-level component to prevent React from unmounting/remounting
 // cards on every DisplayBoard re-render (which caused the visual overlap animation glitch).
-export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onAssignTerrace, optionalExtras = [], optionalPairings = [], aperitifOptions, wines = [], cocktails = [], spirits = [], beers = [] }) {
+// onlySeatId: render just that seat's row (the floor's chair-tap quick
+// access) — the seat LOGIC still sees the whole party, so share cycles and
+// the Send delta stay correct.
+export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onAssignTerrace, optionalExtras = [], optionalPairings = [], aperitifOptions, wines = [], cocktails = [], spirits = [], beers = [], onlySeatId = null }) {
     const isSeated = t.active;
     // Terrace-flow decoration (derived in App, never persisted on the row):
     // 'terrace' = party outside on t._visit.terraceLabel.
@@ -239,7 +242,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
         {/* Seat rows — in quick mode, show controls for reserved tables as well (pre-seat prep) */}
         {seats.length > 0 && (isSeated || quickMode) ? (
           <div style={{ display: "flex", flexDirection: "column", gap: quickMode ? 4 : 0, padding: quickMode ? "6px 8px" : "4px 0" }}>
-            {seats.map(s => {
+            {seats.filter(s => onlySeatId == null || s.id === onlySeatId).map(s => {
               const ws      = waterStyle(s.water);
               const pc      = PC[s.pairing];
               const restr   = allRestr.filter(r => r.pos === s.id);
