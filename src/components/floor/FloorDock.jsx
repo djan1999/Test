@@ -15,9 +15,12 @@ const FONT = tokens.font;
 // per-seat drink rows — the chair pills on the map already carry those.
 // Restrictions stay: one red tag row, same source rule as the chairs.
 //
-// ONE set button (per Djan, 22.08): SET → KITCHEN announces the next course
-// BY NAME and turns the strip on; once announced it flips to UNSET (clears
-// the banner + strip). The old strip-only SET is gone.
+// The actions are the kitchen ticket's FIRE / SET / UNDO bar with the weights
+// inverted — SET 5 / FIRE 2 / UNDO 1, because on the floor SET is the frequent
+// gesture (per Djan, 22.08). SET announces the next course by name and turns
+// the strip on; announced it becomes an AMBER "SET ✓" that takes the set back
+// — amber, not the kitchen's parchment, because amber is how "set" reads
+// everywhere else on the floor (badge, tile ring) (per Djan, 22.08).
 //
 // Data discipline (the floor must never disagree with the board/kitchen):
 // courses derive through getVisibleCoursesForTable/getCourseProgressState with
@@ -288,39 +291,66 @@ export default function FloorDock({
             </div>
           </div>
 
-          {/* actions — never below the fold; ONE set button, dish name on it.
-              SET big, FIRE small (the kitchen's proportions, inverted). */}
+          {/* actions — never below the fold. The kitchen ticket's one bar,
+              weights inverted (SET 5 / FIRE 2 / UNDO 1); the verb stays large
+              and the dish gets the full width beneath it, for the same reason
+              as the kitchen's: an ellipsized "SET → KITCHEN · TOM…" hides the
+              one thing to check before committing. */}
           <div style={{ padding: pad, borderBottom: `1px solid ${tokens.ink[5]}` }}>
-            {(onAnnounce || onUnannounce) && (
-              announced ? (
+            {(onAnnounce || onUnannounce || upd) && (
+              <div style={{ display: "flex", gap: 1, background: tokens.neutral[200], border: `1px solid ${tokens.neutral[200]}`, marginBottom: 6 }}>
                 <button
-                  onClick={() => onUnannounce && onUnannounce()}
-                  disabled={!onUnannounce}
-                  style={{ ...actionBtn(false, !onUnannounce), ...(wide ? { fontSize: 10, padding: "12px 12px" } : {}), display: "block", width: "100%", textAlign: "center", fontWeight: 700, marginBottom: 6 }}
-                >UNSET · {nextFire?.name || ""}</button>
-              ) : (
-                <button
-                  disabled={!onAnnounce || !nextFire}
-                  onClick={() => onAnnounce && onAnnounce()}
-                  style={{ ...actionBtn(true, !onAnnounce || !nextFire), ...(wide ? { fontSize: 10, padding: "12px 12px" } : {}), display: "block", width: "100%", textAlign: "center", marginBottom: 6 }}
+                  disabled={!nextFire || (announced ? !onUnannounce : !onAnnounce)}
+                  onClick={() => (announced ? onUnannounce && onUnannounce() : onAnnounce && onAnnounce())}
+                  title={announced ? "Take back the SET signal" : "Tell the kitchen this course is set"}
+                  style={{
+                    flex: 5, minWidth: 0, fontFamily: FONT, padding: wide ? "13px 10px" : "9px 8px",
+                    border: "none", borderRadius: 0, touchAction: "manipulation",
+                    cursor: !nextFire || (announced ? !onUnannounce : !onAnnounce) ? "default" : "pointer",
+                    // amber fill = set, ink text for contrast on the amber
+                    background: announced ? tokens.signal.warn
+                      : nextFire && onAnnounce ? tokens.charcoal.default : tokens.neutral[50],
+                    color: announced ? tokens.ink[0]
+                      : nextFire && onAnnounce ? tokens.neutral[0] : tokens.ink[4],
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: 1,
+                    overflow: "hidden",
+                  }}
                 >
-                  {!nextFire ? "MENU COMPLETE" : `SET → KITCHEN · ${nextFire.name}`}
+                  <span style={{ fontSize: wide ? 13 : 12, fontWeight: 800, letterSpacing: "0.14em", lineHeight: 1, textTransform: "uppercase" }}>
+                    {!nextFire ? "MENU COMPLETE" : announced ? "SET ✓" : "SET"}
+                  </span>
+                  {nextFire && (
+                    <span style={{
+                      fontSize: wide ? 10 : 9, fontWeight: 600, letterSpacing: "0.04em", lineHeight: 1.15,
+                      textTransform: "uppercase", maxWidth: "100%",
+                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                    }}>{nextFire.name}</span>
+                  )}
                 </button>
-              )
-            )}
-            {upd && (
-              <div style={{ display: "flex", gap: 0, marginBottom: 6 }}>
                 <button
-                  disabled={!nextFire}
+                  disabled={!upd || !nextFire}
                   onClick={fireNext}
-                  style={{ ...actionBtn(false, !nextFire), flex: 1, textAlign: "center", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                >{nextFire ? `FIRE · ${nextFire.name}` : "FIRE"}</button>
-                {canUndo && (
-                  <button onClick={undoFire}
-                    style={{ ...actionBtn(false, false), textAlign: "center", marginLeft: -1, color: tokens.signal.warn, borderColor: tokens.signal.warn }}>
-                    UNDO
-                  </button>
-                )}
+                  title={nextFire ? `Fire ${nextFire.name}` : "Nothing to fire"}
+                  style={{
+                    flex: 2, minWidth: 0, fontFamily: FONT, fontSize: wide ? 11 : 10, fontWeight: 700,
+                    letterSpacing: "0.08em", textTransform: "uppercase", padding: wide ? "13px 10px" : "9px 8px",
+                    border: "none", borderRadius: 0, cursor: upd && nextFire ? "pointer" : "default",
+                    background: tokens.neutral[0], color: upd && nextFire ? tokens.ink[0] : tokens.ink[4],
+                    whiteSpace: "nowrap", touchAction: "manipulation",
+                  }}
+                >FIRE</button>
+                <button
+                  disabled={!canUndo}
+                  onClick={undoFire}
+                  title={canUndo ? "Take back the last FIRE" : "Nothing to undo"}
+                  style={{
+                    flex: 1, minWidth: 0, fontFamily: FONT, fontSize: wide ? 10 : 9, fontWeight: 600,
+                    letterSpacing: "0.06em", textTransform: "uppercase", padding: wide ? "13px 10px" : "9px 8px",
+                    border: "none", borderRadius: 0, cursor: canUndo ? "pointer" : "default",
+                    background: tokens.neutral[0], color: canUndo ? tokens.ink[3] : tokens.ink[5],
+                    whiteSpace: "nowrap", touchAction: "manipulation",
+                  }}
+                >UNDO</button>
               </div>
             )}
             {onOpenDetail && bt && (
