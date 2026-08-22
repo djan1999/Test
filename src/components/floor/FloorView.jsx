@@ -77,7 +77,6 @@ export default function FloorView({
   const [dockLabel, setDockLabel] = useState(null); // the table the side dock follows (last tap)
   const [dockSeatNo, setDockSeatNo] = useState(null); // chair tap → that ONE seat's quick access, in the dock column
   const [movingParty, setMovingParty] = useState(null); // terrace CHANGE TABLE: the reservation being re-seated
-  const [toast, setToast] = useState(null);
   // Fullscreen (the gate toggle / F11 / the PWA's fullscreen display mode):
   // the extra pixels go to the map and the dock, not to margins.
   const isFullscreen = useIsFullscreen();
@@ -91,10 +90,10 @@ export default function FloorView({
   }, [mapKind]);
   if (!map) return null;
 
-  const flash = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2600);
-  };
+  // No confirmation toast (per Djan, 22.08): it mounted above the ticker and
+  // shoved the whole floor down for a beat on every action. The map and the
+  // dock already show each outcome — chips, rings, labels — so nothing is
+  // announced twice.
   const switchTab = (id) => { setTabId(id); setDockLabel(null); setDockSeatNo(null); setMovingParty(null); };
 
   const progressOf = (boardTable) => {
@@ -270,16 +269,11 @@ export default function FloorView({
     const positionKey = floorPositionKey(map.id, label);
     const source = (bt.seats || []).find((seat) => seatFloorPosition(seat, positionKey) === Number(aNo));
     if (!source) return;
-    const target = (bt.seats || []).find((seat) => seatFloorPosition(seat, positionKey) === Number(bNo));
     if (map.kind === "terrace") {
       onSwapSeats(bt.id, Number(aNo), Number(bNo), positionKey);
-      flash(target
-        ? `${label} · P${source.id} ⇄ P${target.id}`
-        : `${label} · P${source.id} → CHAIR ${bNo}`);
       return;
     }
     onSwapSeats(bt.id, Number(aNo), Number(bNo), positionKey, { identity: true });
-    flash(target ? `${label} · P${aNo} ⇄ P${bNo}` : `${label} · P${aNo} → P${bNo}`);
   };
 
   // Parties the terrace tab must keep reachable even without a tile: any
@@ -352,14 +346,12 @@ export default function FloorView({
   const announceDock = onSendSetToKitchen && dockBoard ? () => {
     onSendSetToKitchen([dockBoard.id]);
     if (dockStrip !== "SET") onCycleStatus(map.id, dockLabel);
-    flash(`${dockLabel} SET → KITCHEN ✓`);
   } : undefined;
   // the one set button's other face: announced → UNSET clears the kitchen
   // banner AND the strip together (mirrors the sheet's onUnsetKitchen)
   const unannounceDock = onUnsetKitchen && dockBoard ? () => {
     onUnsetKitchen(dockBoard.id);
     if (dockStrip === "SET") onCycleStatus(map.id, dockLabel);
-    flash(`${dockLabel} UNSET`);
   } : undefined;
 
   // Terrace party actions live IN the dock (per Djan, 22.08 — the old bottom
@@ -377,10 +369,7 @@ export default function FloorView({
         label: `${r.data?.resName || "—"} ×${r.data?.guests || "?"}`
           + (visitStateOf(r.data) === "dining" ? ` · ${diningLabelOf(r)} ↩`
             : r.data?.resTime ? ` · ${r.data.resTime}` : ""),
-        onPick: () => {
-          onAssign(r, dockLabel);
-          flash(`${dockLabel} → ${(r.data?.resName || "—").toUpperCase()} ×${r.data?.guests || "?"}`);
-        },
+        onPick: () => onAssign(r, dockLabel),
       }))
     : null;
 
@@ -394,38 +383,27 @@ export default function FloorView({
     if (targetParty) {
       const fromLabel = movingParty.data?.terrace_table || null;
       const fromOnMap = fromLabel && mapLabels.has(fromLabel);
-      if (!fromOnMap || targetParty.id === movingParty.id) { flash("Table occupied"); return true; }
+      if (!fromOnMap || targetParty.id === movingParty.id) return true; // nothing to swap with
       onAssign(movingParty, label);
       onAssign(targetParty, fromLabel);
-      flash(`${fromLabel} ⇄ ${label}`);
       setMovingParty(null);
       return true;
     }
     onAssign(movingParty, label);
-    flash(`${label} → ${(movingParty.data?.resName || "—").toUpperCase()}`);
     setMovingParty(null);
     return true;
   };
 
   return (
     <div style={{ margin: isMobile ? "0 12px 40px" : "0 24px 48px" }}>
-      {/* map tabs — hidden when the caller owns the map choice (mapKind);
-          the toast still needs a home then. */}
-      {!mapKind ? (
+      {/* map tabs — hidden when the caller owns the map choice (mapKind) */}
+      {!mapKind && (
         <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 0, marginBottom: 8 }}>
           {tabs.map((m) => (
             <button key={m.id} style={btn(m.id === map.id)} onClick={() => switchTab(m.id)}>
               {m.name}
             </button>
           ))}
-          <span style={{ flex: 1 }} />
-          {toast && (
-            <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.green.text, letterSpacing: "0.08em", fontWeight: 700, marginRight: 10 }}>{toast}</span>
-          )}
-        </div>
-      ) : toast && (
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
-          <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.green.text, letterSpacing: "0.08em", fontWeight: 700, marginRight: 10 }}>{toast}</span>
         </div>
       )}
 
@@ -444,10 +422,7 @@ export default function FloorView({
         {sendableIds.length > 0 && onSendSetToKitchen ? (
           <button
             style={{ ...actionBtn(true), padding: "7px 12px", fontSize: 8 }}
-            onClick={() => {
-              onSendSetToKitchen(sendableIds);
-              flash(`SENT TO KITCHEN ✓ (${sendableIds.length})`);
-            }}>
+            onClick={() => onSendSetToKitchen(sendableIds)}>
             SEND SET → KITCHEN ({sendableIds.length})
           </button>
         ) : (

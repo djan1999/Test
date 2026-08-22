@@ -224,7 +224,7 @@ describe("terrace SET → KITCHEN (same handshake as the dining room, from the d
     // courseReady handshake, exactly like a dining SEND
     expect(onSend).toHaveBeenCalledWith([9]);
     expect(handlers.onCycleStatus).toHaveBeenCalledWith("terrace_main", "T23");
-    expect(container.textContent).toContain("SET → KITCHEN ✓");
+    // no confirmation toast (per Djan, 22.08) — the tile's state IS the receipt
   });
 
   it("an announced party's button reads UNSET — it clears, never double-sends", () => {
@@ -409,7 +409,7 @@ describe("SEND SET → KITCHEN", () => {
     });
     fireEvent.click(getByText(/SEND SET → KITCHEN \(1\)/));
     expect(onSend).toHaveBeenCalledWith([1]);
-    expect(container.textContent).toContain("SENT TO KITCHEN ✓");
+    // no confirmation toast (per Djan, 22.08) — the amber rings are the receipt
   });
 
   it("hidden when nothing is both seated and SET", () => {
