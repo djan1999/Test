@@ -60,6 +60,7 @@ export default function FloorView({
   onSendSetToKitchen,
   onSwapSeats,
   onOpenDetail,             // (boardId) → App raises the board's table sheet
+  onUnsetKitchen,           // (boardId) → clears the kitchen banner (courseReady)
   upd,                      // (boardId, field, value|fn) — the dock's extras/alert writes
   isMobile,
 }) {
@@ -341,6 +342,13 @@ export default function FloorView({
     if (dockStrip !== "SET") onCycleStatus(map.id, dockLabel);
     flash(`${dockLabel} SET → KITCHEN ✓`);
   } : undefined;
+  // the one set button's other face: announced → UNSET clears the kitchen
+  // banner AND the strip together (mirrors the sheet's onUnsetKitchen)
+  const unannounceDock = onUnsetKitchen && dockBoard ? () => {
+    onUnsetKitchen(dockBoard.id);
+    if (dockStrip === "SET") onCycleStatus(map.id, dockLabel);
+    flash(`${dockLabel} UNSET`);
+  } : undefined;
 
   const sheetBody = () => {
     if (map.kind === "terrace") {
@@ -575,7 +583,9 @@ export default function FloorView({
             onSeatSwap={onSwapSeats ? swapSeatPositions : undefined}
             showPartyLines={false}
             serviceSelectedLabel={dockLabel}
-            height={isMobile ? 380 : 480}
+            // 560 on desktop (22.08): the slimmer dock gives the map the
+            // gutter back — ~610px wide instead of ~522
+            height={isMobile ? 380 : 560}
             onTableTap={(t) => {
               // CHANGE TABLE in flight: the next FREE terrace table tap re-seats
               // the party there.
@@ -607,6 +617,7 @@ export default function FloorView({
           optionalPairings={optionalPairings}
           onToggleStrip={dockLabel ? () => onCycleStatus(map.id, dockLabel) : undefined}
           onAnnounce={announceDock}
+          onUnannounce={unannounceDock}
           onOpenDetail={onOpenDetail}
           upd={upd}
           isMobile={isMobile}
