@@ -401,74 +401,51 @@ describe("seat swap — drag a chair onto another chair of the same table", () =
   });
 });
 
-describe("SEND SET → KITCHEN", () => {
-  it("appears when a seated table is SET and forwards its board id", () => {
-    const onSend = vi.fn();
-    const { container, getByText } = setup({
-      // T1 seated + SET (sendable); T4 SET but only reserved (not sendable)
-      floorStatus: { dining_a: { T1: "SET", T4: "SET" } },
-      onSendSetToKitchen: onSend,
-    });
-    fireEvent.click(getByText(/SEND SET → KITCHEN \(1\)/));
-    expect(onSend).toHaveBeenCalledWith([1]);
-    // no confirmation toast (per Djan, 22.08) — the amber rings are the receipt
-  });
-
-  it("hidden when nothing is both seated and SET", () => {
-    const { queryByText } = setup({ onSendSetToKitchen: vi.fn() });
-    expect(queryByText(/SEND SET → KITCHEN/)).toBeNull(); // T4 SET is reserved-only
-  });
-});
-
-describe("SEND SET → KITCHEN — no double-send of an already-announced course", () => {
+describe("no bulk SEND SET in the ticker — the dock is the ONE set surface (22.08)", () => {
   const menuCourses = [
     { position: 1, course_key: "amuse", menu: { name: "Amuse" }, is_active: true, is_snack: false, optional_flag: "", course_category: "main" },
     { position: 2, course_key: "main", menu: { name: "Main" }, is_active: true, is_snack: false, optional_flag: "", course_category: "main" },
   ];
-  // T1 has already been sent for its next course (courseReady === its nextFire);
-  // T9 is freshly SET and never sent.
-  const withReady = tables.map((t) =>
-    t.id === 1 ? { ...t, courseReady: { key: "amuse", index: 1, name: "Amuse" } } : t);
 
-  it("an already-sent SET table is excluded from SEND and wears an amber ring", () => {
+  it("never appears, even in the old sendable state (seated + SET, not announced)", () => {
     const onSend = vi.fn();
-    const { container, queryByText } = setup({
-      floorStatus: { dining_a: { T1: "SET" } },
-      tables: withReady,
+    const { queryByText } = setup({
+      floorStatus: { dining_a: { T1: "SET", T4: "SET" } },
       menuCourses,
       onSendSetToKitchen: onSend,
     });
-    // Nothing left to send — T1 already holds the kitchen's SET banner.
     expect(queryByText(/SEND SET → KITCHEN/)).toBeNull();
-    // …and it shows the amber ring (signal.warn) so staff see it's been sent.
-    const t1 = findTable(container, "T1");
-    expect(t1.querySelector('[stroke="#c49a4a"]')).toBeTruthy();
   });
 
-  it("SEND forwards ONLY the table not yet announced (the new one), not the already-sent one", () => {
-    const onSend = vi.fn();
-    const { getByText } = setup({
-      floorStatus: { dining_a: { T1: "SET", T9: "SET" } },
-      tables: withReady, // T1 sent, T9 fresh
-      menuCourses,
-      onSendSetToKitchen: onSend,
-    });
-    fireEvent.click(getByText(/SEND SET → KITCHEN \(1\)/));
-    expect(onSend).toHaveBeenCalledWith([9]); // T1 (already sent) is not re-fired
-  });
-
-  it("a fresh SET table (no courseReady) still sends and shows no ring", () => {
-    const onSend = vi.fn();
-    const { container, getByText } = setup({
+  it("never flashes back in the dock's SET→FIRE window (strip on, courseReady consumed)", () => {
+    // The exact state the dock's FIRE leaves behind for a render or two, until
+    // App's strip watcher clears the strip: strip SET, courseReady null, the
+    // fired course in kitchenLog. The button used to pop back up here.
+    const fired = tables.map((t) =>
+      t.id === 1 ? { ...t, kitchenLog: { amuse: { firedAt: "20:10" } } } : t);
+    const { queryByText } = setup({
       floorStatus: { dining_a: { T1: "SET" } },
-      tables, // T1 has no courseReady
+      tables: fired,
       menuCourses,
-      onSendSetToKitchen: onSend,
+      onSendSetToKitchen: vi.fn(),
     });
-    const t1 = findTable(container, "T1");
-    expect(t1.querySelector('[stroke="#c49a4a"]')).toBeNull(); // not sent → no ring
-    fireEvent.click(getByText(/SEND SET → KITCHEN \(1\)/));
-    expect(onSend).toHaveBeenCalledWith([1]);
+    expect(queryByText(/SEND SET → KITCHEN/)).toBeNull();
+  });
+
+  it("the announced/not-announced rings still tell the states apart without it", () => {
+    const withReady = tables.map((t) =>
+      t.id === 1 ? { ...t, courseReady: { key: "amuse", index: 1, name: "Amuse" } } : t);
+    const announced = setup({
+      floorStatus: { dining_a: { T1: "SET" } }, tables: withReady, menuCourses,
+      onSendSetToKitchen: vi.fn(),
+    });
+    expect(findTable(announced.container, "T1").querySelector('[stroke="#c49a4a"]')).toBeTruthy();
+    announced.unmount();
+    const fresh = setup({
+      floorStatus: { dining_a: { T1: "SET" } }, tables, menuCourses,
+      onSendSetToKitchen: vi.fn(),
+    });
+    expect(findTable(fresh.container, "T1").querySelector('[stroke="#c49a4a"]')).toBeNull();
   });
 });
 

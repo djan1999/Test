@@ -308,17 +308,6 @@ export default function FloorView({
   const bookedParties = reservations.filter((r) =>
     ["booked", "dining"].includes(visitStateOf(r.data)) && !r.data?.clearedFromBoard);
 
-  // SET tables with a live board ticket, grouped by board id (a merge shares one
-  // ticket). SEND forwards only the ones not yet announced for their next course.
-  const setBoardTables = map.kind === "terrace" ? [] : [...new Map(
-    (map.tables || [])
-      .filter((t) => floorStatusOf(floorStatus, map.id, t.label) === "SET")
-      .map((t) => boardTableOf(t))
-      .filter((bt) => bt?.active)
-      .map((bt) => [bt.id, bt]),
-  ).values()];
-  const sendableIds = setBoardTables.filter((bt) => !alreadySent(bt)).map((bt) => bt.id);
-
   // ── dock content — the last tapped table, resolved to its merge-primary
   // board table exactly the way the tiles themselves resolve it ─────────────
   const dockTable = dockLabel ? (map.tables || []).find((t) => t.label === dockLabel) : null;
@@ -419,15 +408,10 @@ export default function FloorView({
         <span style={{ color: tokens.ink[2] }}>RES {ticker.reserved}</span>
         <span style={{ color: tokens.green.text }}>SET {ticker.set}</span>
         <span style={{ flex: 1 }} />
-        {sendableIds.length > 0 && onSendSetToKitchen ? (
-          <button
-            style={{ ...actionBtn(true), padding: "7px 12px", fontSize: 8 }}
-            onClick={() => onSendSetToKitchen(sendableIds)}>
-            SEND SET → KITCHEN ({sendableIds.length})
-          </button>
-        ) : (
-          <span style={{ color: tokens.ink[3], fontSize: 8 }}>TAP TABLE → DOCK · TAP CHAIR → QUICK ACCESS</span>
-        )}
+        {/* no bulk SEND SET here — the dock is the ONE set surface (per Djan,
+            22.08). The button also flashed back for the render(s) between the
+            dock's FIRE consuming courseReady and the strip watcher's clear. */}
+        <span style={{ color: tokens.ink[3], fontSize: 8 }}>TAP TABLE → DOCK · TAP CHAIR → QUICK ACCESS</span>
       </div>
 
       {/* CHANGE TABLE banner — armed until a table is tapped */}
