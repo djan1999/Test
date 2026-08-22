@@ -530,15 +530,14 @@ export default function FloorView({
         </div>
         {/* the dock column — a chair tap swaps it to that ONE seat's quick
             access (the real board editor, scoped by onlySeatId); a table
-            tap or ✕ brings the table dock back. Fullscreen widens it — and
-            while the seat panel is open the column grows to the board card's
-            designed width (the board grid's minmax is 340): the card was
-            never meant to live at dock width. The map does not shrink for
-            it; it just re-centers in less surplus space. */}
+            tap or ✕ brings the table dock back. The width is CONSTANT: the
+            board card's designed 340 (the board grid's minmax), 400 in
+            fullscreen — a per-state width made the centered map re-shift
+            sideways on every chair tap (per Djan, 22.08). The gutter absorbs
+            the column once; the map never moves and still fits at full
+            size at both widths. */}
         <div style={{
-          width: isMobile ? "100%"
-            : dockSeat && dockBoard ? (isFullscreen ? 400 : 340)
-            : isFullscreen ? 330 : 260,
+          width: isMobile ? "100%" : isFullscreen ? 400 : 340,
           flexShrink: 0,
         }}>
           {dockSeat && dockBoard ? (
