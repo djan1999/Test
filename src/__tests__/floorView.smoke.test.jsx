@@ -550,6 +550,35 @@ describe("FOH table dock (quick access beside the map)", () => {
     expect(upd.mock.calls.find((c) => c[1] === "kitchenSent")).toBeTruthy();
   });
 
+  it("a chair tap opens that guest's quick-access picture in the dock (22.08)", () => {
+    const EXTRAS = [{ key: "cheese", id: "cheese", name: "Cheese", pairings: ["—"] }];
+    const withGuest = tables.map((t) => t.id === 1 ? {
+      ...t,
+      restrictions: [{ pos: 1, note: "gluten" }],
+      seats: [
+        { id: 1, water: "XC", pairing: "Wine", gender: "Mrs",
+          aperitifs: [{ name: "Negroni" }, { name: "Negroni" }],
+          extras: { cheese: { ordered: true, pairing: "—" } }, floorPositions: {} },
+        { id: 2, water: "—", pairing: "", floorPositions: {} },
+      ],
+    } : t);
+    const { container, handlers, getByText } = setup({ tables: withGuest, menuCourses, optionalExtras: EXTRAS });
+    const seat = findTable(container, "T1").querySelector('[data-seat="0"]');
+    fireEvent.click(seat);
+    // the chair tap selects the GUEST — it neither toggles nor reads as a table tap
+    expect(handlers.onCycleStatus).not.toHaveBeenCalled();
+    const dock = dockOf(getByText);
+    expect(dock.textContent).toContain("[GUEST · P1 — MRS]");
+    expect(dock.textContent).toContain("XC");
+    expect(dock.textContent).toContain("WINE");
+    expect(dock.textContent).toMatch(/NEGRONI\s*×2/);
+    expect(dock.textContent).toContain("CHEESE");
+    expect(dock.textContent).toContain("[GLU]");
+    // a table-body tap returns the dock to the table view
+    fireEvent.click(findTable(container, "T1"));
+    expect(dockOf(getByText).textContent).not.toContain("[GUEST");
+  });
+
   it("the terrace dock follows the tapped party too — same info on both floors", () => {
     const withFired9 = tables.map((t) =>
       t.id === 9 ? { ...t, kitchenLog: { amuse: { firedAt: "20:02" } } } : t);

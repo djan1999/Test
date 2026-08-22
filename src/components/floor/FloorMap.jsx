@@ -203,6 +203,11 @@ export default function FloorMap({
   serviceSelectedLabel = null, // service mode: the table the FOH dock follows
                             // — dashed focus outline; default off so the
                             // picker/kitchen/editor consumers are untouched
+  onServiceSeatTap = null,  // (label, seatNo) — service mode: a plain tap on a
+                            // chair selects that GUEST for the dock instead of
+                            // bubbling to the table tap; default off
+  serviceSelectedSeat = null, // { label, no } — the chair the dock's guest
+                            // card is showing; dashed focus ring
   seatLabelsByLabel = {},   // { [label]: { [chairNo]: guestNo } } — keeps
                             // guest labels stable when P2 sits at chair 6
   onSeatSwap,               // (label, fromNo, toNo) — service mode: drag a
@@ -660,9 +665,23 @@ export default function FloorMap({
                   onPointerMove={swappable ? onPointerMove : undefined}
                   onPointerUp={swappable ? onSeatSwapPointerUp(t) : undefined}
                   onClick={(e) => {
-                    if (!seatEditing) return;
-                    e.stopPropagation();
-                    onSeatTap && onSeatTap(t.label, i);
+                    if (seatEditing) {
+                      e.stopPropagation();
+                      onSeatTap && onSeatTap(t.label, i);
+                      return;
+                    }
+                    // Service: a plain chair tap selects the guest. A finished
+                    // swap drag's trailing click must die HERE — consumed and
+                    // stopped, or it would bubble and read as a table tap.
+                    if (mode === "service" && onServiceSeatTap && p.no != null) {
+                      if (swallowTapRef.current) {
+                        swallowTapRef.current = false;
+                        e.stopPropagation();
+                        return;
+                      }
+                      e.stopPropagation();
+                      onServiceSeatTap(t.label, p.no);
+                    }
                   }}>
                   {numbered ? (
                     <>
@@ -718,6 +737,12 @@ export default function FloorMap({
                       fill={tokens.signal.alert} fontWeight={700}>
                       {restrictionCode(seatRestr[0].note)}
                     </text>
+                  )}
+                  {mode === "service" && serviceSelectedSeat
+                    && serviceSelectedSeat.label === t.label
+                    && Number(serviceSelectedSeat.no) === Number(p.no) && (
+                    <circle cx={sx} cy={sy} r={2.7} fill="none"
+                      stroke={tokens.ink[0]} strokeWidth={0.4} strokeDasharray="1.2 0.9" />
                   )}
                 </g>
               );

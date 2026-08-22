@@ -71,6 +71,7 @@ export default function FloorView({
   const [tabId, setTabId] = useState(null);
   const [sheetLabel, setSheetLabel] = useState(null);
   const [dockLabel, setDockLabel] = useState(null); // the table the side dock follows (last tap)
+  const [dockSeatNo, setDockSeatNo] = useState(null); // chair tap → this guest's card in the dock
   const [movingParty, setMovingParty] = useState(null); // terrace CHANGE TABLE: the reservation being re-seated
   const [toast, setToast] = useState(null);
 
@@ -79,7 +80,7 @@ export default function FloorView({
   // Leaving the map (App's toggle) must drop the open sheet / pending CHANGE
   // TABLE, exactly like the old tab switch did.
   useEffect(() => {
-    if (mapKind) { setSheetLabel(null); setDockLabel(null); setMovingParty(null); }
+    if (mapKind) { setSheetLabel(null); setDockLabel(null); setDockSeatNo(null); setMovingParty(null); }
   }, [mapKind]);
   if (!map) return null;
 
@@ -87,7 +88,7 @@ export default function FloorView({
     setToast(msg);
     setTimeout(() => setToast(null), 2600);
   };
-  const switchTab = (id) => { setTabId(id); setSheetLabel(null); setDockLabel(null); setMovingParty(null); };
+  const switchTab = (id) => { setTabId(id); setSheetLabel(null); setDockLabel(null); setDockSeatNo(null); setMovingParty(null); };
 
   const progressOf = (boardTable) => {
     if (!boardTable) return "";
@@ -335,6 +336,14 @@ export default function FloorView({
   const dockRestrictions = map.kind === "terrace"
     ? ((dockBoard?.restrictions?.length ? dockBoard.restrictions : occ[dockLabel]?.data?.restrictions) || [])
     : (dockBoard?.restrictions || []);
+  // chair tap → the guest at that floor position; resolved with the same
+  // per-map mapping the swap drags use, so the card can never show the wrong
+  // person after a seat swap
+  const dockSeat = dockSeatNo != null && dockBoard
+    ? (dockBoard.seats || []).find(
+        (s) => seatFloorPosition(s, floorPositionKey(map.id, dockLabel)) === Number(dockSeatNo),
+      ) || null
+    : null;
   // announce THIS table — same double write as the terrace sheet's
   // SET → KITCHEN: the kitchen banner plus the local strip (when not on yet)
   const announceDock = onSendSetToKitchen && dockBoard ? () => {
@@ -583,6 +592,10 @@ export default function FloorView({
             onSeatSwap={onSwapSeats ? swapSeatPositions : undefined}
             showPartyLines={false}
             serviceSelectedLabel={dockLabel}
+            serviceSelectedSeat={dockSeatNo != null && dockLabel ? { label: dockLabel, no: dockSeatNo } : null}
+            // a chair tap selects the GUEST for the dock (per Djan, 22.08) —
+            // it does not bubble to the table tap
+            onServiceSeatTap={(label, no) => { setDockLabel(label); setDockSeatNo(Number(no)); }}
             // 560 on desktop (22.08): the slimmer dock gives the map the
             // gutter back — ~610px wide instead of ~522
             height={isMobile ? 380 : 560}
@@ -598,8 +611,10 @@ export default function FloorView({
               }
               // A tap SELECTS (per Djan, 21.08) — the dock follows it and
               // holds the SET controls; terrace tables also raise their
-              // action sheet. Nothing toggles on the tap itself.
+              // action sheet. Nothing toggles on the tap itself. A table-body
+              // tap returns the dock from a guest card to the table view.
               setDockLabel(t.label);
+              setDockSeatNo(null);
               if (map.kind === "terrace") setSheetLabel(t.label);
             }}
           />
@@ -609,6 +624,9 @@ export default function FloorView({
           mapKind={map.kind === "terrace" ? "terrace" : "dining"}
           boardTable={dockBoard}
           restrictions={dockRestrictions}
+          selectedSeat={dockSeat}
+          selectedSeatNo={dockSeatNo}
+          onClearSeat={() => setDockSeatNo(null)}
           strip={dockStrip}
           menuCourses={menuCourses}
           profiles={profiles}
