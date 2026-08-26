@@ -1,0 +1,116 @@
+/* ── SERVICE BOARD V2 — ONE KIT ─────────────────────────────
+   Single design language. Roboto Mono everywhere.
+   Ink carries hierarchy; color carries STATE, never decoration. */
+
+@import url('https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;500;700&display=swap');
+
+:root {
+  --font: 'Roboto Mono', ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace;
+
+  /* ink scale — the whole neutral world */
+  --bg:      #f4f3f1;   /* canvas */
+  --surface: #ffffff;   /* card */
+  --ink0:    #0f0e0c;   /* max emphasis */
+  --ink1:    #262522;   /* primary text */
+  --ink2:    #56544f;   /* secondary text */
+  --ink3:    #8b8983;   /* metadata */
+  --line:    #d6d4cf;   /* hairline */
+  --subtle:  #eceae6;   /* faint fill */
+
+  /* signal — functional state only */
+  --gold:       #b98a3c;  --gold-wash:  #f7efdf;   /* fired / in course */
+  --red:        #a83c2e;  --red-wash:   #f6eae8;   /* attention / allergen / destructive */
+  --green:      #3e6b4b;  --green-wash: #eaf1ec;   /* confirmed / set / arrived */
+  --done:       #a8a7a3;                            /* completed, receding */
+
+  /* type scale — five steps, nothing else */
+  --t-label: 500 10px/1.3 var(--font);   /* +0.16em, uppercase — section labels   */
+  --t-meta:  400 12px/1.45 var(--font);  /* +0.08em, uppercase — metadata         */
+  --t-value: 400 14px/1.5  var(--font);  /* data, body — the operational floor    */
+  --t-strong:500 17px/1.4  var(--font);  /* table ids, guest names                */
+  --t-head:  500 22px/1.3  var(--font);  /* +0.04em, uppercase — screen titles    */
+
+  --sp: 8px;            /* spacing base */
+  --tap: 48px;          /* minimum touch target */
+  --rule: 1px solid var(--line);
+  --rule-strong: 2px solid var(--ink0);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink1); font: var(--t-value); -webkit-font-smoothing: antialiased; }
+.label  { font: var(--t-label); letter-spacing: .16em; text-transform: uppercase; color: var(--ink3); }
+.meta   { font: var(--t-meta); letter-spacing: .08em; text-transform: uppercase; color: var(--ink2); }
+.value  { font: var(--t-value); color: var(--ink1); }
+.strong { font: var(--t-strong); color: var(--ink0); }
+.head   { font: var(--t-head); letter-spacing: .04em; text-transform: uppercase; color: var(--ink0); }
+.num    { font-variant-numeric: tabular-nums; }
+
+/* ── SHELL — identical on every screen ── */
+.topbar {
+  height: 52px; background: var(--surface); border-bottom: var(--rule-strong);
+  display: flex; align-items: stretch; padding: 0 16px 0 20px; gap: 24px;
+}
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand .name { font: 700 15px var(--font); letter-spacing: .38em; color: var(--ink0); }
+.rooms { display: flex; align-items: stretch; margin-left: 8px; }
+.room {
+  display: flex; align-items: center; padding: 0 22px; cursor: pointer;
+  font: 500 12px var(--font); letter-spacing: .14em; color: var(--ink2);
+  border-left: var(--rule);
+}
+.room:last-child { border-right: var(--rule); }
+.room.active { background: var(--ink0); color: #fff; }
+.topbar .right { margin-left: auto; display: flex; align-items: center; gap: 18px; }
+.sync { display: flex; align-items: center; gap: 7px; font: 500 11px var(--font); letter-spacing: .12em; color: var(--ink2); }
+.sync .dot { width: 8px; height: 8px; background: var(--green); border-radius: 50%; }
+.clock { font: 500 17px var(--font); letter-spacing: .06em; color: var(--ink0); }
+.who { width: 34px; height: 34px; border: var(--rule); display: flex; align-items: center;
+  justify-content: center; font: 500 11px var(--font); color: var(--ink2); background: var(--surface); }
+
+.ctxbar {
+  height: 46px; background: var(--surface); border-bottom: var(--rule);
+  display: flex; align-items: center; padding: 0 20px; gap: 20px;
+}
+.ctx-read { display: flex; align-items: baseline; gap: 14px; }
+.viewtabs { display: flex; margin-left: auto; }
+.viewtab {
+  height: 32px; display: flex; align-items: center; padding: 0 16px;
+  font: 500 11px var(--font); letter-spacing: .12em; color: var(--ink2);
+  border: var(--rule); border-right: none; background: var(--surface); cursor: pointer;
+}
+.viewtab:last-child { border-right: var(--rule); }
+.viewtab.active { background: var(--ink0); color: #fff; border-color: var(--ink0); }
+
+/* ── CONTROL KIT — the only four button styles ── */
+.btn {
+  font: 500 12px var(--font); letter-spacing: .12em; text-transform: uppercase;
+  min-height: var(--tap); padding: 0 22px; display: inline-flex; align-items: center;
+  justify-content: center; gap: 8px; cursor: pointer; border-radius: 0;
+}
+.btn-primary { background: var(--ink0); color: #fff; border: 2px solid var(--ink0); }
+.btn-secondary { background: var(--surface); color: var(--ink0); border: 1px solid var(--ink0); }
+.btn-quiet { background: transparent; color: var(--ink2); border: 1px solid var(--line); }
+.btn-danger { background: var(--surface); color: var(--red); border: 1px solid var(--red); }
+.btn-confirm { background: var(--green); color: #fff; border: 2px solid var(--green); }
+.btn[disabled] { opacity: .38; pointer-events: none; }
+.btn-sm { min-height: 36px; padding: 0 14px; font-size: 11px; }
+
+/* chips — status (read) vs input (tap) */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px;
+  font: 500 10px var(--font); letter-spacing: .1em; text-transform: uppercase;
+  border: 1px solid var(--line); color: var(--ink2); background: var(--surface);
+}
+.chip-state-reserved { border-style: dashed; border-color: var(--ink3); }
+.chip-state-seated { background: var(--ink0); border-color: var(--ink0); color: #fff; }
+.chip-state-fired { background: var(--gold-wash); border-color: var(--gold); color: var(--gold); }
+.chip-state-attn { background: var(--red-wash); border-color: var(--red); color: var(--red); }
+.chip-state-done { color: var(--done); border-color: var(--subtle); background: var(--subtle); }
+.chip-diet { border: 1px solid var(--red); color: var(--red); background: var(--surface); }
+
+/* card grammar — one table entity everywhere */
+.card { background: var(--surface); border: var(--rule); border-left: 3px solid var(--line); }
+.card.fired { border-left-color: var(--gold); }
+.card.attn { border-left-color: var(--red); }
+.card.seated { border-left-color: var(--ink0); }
+.card.done { border-left-color: var(--subtle); }

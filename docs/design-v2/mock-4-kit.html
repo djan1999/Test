@@ -1,0 +1,159 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>V2 — One Kit</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  body { padding: 26px 30px; }
+  .sheet-head { display: flex; align-items: baseline; gap: 16px; border-bottom: var(--rule-strong); padding-bottom: 14px; margin-bottom: 22px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 26px 34px; }
+  .sec { }
+  .sec-title { display: flex; gap: 10px; align-items: baseline; border-bottom: var(--rule); padding-bottom: 8px; margin-bottom: 14px; }
+  .sec-title .no { font: 500 11px var(--font); color: var(--ink3); }
+  .demo-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .trow { display: flex; align-items: baseline; gap: 16px; margin-bottom: 10px; }
+  .trow .spec { width: 200px; font: 400 10px var(--font); letter-spacing: .08em; color: var(--ink3); text-transform: uppercase; }
+  .swatch { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .swatch .box { width: 40px; height: 26px; border: var(--rule); }
+  .swatch .use { font: 400 11px var(--font); color: var(--ink2); }
+  .swatch .nm { font: 500 11px var(--font); width: 130px; color: var(--ink0); letter-spacing: .06em; }
+  .rule-demo { display: flex; flex-direction: column; gap: 12px; }
+  .ent { display: flex; gap: 16px; align-items: flex-start; }
+  .ent .mini { border: 2px solid var(--ink0); background: var(--surface); width: 108px; height: 74px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; position: relative; }
+  .ent .mini .strip { position: absolute; left: -2px; top: -2px; bottom: -2px; width: 4px; background: var(--gold); }
+  .dots { display: flex; gap: 3px; }
+  .dots i { width: 6px; height: 6px; border: 1px solid var(--ink2); border-radius: 50%; }
+  .dots i.on { background: var(--ink0); border-color: var(--ink0); }
+  .dots i.hot { background: var(--gold); border-color: var(--gold); }
+  .anti { border: 1px dashed var(--red); background: var(--red-wash); padding: 12px 16px; margin-top: 18px;
+    display: flex; gap: 24px; }
+  .anti .item { font: 400 11px var(--font); color: var(--red); letter-spacing: .04em; }
+</style></head>
+<body>
+
+<div class="sheet-head">
+  <span class="head">SERVICE BOARD V2 — ONE KIT</span>
+  <span class="meta">ROBOTO MONO · INK + 3 SIGNALS · RADIUS 0 · 8PX GRID</span>
+  <span class="meta num" style="margin-left:auto">26 AUG 2026</span>
+</div>
+
+<div class="grid">
+
+  <section class="sec">
+    <div class="sec-title"><span class="no">01</span><span class="label" style="color:var(--ink0)">TYPE SCALE — FIVE STEPS, ONE FACE</span></div>
+    <div class="trow"><span class="spec">LABEL · 10/500 +.16em</span><span class="label">SECTION LABEL — TABLE DOCK</span></div>
+    <div class="trow"><span class="spec">META · 12/400 +.08em</span><span class="meta">WED 26 AUG · DINNER · 38 PAX</span></div>
+    <div class="trow"><span class="spec">VALUE · 14/400 — floor</span><span class="value">Venison / porcini / blackberry</span></div>
+    <div class="trow"><span class="spec">STRONG · 17/500</span><span class="strong">T4 · KOVAČ</span></div>
+    <div class="trow"><span class="spec">HEAD · 22/500 +.04em</span><span class="head">DINING ROOM</span></div>
+    <div class="anti">
+      <span class="item">✕ NO 8–9PX TEXT</span>
+      <span class="item">✕ NO SECOND TYPEFACE</span>
+      <span class="item">✕ NO UNLABELED CODES (XC/OW)</span>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-title"><span class="no">02</span><span class="label" style="color:var(--ink0)">COLOR — INK WORKS, SIGNAL SPEAKS</span></div>
+    <div class="swatch"><span class="box" style="background:var(--ink0)"></span><span class="nm">INK 0–3</span><span class="use">hierarchy, chrome, primary actions</span></div>
+    <div class="swatch"><span class="box" style="background:var(--gold)"></span><span class="nm">GOLD — FIRED</span><span class="use">a course is on the pass, timers</span></div>
+    <div class="swatch"><span class="box" style="background:var(--red)"></span><span class="nm">RED — ATTENTION</span><span class="use">allergen, overdue, destructive</span></div>
+    <div class="swatch"><span class="box" style="background:var(--green)"></span><span class="nm">GREEN — CONFIRMED</span><span class="use">seated, ready, saved, synced</span></div>
+    <div class="swatch"><span class="box" style="background:var(--subtle)"></span><span class="nm">SUBTLE — DONE</span><span class="use">finished work recedes</span></div>
+    <div class="anti">
+      <span class="item">✕ NO COLOR AS DECORATION</span>
+      <span class="item">✕ NO EMOJI ICONOGRAPHY</span>
+      <span class="item">✕ NO PINK/BLUE GENDER FILLS</span>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-title"><span class="no">03</span><span class="label" style="color:var(--ink0)">CONTROLS — FOUR WEIGHTS, 48PX TAP</span></div>
+    <div class="demo-row">
+      <button class="btn btn-primary">FIRE VENISON ▸</button>
+      <button class="btn btn-confirm">READY ✓</button>
+      <button class="btn btn-secondary">OPEN DOCK</button>
+    </div>
+    <div class="demo-row">
+      <button class="btn btn-quiet">DETAILS</button>
+      <button class="btn btn-danger">END SERVICE</button>
+      <button class="btn btn-primary" disabled>FIRE ▸</button>
+    </div>
+    <div class="demo-row" style="margin-top:8px">
+      <span class="meta">ONE ADD CONVENTION →</span>
+      <button class="btn btn-secondary btn-sm">[+] NEW RES</button>
+      <button class="btn btn-secondary btn-sm">[+] PROFILE</button>
+      <button class="btn btn-secondary btn-sm">[+] GUEST</button>
+    </div>
+  </section>
+
+  <section class="sec">
+    <div class="sec-title"><span class="no">04</span><span class="label" style="color:var(--ink0)">CHIPS — STATE READS, INPUT TAPS</span></div>
+    <div class="demo-row">
+      <span class="chip chip-state-reserved">RESERVED</span>
+      <span class="chip chip-state-seated">SEATED 19:07</span>
+      <span class="chip chip-state-fired">FIRED 2:41</span>
+      <span class="chip chip-state-attn">DUE NOW</span>
+      <span class="chip chip-state-done">CLOSED</span>
+    </div>
+    <div class="demo-row">
+      <span class="chip chip-diet">VG VEGAN</span>
+      <span class="chip chip-diet">GF GLUTEN FREE</span>
+      <span class="chip chip-diet">NF NUT FREE</span>
+      <span class="chip">NO ALC</span>
+      <span class="chip">CAKE</span>
+    </div>
+    <div class="demo-row" style="margin-top:6px">
+      <span class="meta">WATER, SPELLED OUT →</span>
+      <span class="chip">STILL ×2</span>
+      <span class="chip">SPARKLING ×1</span>
+      <span class="chip">TAP OK</span>
+    </div>
+  </section>
+
+  <section class="sec" style="grid-column: 1 / -1;">
+    <div class="sec-title"><span class="no">05</span><span class="label" style="color:var(--ink0)">ONE TABLE ENTITY — THREE PROJECTIONS</span></div>
+    <div class="ent">
+      <div>
+        <div class="mini">
+          <span class="strip"></span>
+          <span style="font:500 15px var(--font)">T4</span>
+          <span style="font:400 10px var(--font); color:var(--ink2)">KOVAČ · 2P</span>
+          <span class="dots"><i class="on"></i><i class="on"></i><i class="hot"></i><i></i><i></i><i></i></span>
+        </div>
+        <div class="meta" style="margin-top:8px">MAP CELL</div>
+      </div>
+      <div style="flex:1">
+        <div class="card fired" style="max-width:420px">
+          <div style="display:flex; align-items:baseline; gap:12px; padding:12px 16px 8px;">
+            <span style="font:500 20px var(--font)">T4</span>
+            <span style="font:500 14px var(--font)">KOVAČ</span>
+            <span class="meta num" style="margin-left:auto">2 PAX</span>
+          </div>
+          <div style="display:flex; gap:8px; padding:0 16px 12px;">
+            <span class="chip chip-state-seated">SEATED 19:07</span>
+            <span class="chip chip-state-fired">TROUT FIRED</span>
+            <span class="chip chip-diet">VG P2</span>
+          </div>
+        </div>
+        <div class="meta" style="margin-top:8px">BOARD CARD / DOCK HEAD</div>
+      </div>
+      <div style="flex:1">
+        <div class="card fired" style="max-width:420px">
+          <div style="display:flex; align-items:baseline; gap:12px; padding:12px 16px 4px;">
+            <span style="font:500 20px var(--font)">T4</span>
+            <span style="font:400 12px var(--font); color:var(--ink2)">KOVAČ · 2P</span>
+            <span style="font:500 16px var(--font); color:var(--gold); margin-left:auto" class="num">2:41</span>
+          </div>
+          <div style="padding:0 16px 12px; font:500 15px var(--font)">TROUT / RADIŠA / CAVIAR</div>
+        </div>
+        <div class="meta" style="margin-top:8px">KITCHEN TICKET</div>
+      </div>
+    </div>
+    <div class="meta" style="margin-top:14px; color:var(--ink2)">
+      SAME ID TYPE · SAME STATE STRIP · SAME CHIP GRAMMAR — LEARN IT ONCE, READ IT EVERYWHERE.
+    </div>
+  </section>
+
+</div>
+
+</body></html>

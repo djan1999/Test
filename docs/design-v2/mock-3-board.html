@@ -1,0 +1,155 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>V2 — Service · Board</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .stage { padding: 22px 24px; }
+  .sitting { margin-bottom: 26px; }
+  .sit-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 12px; }
+  .sit-rule { flex: 1; border-top: var(--rule); position: relative; top: -3px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+
+  .bcard-top { display: flex; align-items: baseline; gap: 12px; padding: 14px 16px 4px; }
+  .bcard-top .tid { font: 500 20px var(--font); color: var(--ink0); }
+  .bcard-top .tnm { font: 500 14px var(--font); letter-spacing: .04em; color: var(--ink1); }
+  .bcard-top .ttime { margin-left: auto; font: 400 12px var(--font); color: var(--ink2); }
+  .bcard-meta { display: flex; align-items: center; gap: 8px; padding: 8px 16px 12px; flex-wrap: wrap; }
+  .bcard-act { border-top: var(--rule); display: flex; align-items: stretch; }
+  .bcard-act .grow { flex: 1; display: flex; align-items: center; padding: 0 16px;
+    font: 400 11px var(--font); letter-spacing: .1em; color: var(--ink3); }
+  .bcard-act .btn { border: none; border-left: var(--rule); min-height: 46px; }
+</style></head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="name">SERVICE BOARD</span></div>
+  <nav class="rooms">
+    <div class="room active">SERVICE</div>
+    <div class="room">KITCHEN</div>
+    <div class="room">RESERVATIONS</div>
+    <div class="room">ADMIN</div>
+  </nav>
+  <div class="right">
+    <span class="sync"><span class="dot"></span>SYNCED</span>
+    <span class="clock num">18:26</span>
+    <span class="who">AŽ</span>
+  </div>
+</header>
+
+<div class="ctxbar">
+  <div class="ctx-read">
+    <span class="meta" style="color:var(--ink0)">WED 26 AUG · DINNER</span>
+    <span class="meta">14 RES · 38 PAX</span>
+    <span class="meta" style="color:var(--green)">2 SEATED</span>
+  </div>
+  <button class="btn btn-secondary btn-sm" style="margin-left:auto">[+] NEW RES</button>
+  <div class="viewtabs" style="margin-left:14px">
+    <div class="viewtab active">BOARD</div>
+    <div class="viewtab">TERRACE</div>
+    <div class="viewtab">DINING ROOM</div>
+  </div>
+</div>
+
+<main class="stage">
+
+  <section class="sitting">
+    <div class="sit-head">
+      <span class="strong num">[18:30]</span>
+      <span class="sit-rule"></span>
+      <span class="meta num">1/2 SEATED · 8 PAX</span>
+    </div>
+    <div class="cards">
+      <div class="card seated">
+        <div class="bcard-top"><span class="tid">T2–3</span><span class="tnm">ZUPAN</span><span class="ttime num">18:30</span></div>
+        <div class="bcard-meta">
+          <span class="chip chip-state-seated">SEATED 18:24</span>
+          <span class="chip">6 PAX</span>
+          <span class="chip">LONG · SLO</span>
+          <span class="chip chip-diet">GF ×1</span>
+        </div>
+        <div class="bcard-act">
+          <span class="grow">COURSE 1/6 — AMUSE SERVED</span>
+          <button class="btn btn-quiet btn-sm">DETAILS</button>
+          <button class="btn btn-secondary btn-sm">OPEN DOCK ▸</button>
+        </div>
+      </div>
+      <div class="card attn">
+        <div class="bcard-top"><span class="tid">T4</span><span class="tnm">KOVAČ</span><span class="ttime num">18:30</span></div>
+        <div class="bcard-meta">
+          <span class="chip chip-state-reserved">RESERVED</span>
+          <span class="chip">2 PAX</span>
+          <span class="chip">LONG · EN</span>
+          <span class="chip chip-diet">VG P2</span>
+          <span class="chip">NO ALC P2</span>
+        </div>
+        <div class="bcard-act">
+          <span class="grow" style="color:var(--red)">DUE NOW — 18:30</span>
+          <button class="btn btn-quiet btn-sm">DETAILS</button>
+          <button class="btn btn-confirm btn-sm">SEAT ▸</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sitting">
+    <div class="sit-head">
+      <span class="strong num">[19:00]</span>
+      <span class="sit-rule"></span>
+      <span class="meta num">0/2 SEATED · 6 PAX</span>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="bcard-top"><span class="tid">T1</span><span class="tnm">NOVAK</span><span class="ttime num">19:00</span></div>
+        <div class="bcard-meta">
+          <span class="chip chip-state-reserved">RESERVED</span>
+          <span class="chip">2 PAX</span>
+          <span class="chip">SHORT · EN</span>
+        </div>
+        <div class="bcard-act">
+          <span class="grow">ARRIVES IN 34 MIN</span>
+          <button class="btn btn-quiet btn-sm">DETAILS</button>
+          <button class="btn btn-secondary btn-sm">SEAT ▸</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="bcard-top"><span class="tid">T6</span><span class="tnm">HRIBAR</span><span class="ttime num">19:00</span></div>
+        <div class="bcard-meta">
+          <span class="chip chip-state-reserved">RESERVED</span>
+          <span class="chip">4 PAX</span>
+          <span class="chip">LONG · SLO</span>
+          <span class="chip">CAKE</span>
+        </div>
+        <div class="bcard-act">
+          <span class="grow">HOTEL GUEST — ROOM 12</span>
+          <button class="btn btn-quiet btn-sm">DETAILS</button>
+          <button class="btn btn-secondary btn-sm">SEAT ▸</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sitting">
+    <div class="sit-head">
+      <span class="strong num">[20:30]</span>
+      <span class="sit-rule"></span>
+      <span class="meta num">0/1 SEATED · 4 PAX</span>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <div class="bcard-top"><span class="tid">T8</span><span class="tnm">WALK-IN HOLD</span><span class="ttime num">20:30</span></div>
+        <div class="bcard-meta">
+          <span class="chip chip-state-reserved">RESERVED</span>
+          <span class="chip">4 PAX</span>
+          <span class="chip">SHORT · EN</span>
+        </div>
+        <div class="bcard-act">
+          <span class="grow">SECOND SITTING</span>
+          <button class="btn btn-quiet btn-sm">DETAILS</button>
+          <button class="btn btn-secondary btn-sm">SEAT ▸</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+</body></html>

@@ -1,0 +1,155 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>V2 — Kitchen · Pass</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .stage { display: grid; grid-template-columns: 1fr 340px; height: calc(100vh - 98px); }
+
+  .queue { padding: 20px 24px; overflow: auto; }
+  .qcols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+  .qhead { display: flex; align-items: baseline; gap: 10px; margin: 2px 2px 12px; }
+
+  .ticket { margin-bottom: 14px; }
+  .tk-top { display: flex; align-items: baseline; gap: 12px; padding: 12px 16px 10px; }
+  .tk-top .tid { font: 500 20px var(--font); color: var(--ink0); }
+  .tk-top .tnm { font: 400 12px var(--font); letter-spacing: .06em; color: var(--ink2); }
+  .tk-timer { margin-left: auto; font: 500 16px var(--font); color: var(--gold); }
+  .tk-timer.late { color: var(--red); }
+  .tk-course { padding: 0 16px 4px; font: 500 15px var(--font); color: var(--ink0); }
+  .tk-mods { padding: 8px 16px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .mod { display: flex; gap: 10px; font: 400 12px var(--font); color: var(--ink2); }
+  .mod b { color: var(--red); font-weight: 500; }
+  .tk-act { border-top: var(--rule); display: flex; }
+  .tk-act .btn { flex: 1; border: none; min-height: 54px; }
+  .tk-act .btn + .btn { border-left: var(--rule); }
+  .tk.done-card { opacity: .5; }
+  .upnext { border-top: var(--rule); margin-top: 6px; padding-top: 14px; }
+
+  /* mini map, same grammar as service floor */
+  .minimap { border-left: var(--rule-strong); background: var(--surface); padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+  .mm-box { flex: 1; border: 2px solid var(--ink0); position: relative; }
+  .t { position: absolute; border: 1px solid var(--ink1); background: var(--surface);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+  .t .id { font: 500 12px var(--font); color: var(--ink0); }
+  .t .dots { display: flex; gap: 2px; }
+  .t .dots i { width: 5px; height: 5px; border: 1px solid var(--ink2); border-radius: 50%; }
+  .t .dots i.on { background: var(--ink0); border-color: var(--ink0); }
+  .t .dots i.hot { background: var(--gold); border-color: var(--gold); }
+  .t.round { border-radius: 50%; }
+  .t.free { border-color: var(--line); } .t.free .id { color: var(--ink3); }
+  .t.reserved { border-style: dashed; }
+  .t.seated { border-width: 2px; }
+  .t.fired { box-shadow: inset 3px 0 0 var(--gold); }
+  .t.attn { box-shadow: inset 3px 0 0 var(--red); }
+</style></head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="name">SERVICE BOARD</span></div>
+  <nav class="rooms">
+    <div class="room">SERVICE</div>
+    <div class="room active">KITCHEN</div>
+    <div class="room">RESERVATIONS</div>
+    <div class="room">ADMIN</div>
+  </nav>
+  <div class="right">
+    <span class="sync"><span class="dot"></span>SYNCED</span>
+    <span class="clock num">19:42</span>
+    <span class="who">MK</span>
+  </div>
+</header>
+
+<div class="ctxbar">
+  <div class="ctx-read">
+    <span class="meta" style="color:var(--ink0)">WED 26 AUG · DINNER</span>
+    <span class="meta" style="color:var(--gold)">2 FIRED</span>
+    <span class="meta">1 UP NEXT</span>
+  </div>
+  <div class="viewtabs">
+    <div class="viewtab active">TICKETS</div>
+    <div class="viewtab">TERRACE</div>
+    <div class="viewtab">DINING ROOM</div>
+  </div>
+</div>
+
+<main class="stage">
+  <section class="queue">
+    <div class="qcols">
+      <div>
+        <div class="qhead"><span class="label">ON THE PASS</span><span class="meta num">2</span></div>
+
+        <div class="card fired ticket">
+          <div class="tk-top"><span class="tid">T4</span><span class="tnm">KOVAČ · 2P</span><span class="tk-timer num">2:41</span></div>
+          <div class="tk-course">TROUT / RADIŠA / CAVIAR</div>
+          <div class="tk-mods">
+            <div class="mod"><b>P2 VG</b><span>→ CELERIAC / RADIŠA (NO CAVIAR)</span></div>
+            <div class="mod"><span style="color:var(--ink3)">P1</span><span>AS LISTED</span></div>
+          </div>
+          <div class="tk-act">
+            <button class="btn btn-quiet">HOLD</button>
+            <button class="btn btn-confirm">READY ✓</button>
+          </div>
+        </div>
+
+        <div class="card fired ticket">
+          <div class="tk-top"><span class="tid">T2–3</span><span class="tnm">ZUPAN · 6P</span><span class="tk-timer late num">6:12</span></div>
+          <div class="tk-course">TROUT / RADIŠA / CAVIAR</div>
+          <div class="tk-mods">
+            <div class="mod"><b>P4 GF</b><span>→ NO SOURDOUGH CRUMB</span></div>
+            <div class="mod"><span style="color:var(--ink3)">×5</span><span>AS LISTED</span></div>
+          </div>
+          <div class="tk-act">
+            <button class="btn btn-quiet">HOLD</button>
+            <button class="btn btn-confirm">READY ✓</button>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div class="qhead"><span class="label">UP NEXT</span><span class="meta num">1</span></div>
+        <div class="card seated ticket">
+          <div class="tk-top"><span class="tid">T6</span><span class="tnm">HRIBAR · 2P</span></div>
+          <div class="tk-course">VENISON / PORCINI / BLACKBERRY</div>
+          <div class="tk-mods"><div class="mod"><span style="color:var(--ink3)">×2</span><span>AS LISTED</span></div></div>
+          <div class="tk-act">
+            <button class="btn btn-primary">FIRE ▸</button>
+          </div>
+        </div>
+
+        <div class="qhead upnext" style="border-top:none"><span class="label">DONE — LAST 30 MIN</span><span class="meta num">2</span></div>
+        <div class="card done ticket done-card">
+          <div class="tk-top"><span class="tid">T9</span><span class="tnm">OBLAK · 2P</span><span class="tk-timer num" style="color:var(--done)">19:38</span></div>
+          <div class="tk-course" style="color:var(--ink2)">MILKA — CHOCOLATE / HAY</div>
+        </div>
+        <div class="card done ticket done-card">
+          <div class="tk-top"><span class="tid">T2–3</span><span class="tnm">ZUPAN · 6P</span><span class="tk-timer num" style="color:var(--done)">19:21</span></div>
+          <div class="tk-course" style="color:var(--ink2)">SOURDOUGH / KEFIR BUTTER</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="minimap">
+    <span class="label">DINING ROOM — LIVE</span>
+    <div class="mm-box">
+      <div class="t reserved" style="left:6%; top:8%; width:64px; height:44px;"><span class="id">T1</span></div>
+      <div class="t seated fired" style="left:28%; top:7%; width:120px; height:50px;"><span class="id">T2–3</span>
+        <div class="dots"><i class="on"></i><i class="on"></i><i class="hot"></i><i></i><i></i><i></i></div></div>
+      <div class="t seated attn" style="left:70%; top:8%; width:70px; height:48px;"><span class="id">T4</span>
+        <div class="dots"><i class="on"></i><i class="on"></i><i class="hot"></i><i></i><i></i><i></i></div></div>
+      <div class="t round free" style="left:8%; top:40%; width:52px; height:52px;"><span class="id">T5</span></div>
+      <div class="t seated" style="left:36%; top:41%; width:66px; height:46px;"><span class="id">T6</span>
+        <div class="dots"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div></div>
+      <div class="t free" style="left:60%; top:41%; width:66px; height:46px;"><span class="id">T7</span></div>
+      <div class="t reserved" style="left:8%; top:72%; width:66px; height:44px;"><span class="id">T8</span></div>
+      <div class="t round seated" style="left:38%; top:68%; width:56px; height:56px;"><span class="id">T9</span>
+        <div class="dots"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div></div>
+      <div class="t round free" style="left:64%; top:68%; width:56px; height:56px;"><span class="id">T10</span></div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <span class="meta"><span style="color:var(--gold)">●</span> FIRED — WAITING ON PASS</span>
+      <span class="meta"><span style="color:var(--red)">●</span> DIET FLAG ON TABLE</span>
+    </div>
+  </aside>
+</main>
+
+</body></html>

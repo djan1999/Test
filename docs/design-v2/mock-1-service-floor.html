@@ -1,0 +1,184 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>V2 — Service · Floor</title>
+<link rel="stylesheet" href="tokens.css">
+<style>
+  .stage { display: grid; grid-template-columns: 1fr 400px; height: calc(100vh - 98px); }
+
+  /* floor map */
+  .floor { padding: 20px 24px; display: flex; flex-direction: column; }
+  .room-box { flex: 1; border: 2px solid var(--ink0); position: relative; background: var(--surface); }
+  .pass { position: absolute; left: 0; right: 0; bottom: 0; height: 44px; border-top: 2px solid var(--ink0);
+    background: repeating-linear-gradient(45deg, transparent 0 7px, var(--subtle) 7px 9px);
+    display: flex; align-items: center; justify-content: center; }
+  .pass span { background: var(--surface); border: 1px solid var(--ink0); padding: 3px 12px;
+    font: 500 10px var(--font); letter-spacing: .18em; }
+
+  .t { position: absolute; border: 1px solid var(--ink1); background: var(--surface);
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+  .t .id { font: 500 15px var(--font); color: var(--ink0); letter-spacing: .04em; }
+  .t .sub { font: 400 10px var(--font); letter-spacing: .06em; color: var(--ink2); }
+  .t.round { border-radius: 50%; }
+  .t.free { border-color: var(--line); }
+  .t.free .id { color: var(--ink3); }
+  .t.reserved { border-style: dashed; border-color: var(--ink2); }
+  .t.seated { border-width: 2px; border-color: var(--ink0); }
+  .t.seated .strip { position: absolute; left: -2px; top: -2px; bottom: -2px; width: 4px; background: var(--ink0); }
+  .t.fired .strip { background: var(--gold); }
+  .t.attn  .strip { background: var(--red); }
+  .t .dots { display: flex; gap: 3px; margin-top: 1px; }
+  .t .dots i { width: 6px; height: 6px; border: 1px solid var(--ink2); border-radius: 50%; }
+  .t .dots i.on { background: var(--ink0); border-color: var(--ink0); }
+  .t .dots i.hot { background: var(--gold); border-color: var(--gold); }
+  .t .flag { position: absolute; top: 4px; right: 4px; font: 700 8px var(--font); color: var(--red);
+    border: 1px solid var(--red); padding: 1px 3px; letter-spacing: .08em; background: var(--surface); }
+  .legend { display: flex; gap: 22px; align-items: center; padding: 12px 2px 0; }
+  .lg { display: flex; align-items: center; gap: 8px; font: 400 10px var(--font);
+    letter-spacing: .1em; color: var(--ink2); text-transform: uppercase; }
+  .sw { width: 14px; height: 14px; border: 1px solid var(--ink2); background: var(--surface); }
+
+  /* dock */
+  .dock { border-left: var(--rule-strong); background: var(--surface); display: flex; flex-direction: column; overflow: hidden; }
+  .dock-head { padding: 18px 20px 14px; border-bottom: var(--rule); }
+  .dock-id-row { display: flex; align-items: baseline; gap: 12px; }
+  .dock-meta-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+  .allergen { margin: 0; padding: 10px 20px; background: var(--red-wash); border-bottom: 1px solid var(--red);
+    display: flex; align-items: center; gap: 10px; font: 500 11px var(--font); letter-spacing: .1em; color: var(--red); }
+  .courses { flex: 1; overflow: auto; }
+  .course { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: var(--rule); min-height: 52px; }
+  .course .st { width: 16px; text-align: center; font: 500 13px var(--font); color: var(--ink3); }
+  .course.on .st { color: var(--green); }
+  .course.hot { background: var(--gold-wash); }
+  .course.hot .st { color: var(--gold); }
+  .course .nm { flex: 1; font: 400 14px var(--font); color: var(--ink1); }
+  .course.dim .nm { color: var(--ink3); }
+  .course .tm { font: 400 11px var(--font); color: var(--ink3); letter-spacing: .06em; }
+  .course.hot .tm { color: var(--gold); font-weight: 500; }
+  .seats { border-top: var(--rule); padding: 12px 20px; display: flex; flex-direction: column; gap: 8px; }
+  .seatrow { display: flex; align-items: center; gap: 10px; font: 400 12px var(--font); color: var(--ink2); }
+  .seatrow b { font-weight: 500; color: var(--ink0); width: 26px; }
+  .dock-actions { border-top: var(--rule-strong); padding: 14px 20px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .row { display: flex; gap: 10px; }
+  .row .btn { flex: 1; }
+</style></head>
+<body>
+
+<header class="topbar">
+  <div class="brand"><span class="name">SERVICE BOARD</span></div>
+  <nav class="rooms">
+    <div class="room active">SERVICE</div>
+    <div class="room">KITCHEN</div>
+    <div class="room">RESERVATIONS</div>
+    <div class="room">ADMIN</div>
+  </nav>
+  <div class="right">
+    <span class="sync"><span class="dot"></span>SYNCED</span>
+    <span class="clock num">19:42</span>
+    <span class="who">AŽ</span>
+  </div>
+</header>
+
+<div class="ctxbar">
+  <div class="ctx-read">
+    <span class="meta" style="color:var(--ink0)">WED 26 AUG · DINNER</span>
+    <span class="meta">14 RES</span>
+    <span class="meta">38 PAX</span>
+    <span class="meta" style="color:var(--green)">6 SEATED</span>
+  </div>
+  <div class="viewtabs">
+    <div class="viewtab">BOARD</div>
+    <div class="viewtab">TERRACE</div>
+    <div class="viewtab active">DINING ROOM</div>
+  </div>
+</div>
+
+<main class="stage">
+  <section class="floor">
+    <div class="room-box">
+      <!-- top row -->
+      <div class="t reserved" style="left:6%; top:7%; width:110px; height:74px;">
+        <span class="id">T1</span><span class="sub">NOVAK · 19:00</span>
+      </div>
+      <div class="t seated fired" style="left:24%; top:6%; width:220px; height:86px;">
+        <span class="strip"></span>
+        <span class="id">T2–3</span><span class="sub">ZUPAN · 6P</span>
+        <div class="dots"><i class="on"></i><i class="on"></i><i class="hot"></i><i></i><i></i><i></i></div>
+      </div>
+      <div class="t seated attn" style="left:66%; top:7%; width:130px; height:80px;">
+        <span class="strip"></span><span class="flag">VG</span>
+        <span class="id">T4</span><span class="sub">KOVAČ · 2P</span>
+        <div class="dots"><i class="on"></i><i class="on"></i><i class="hot"></i><i></i><i></i><i></i></div>
+      </div>
+      <!-- middle row -->
+      <div class="t round free" style="left:7%; top:42%; width:96px; height:96px;">
+        <span class="id">T5</span>
+      </div>
+      <div class="t seated" style="left:34%; top:43%; width:120px; height:82px;">
+        <span class="strip"></span>
+        <span class="id">T6</span><span class="sub">HRIBAR · 2P</span>
+        <div class="dots"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></div>
+      </div>
+      <div class="t free" style="left:56%; top:43%; width:120px; height:82px;">
+        <span class="id">T7</span>
+      </div>
+      <!-- bottom row -->
+      <div class="t reserved" style="left:7%; top:72%; width:116px; height:76px;">
+        <span class="id">T8</span><span class="sub">20:30 · 4P</span>
+      </div>
+      <div class="t round seated done" style="left:36%; top:70%; width:100px; height:100px;">
+        <span class="strip" style="background:var(--done)"></span>
+        <span class="id">T9</span><span class="sub">OBLAK · 2P</span>
+        <div class="dots"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></div>
+      </div>
+      <div class="t round free" style="left:62%; top:70%; width:100px; height:100px;">
+        <span class="id">T10</span>
+      </div>
+      <div class="pass"><span>PASS / KITCHEN</span></div>
+    </div>
+    <div class="legend">
+      <span class="lg"><span class="sw" style="border-style:dashed"></span>RESERVED</span>
+      <span class="lg"><span class="sw" style="border-width:2px;border-color:var(--ink0)"></span>SEATED</span>
+      <span class="lg"><span class="sw" style="border-color:var(--gold);background:var(--gold-wash)"></span>COURSE FIRED</span>
+      <span class="lg"><span class="sw" style="border-color:var(--red);background:var(--red-wash)"></span>ATTENTION</span>
+      <span class="lg"><span class="sw" style="border-color:var(--subtle);background:var(--subtle)"></span>CLOSING</span>
+    </div>
+  </section>
+
+  <aside class="dock">
+    <div class="dock-head">
+      <div class="label" style="margin-bottom:8px">TABLE DOCK</div>
+      <div class="dock-id-row">
+        <span class="strong" style="font-size:24px">T4</span>
+        <span class="strong">KOVAČ</span>
+        <span class="meta num" style="margin-left:auto">2 PAX</span>
+      </div>
+      <div class="dock-meta-row">
+        <span class="chip chip-state-seated">SEATED 19:07</span>
+        <span class="chip">LONG · EN</span>
+        <span class="meta num" style="margin-left:auto">+35 MIN</span>
+      </div>
+    </div>
+    <div class="allergen">⚠ P2 VEGAN — KITCHEN NOTIFIED</div>
+    <div class="courses">
+      <div class="course on dim"><span class="st">✓</span><span class="nm">AMUSE — CORN / ELDERFLOWER</span><span class="tm num">19:12</span></div>
+      <div class="course on dim"><span class="st">✓</span><span class="nm">SOURDOUGH / KEFIR BUTTER</span><span class="tm num">19:21</span></div>
+      <div class="course hot"><span class="st">●</span><span class="nm">TROUT / RADIŠA / CAVIAR</span><span class="tm">FIRED 19:41</span></div>
+      <div class="course"><span class="st">○</span><span class="nm">VENISON / PORCINI / BLACKBERRY</span><span class="tm"></span></div>
+      <div class="course"><span class="st">○</span><span class="nm">PRE-DESSERT — PINE / YOGURT</span><span class="tm"></span></div>
+      <div class="course"><span class="st">○</span><span class="nm">MILKA — CHOCOLATE / HAY</span><span class="tm"></span></div>
+    </div>
+    <div class="seats">
+      <div class="seatrow"><b>P1</b><span>STILL ×1</span><span>·</span><span>PAIRING ½</span></div>
+      <div class="seatrow"><b>P2</b><span>SPARKLING ×1</span><span>·</span><span>NO ALCOHOL</span><span class="chip chip-diet" style="margin-left:auto">VG VEGAN</span></div>
+    </div>
+    <div class="dock-actions">
+      <button class="btn btn-primary">FIRE VENISON ▸</button>
+      <div class="row">
+        <button class="btn btn-secondary btn-sm">HOLD</button>
+        <button class="btn btn-secondary btn-sm">MOVE</button>
+        <button class="btn btn-quiet btn-sm">UNSEAT</button>
+      </div>
+    </div>
+  </aside>
+</main>
+
+</body></html>
