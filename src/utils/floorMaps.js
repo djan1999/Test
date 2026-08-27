@@ -903,6 +903,48 @@ export function hitTestSheet(sheet, point) {
   return null;
 }
 
+// ── MIRROR view transform ───────────────────────────────────────────────────
+// A station's tablet can stand facing AGAINST the map's drawn orientation, so
+// the floor reads mirrored from where you hold it — "the table on my left
+// shows on the right" (per Djan, 27.08). MIRROR fixes that as a pure
+// reflection across the vertical axis applied at RENDER time: geometry flips,
+// identity does not. Labels, boardIds, members and seat NUMBERS ride along
+// untouched, so every identity-keyed structure (SET strips, seat swaps,
+// reservations, the dock) behaves exactly the same on a mirrored floor — and
+// text stays readable because the DATA reflects, never the SVG. Stored maps
+// are never mirrored; the preference is per device by nature (it describes
+// one tablet's physical disposition) and lives with the caller.
+export function mirrorFloorMap(map) {
+  if (!map) return map;
+  const seat = (s) => {
+    if (s.angle != null) return { ...s, angle: (360 - s.angle) % 360 };
+    if (s.side === "W" || s.side === "E") return { ...s, side: s.side === "W" ? "E" : "W" };
+    // N/S offsets run along x. Quantised to 6dp (same trick as the ring snap
+    // in seatDisplayPoints) so mirroring twice restores offsets EXACTLY —
+    // 1-0.78 alone lands a hair off 0.22 in floating point.
+    return { ...s, offset: Number((1 - (s.offset ?? 0.5)).toFixed(6)) };
+  };
+  const sheet = sheetOf(map);
+  return {
+    ...map,
+    tables: (map.tables || []).map((t) => ({
+      ...t,
+      x: MAP_W - t.x - t.w,
+      seats: (t.seats || []).map(seat),
+    })),
+    sheet: {
+      walls: sheet.walls.map((w) => ({ ...w, pts: arr(w.pts).map(([x, y]) => [MAP_W - x, y]) })),
+      // Openings keep seg + t: reflection is affine, so "t along the segment"
+      // lands on the reflected point by itself. The leaf's computed normal
+      // NEGATES under reflection though — flip the swing so a door that
+      // opened into the room still opens into the room.
+      openings: sheet.openings.map((o) => ({ ...o, swing: (o.swing || 1) === -1 ? 1 : -1 })),
+      zones: sheet.zones.map((z) => ({ ...z, x: MAP_W - z.x - z.w })),
+      planters: sheet.planters.map((p) => ({ ...p, x: MAP_W - p.x })),
+    },
+  };
+}
+
 // ── map ops ─────────────────────────────────────────────────────────────────
 
 const uniqueMapId = (state, base) => {
