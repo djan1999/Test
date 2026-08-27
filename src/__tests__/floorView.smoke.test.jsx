@@ -625,56 +625,68 @@ describe("FOH table dock (quick access beside the map)", () => {
   });
 });
 
-describe("MIRROR — flip the drawing to match the tablet's disposition (per Djan, 27.08)", () => {
+describe("MIRROR — selectable flips (↕ / ↔) to match the tablet's disposition (per Djan, 27.08)", () => {
   // per-DEVICE preference in localStorage — isolate every case
   beforeEach(() => { try { localStorage.clear(); } catch {} });
   afterEach(() => { try { localStorage.clear(); } catch {} });
 
-  const tableY = (container, label) =>
-    Number(findTable(container, label).querySelector("rect").getAttribute("y"));
+  const tileBox = (container, label) => {
+    const r = findTable(container, label).querySelector("rect");
+    return { x: Number(r.getAttribute("x")), y: Number(r.getAttribute("y")) };
+  };
 
-  it("flips the geometry upside down (never left–right) and back; identity (labels, taps, chairs, codes) is untouched", () => {
-    const { container, handlers, getByText } = setup();
-    expect(tableY(container, "T1")).toBe(8); // stored position
-    fireEvent.click(getByText("MIRROR"));
-    expect(tableY(container, "T1")).toBe(75); // MAP_H 92 − y 8 − h 9
-    // P1's chair keeps the W edge (x 5.6 — left–right must NOT flip) while
-    // its y rides the flipped table: 75 + 9/2 = 79.5
-    expect(findTable(container, "T1").querySelector('[data-seat="0"] g').getAttribute("transform"))
-      .toContain("translate(5.6,79.5");
-    // the restriction code still rides P1's chair — the guest moved WITH it
-    expect(findTable(container, "T1").textContent).toContain("SHF");
-    // a tap on the mirrored tile selects ITS table, exactly as before
-    fireEvent.click(findTable(container, "T1"));
-    expect(handlers.onCycleStatus).not.toHaveBeenCalled();
-    expect(getByText("[TABLE DOCK]").parentElement.textContent).toContain("T1");
-    // toggle back off — the stored drawing returns exactly
-    fireEvent.click(getByText("MIRROR"));
-    expect(tableY(container, "T1")).toBe(8);
+  it("↕ and ↔ each flip their own axis, compose to the 180° turn, and unwind independently", () => {
+    const { container, getByText } = setup();
+    expect(tileBox(container, "T1")).toEqual({ x: 8, y: 8 }); // stored position (12×9)
+    fireEvent.click(getByText("MIRROR ↕"));
+    expect(tileBox(container, "T1")).toEqual({ x: 8, y: 75 });  // 92−8−9, x untouched
+    fireEvent.click(getByText("MIRROR ↔"));
+    expect(tileBox(container, "T1")).toEqual({ x: 80, y: 75 }); // +100−8−12 — both = 180°
+    fireEvent.click(getByText("MIRROR ↕"));
+    expect(tileBox(container, "T1")).toEqual({ x: 80, y: 8 });  // ↔ stays on alone
+    fireEvent.click(getByText("MIRROR ↔"));
+    expect(tileBox(container, "T1")).toEqual({ x: 8, y: 8 });   // back to the stored drawing
   });
 
-  it("remembers per ROOM (dining and terrace flip independently) and per DEVICE (survives a remount)", () => {
+  it("flipping never touches identity: taps, the dock and restriction codes follow the guests", () => {
+    const { container, handlers, getByText } = setup();
+    fireEvent.click(getByText("MIRROR ↕"));
+    fireEvent.click(getByText("MIRROR ↔"));
+    // P1's chair (W edge, at 5.6/12.5 stored) rides the 180° turn to the E
+    // edge of the turned tile: x 92+2.4, y 75+4.5
+    expect(findTable(container, "T1").querySelector('[data-seat="0"] g').getAttribute("transform"))
+      .toContain("translate(94.4,79.5");
+    expect(findTable(container, "T1").textContent).toContain("SHF"); // P1's code moved WITH the guest
+    fireEvent.click(findTable(container, "T1"));
+    expect(handlers.onCycleStatus).not.toHaveBeenCalled(); // select-only, as ever
+    expect(getByText("[TABLE DOCK]").parentElement.textContent).toContain("T1");
+  });
+
+  it("remembers per ROOM and per DEVICE; the retired one-flag format still reads as the ↕ it meant", () => {
     const first = setup();
-    fireEvent.click(first.getByText("MIRROR")); // dining ON
-    expect(tableY(first.container, "T1")).toBe(75);
-    // the terrace keeps its own (un-mirrored) disposition
+    fireEvent.click(first.getByText("MIRROR ↕")); // dining ↕ ON
     fireEvent.click(first.getByText("TERRACE"));
-    expect(tableY(first.container, "T21")).toBe(18);
-    // …and its own toggle
-    fireEvent.click(first.getByText("MIRROR"));
-    expect(tableY(first.container, "T21")).toBe(92 - 18 - 10);
+    expect(tileBox(first.container, "T21")).toEqual({ x: 8, y: 18 }); // terrace keeps its own disposition
+    fireEvent.click(first.getByText("MIRROR ↔")); // terrace ↔ ON only
+    expect(tileBox(first.container, "T21")).toEqual({ x: 100 - 8 - 14, y: 18 });
     first.unmount();
-    // a fresh mount on the same device restores both flips
+    // a fresh mount on the same device restores both rooms' choices
     const again = setup();
-    expect(tableY(again.container, "T1")).toBe(75);
+    expect(tileBox(again.container, "T1")).toEqual({ x: 8, y: 75 });
     fireEvent.click(again.getByText("TERRACE"));
-    expect(tableY(again.container, "T21")).toBe(64);
+    expect(tileBox(again.container, "T21")).toEqual({ x: 78, y: 18 });
+    again.unmount();
+    // a boolean stored by the one-axis MIRROR builds means up↕down
+    try { localStorage.setItem("milka_floor_mirror_v1", JSON.stringify({ dining: true })); } catch {}
+    const migrated = setup();
+    expect(tileBox(migrated.container, "T1")).toEqual({ x: 8, y: 75 });
   });
 
   it("mirrored terrace tiles still resolve their party — occupancy, dock and MOVE all follow the label", () => {
     const { container, handlers, getByText } = setup();
     fireEvent.click(getByText("TERRACE"));
-    fireEvent.click(getByText("MIRROR"));
+    fireEvent.click(getByText("MIRROR ↕"));
+    fireEvent.click(getByText("MIRROR ↔"));
     // WEISS still occupies T23 (identity), wherever the tile draws
     const dock = (() => { fireEvent.click(findTable(container, "T23")); return getByText("[TABLE DOCK]").parentElement; })();
     expect(dock.textContent).toContain("×4");

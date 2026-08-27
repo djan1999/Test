@@ -53,8 +53,16 @@ const actionBtn = (primary) => ({
 // disposition at its station, so it must never sync to the other screens) and
 // per ROOM: "dining" covers every dining layout (same physical room, whatever
 // tonight's map), the terrace is its own space. Same localStorage register as
-// the kitchen minimap's remembered room.
+// the kitchen minimap's remembered room. Each room stores WHICH axes flip:
+// { upDown, leftRight } — selectable per Djan (27.08), both on = the 180°
+// turn. Builds that shipped the one-axis MIRROR stored a plain boolean;
+// normalize it to the up↔down flip it meant, so updated tablets keep their
+// setting.
 const MIRROR_LS_KEY = "milka_floor_mirror_v1";
+const mirrorAxesOf = (v) => ({
+  upDown: v === true || !!v?.upDown,
+  leftRight: !!v?.leftRight,
+});
 const readMirrorPrefs = () => {
   try {
     const raw = JSON.parse(localStorage.getItem(MIRROR_LS_KEY) || "{}");
@@ -109,17 +117,21 @@ export default function FloorView({
   }, [mapKind]);
 
   // MIRROR (per Djan, 27.08): a tablet standing against the map's drawn
-  // orientation shows the room UPSIDE DOWN from where you look at it — what's
-  // near you draws at the far edge. The toggle flips the DRAWING top↔bottom
-  // only ("mirror" means upside down, NOT left–right — Djan) — a render-time
-  // reflection of the geometry. Identity (labels, seat numbers, taps, every
-  // write) is untouched, so the dock, strips and swaps behave exactly the
-  // same on a mirrored floor.
+  // orientation shows the room flipped from where you look at it — and which
+  // way depends on the station, so BOTH axes are selectable: ↕ flips
+  // top↔bottom (what's near you draws at the near edge), ↔ flips left↔right,
+  // both together turn the map 180°. A render-time reflection of the DRAWING
+  // only. Identity (labels, seat numbers, taps, every write) is untouched,
+  // so the dock, strips and swaps behave exactly the same on a mirrored
+  // floor.
   const mirrorKind = map?.kind === "terrace" ? "terrace" : "dining";
-  const mirrored = !!mirrorPrefs[mirrorKind];
-  const shownMap = useMemo(() => (mirrored ? mirrorFloorMap(map) : map), [map, mirrored]);
-  const toggleMirror = () => {
-    const next = { ...mirrorPrefs, [mirrorKind]: !mirrored };
+  const mirrorAxes = mirrorAxesOf(mirrorPrefs[mirrorKind]);
+  const shownMap = useMemo(
+    () => mirrorFloorMap(map, mirrorAxes),
+    [map, mirrorAxes.upDown, mirrorAxes.leftRight],
+  );
+  const toggleMirror = (axis) => {
+    const next = { ...mirrorPrefs, [mirrorKind]: { ...mirrorAxes, [axis]: !mirrorAxes[axis] } };
     setMirrorPrefs(next);
     storeMirrorPrefs(next);
   };
@@ -447,14 +459,25 @@ export default function FloorView({
         {/* no bulk SEND SET here — the dock is the ONE set surface (per Djan,
             22.08). The button also flashed back for the render(s) between the
             dock's FIRE consuming courseReady and the strip watcher's clear. */}
-        <button
-          style={{ ...btn(mirrored), padding: "5px 10px", marginLeft: 0 }}
-          onClick={toggleMirror}
-          aria-pressed={mirrored}
-          title="Flip the map upside down to match the room as seen from this tablet's station"
-        >
-          MIRROR
-        </button>
+        {/* one segmented control, two independent flips — both on = 180° */}
+        <span style={{ display: "flex" }}>
+          <button
+            style={{ ...btn(mirrorAxes.upDown), padding: "5px 10px", marginLeft: 0 }}
+            onClick={() => toggleMirror("upDown")}
+            aria-pressed={mirrorAxes.upDown}
+            title="Flip the map top↔bottom to match the room as seen from this tablet's station"
+          >
+            MIRROR ↕
+          </button>
+          <button
+            style={{ ...btn(mirrorAxes.leftRight), padding: "5px 10px" }}
+            onClick={() => toggleMirror("leftRight")}
+            aria-pressed={mirrorAxes.leftRight}
+            title="Flip the map left↔right to match the room as seen from this tablet's station"
+          >
+            MIRROR ↔
+          </button>
+        </span>
         <span style={{ color: tokens.ink[3], fontSize: 8 }}>TAP TABLE → DOCK · TAP CHAIR → QUICK ACCESS</span>
       </div>
 
