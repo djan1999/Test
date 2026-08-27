@@ -109,10 +109,12 @@ export default function FloorView({
   }, [mapKind]);
 
   // MIRROR (per Djan, 27.08): a tablet standing against the map's drawn
-  // orientation shows the room mirrored from where you look at it. The toggle
-  // flips the DRAWING only — a render-time reflection of the geometry.
-  // Identity (labels, seat numbers, taps, every write) is untouched, so the
-  // dock, strips and swaps behave exactly the same on a mirrored floor.
+  // orientation shows the room UPSIDE DOWN from where you look at it — what's
+  // near you draws at the far edge. The toggle flips the DRAWING top↔bottom
+  // only ("mirror" means upside down, NOT left–right — Djan) — a render-time
+  // reflection of the geometry. Identity (labels, seat numbers, taps, every
+  // write) is untouched, so the dock, strips and swaps behave exactly the
+  // same on a mirrored floor.
   const mirrorKind = map?.kind === "terrace" ? "terrace" : "dining";
   const mirrored = !!mirrorPrefs[mirrorKind];
   const shownMap = useMemo(() => (mirrored ? mirrorFloorMap(map) : map), [map, mirrored]);
@@ -449,7 +451,7 @@ export default function FloorView({
           style={{ ...btn(mirrored), padding: "5px 10px", marginLeft: 0 }}
           onClick={toggleMirror}
           aria-pressed={mirrored}
-          title="Flip the map left–right to match the room as seen from this tablet's station"
+          title="Flip the map upside down to match the room as seen from this tablet's station"
         >
           MIRROR
         </button>
