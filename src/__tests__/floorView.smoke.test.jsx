@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, fireEvent, within } from "@testing-library/react";
 import FloorView from "../components/floor/FloorView.jsx";
 import FloorMap from "../components/floor/FloorMap.jsx";
@@ -622,5 +622,62 @@ describe("FOH table dock (quick access beside the map)", () => {
     const dock = dockOf(getByText);
     expect(dock.textContent).toContain("[COURSE · C1/2]");
     expect(dock.textContent).toContain("C01 / Amuse");
+  });
+});
+
+describe("MIRROR — flip the drawing to match the tablet's disposition (per Djan, 27.08)", () => {
+  // per-DEVICE preference in localStorage — isolate every case
+  beforeEach(() => { try { localStorage.clear(); } catch {} });
+  afterEach(() => { try { localStorage.clear(); } catch {} });
+
+  const tableX = (container, label) =>
+    Number(findTable(container, label).querySelector("rect").getAttribute("x"));
+
+  it("flips the geometry left–right and back; identity (labels, taps, chairs, codes) is untouched", () => {
+    const { container, handlers, getByText } = setup();
+    expect(tableX(container, "T1")).toBe(8); // stored position
+    fireEvent.click(getByText("MIRROR"));
+    expect(tableX(container, "T1")).toBe(80); // MAP_W 100 − x 8 − w 12
+    // P1's chair (W edge, x−2.4 = 5.6) now draws off the E edge: 92 + 2.4
+    expect(findTable(container, "T1").querySelector('[data-seat="0"] g').getAttribute("transform"))
+      .toContain("translate(94.4,");
+    // the restriction code still rides P1's chair — the guest moved WITH it
+    expect(findTable(container, "T1").textContent).toContain("SHF");
+    // a tap on the mirrored tile selects ITS table, exactly as before
+    fireEvent.click(findTable(container, "T1"));
+    expect(handlers.onCycleStatus).not.toHaveBeenCalled();
+    expect(getByText("[TABLE DOCK]").parentElement.textContent).toContain("T1");
+    // toggle back off — the stored drawing returns exactly
+    fireEvent.click(getByText("MIRROR"));
+    expect(tableX(container, "T1")).toBe(8);
+  });
+
+  it("remembers per ROOM (dining and terrace flip independently) and per DEVICE (survives a remount)", () => {
+    const first = setup();
+    fireEvent.click(first.getByText("MIRROR")); // dining ON
+    expect(tableX(first.container, "T1")).toBe(80);
+    // the terrace keeps its own (un-mirrored) disposition
+    fireEvent.click(first.getByText("TERRACE"));
+    expect(tableX(first.container, "T21")).toBe(8);
+    // …and its own toggle
+    fireEvent.click(first.getByText("MIRROR"));
+    expect(tableX(first.container, "T21")).toBe(100 - 8 - 14);
+    first.unmount();
+    // a fresh mount on the same device restores both flips
+    const again = setup();
+    expect(tableX(again.container, "T1")).toBe(80);
+    fireEvent.click(again.getByText("TERRACE"));
+    expect(tableX(again.container, "T21")).toBe(78);
+  });
+
+  it("mirrored terrace tiles still resolve their party — occupancy, dock and MOVE all follow the label", () => {
+    const { container, handlers, getByText } = setup();
+    fireEvent.click(getByText("TERRACE"));
+    fireEvent.click(getByText("MIRROR"));
+    // WEISS still occupies T23 (identity), wherever the tile draws
+    const dock = (() => { fireEvent.click(findTable(container, "T23")); return getByText("[TABLE DOCK]").parentElement; })();
+    expect(dock.textContent).toContain("×4");
+    fireEvent.click(within(dock).getByText(/MOVE TO T9/));
+    expect(handlers.onMove).toHaveBeenCalledWith(reservations[0]);
   });
 });

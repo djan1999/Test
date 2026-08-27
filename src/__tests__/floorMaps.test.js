@@ -4,7 +4,7 @@ import {
   findMapTable, resolveReservationTable, boardIdsOf, mapSeatCountForBoardTable,
   planLayoutSwitch, applyLayoutSwitchRow, layoutSwitchBlockers, isCurrentServiceRow,
   activeDiningMapIdForDay, setActiveDiningForDay, resolveFloorMapsForDay,
-  seatDisplayPoints, assignSeatNumbers,
+  seatDisplayPoints, assignSeatNumbers, mirrorFloorMap,
   terraceOccupancy,
   GEOMETRY_VERSION, MAP_W, MAP_H,
   moveTable, resizeTable, rotateTable, setTableShape, renameTable,
@@ -379,6 +379,79 @@ describe("seatDisplayPoints", () => {
     expect(pts[1].x).toBeCloseTo(6);
     expect(pts[2].x).toBeCloseTo(10);
     expect(pts[3].x).toBeCloseTo(6);  // lone S chair centers
+  });
+});
+
+describe("mirrorFloorMap (the per-device MIRROR view — geometry flips, identity does not)", () => {
+  it("reflects tables across the vertical axis; labels, slots and merges ride along", () => {
+    const m = mirrorFloorMap(mapA);
+    const t1 = findMapTable(m, "T1"); // stored at x 8, w 12
+    expect(t1.x).toBe(MAP_W - 8 - 12);
+    expect(t1.y).toBe(8);
+    expect(boardIdsOf(t1)).toEqual([1]);
+    expect(findMapTable(m, "T2-3").members).toEqual(["T2", "T3"]);
+    // the stored state is never touched — a pure view of it
+    expect(findMapTable(mapA, "T1").x).toBe(8);
+  });
+
+  it("seat NUMBERS stay with their guests while the chairs flip: W↔E, N/S offsets reflect, ring angles reflect", () => {
+    const m = mirrorFloorMap(mapA);
+    // T1's P1 sat the W edge → draws on the E edge now (that IS where the
+    // mirrored viewer sees that guest); P2 the other way
+    expect(findMapTable(m, "T1").seats).toEqual([
+      { no: 1, side: "E", offset: 0.5 }, { no: 2, side: "W", offset: 0.5 },
+    ]);
+    // merge corners cross: SW (S @ 0.22) ↔ SE (S @ 0.78)
+    const corners = findMapTable(m, "T2-3").seats;
+    expect(corners[0]).toEqual({ no: 1, side: "S", offset: 0.78 });
+    expect(corners[3]).toEqual({ no: 4, side: "S", offset: 0.22 });
+    // round T5: NW (315°) ↔ NE (45°)
+    expect(findMapTable(m, "T5").seats.map((s) => s.angle)).toEqual([45, 315]);
+  });
+
+  it("every seed table's display points come out as the EXACT reflection of the original's", () => {
+    for (const map of state.maps) {
+      const mirroredMap = mirrorFloorMap(map);
+      for (const table of map.tables) {
+        const orig = seatDisplayPoints(table);
+        const mir = seatDisplayPoints(findMapTable(mirroredMap, table.label));
+        orig.forEach((p, i) => {
+          expect(mir[i].no).toBe(p.no);
+          expect(mir[i].x).toBeCloseTo(MAP_W - p.x, 6);
+          expect(mir[i].y).toBeCloseTo(p.y, 6);
+          expect(mir[i].out.x).toBeCloseTo(-p.out.x, 6);
+          expect(mir[i].out.y).toBeCloseTo(p.out.y, 6);
+        });
+      }
+    }
+  });
+
+  it("mirrors the sheet: walls/zones/planters reflect, doors keep their spot AND their side of the room", () => {
+    const terrace = getTerraceMap(state);
+    const m = mirrorFloorMap(terrace);
+    expect(sheetOf(m).walls[0].pts).toEqual([[98, 2], [2, 2], [2, 90], [98, 90]]);
+    expect(sheetOf(m).planters.map((p) => p.x)).toEqual([87, 66, 45]);
+    const dining = mirrorFloorMap(mapA);
+    expect(sheetOf(dining).zones[0]).toMatchObject({ x: 2, w: 96, label: "PASS / KITCHEN" }); // symmetric zone stays put
+    // the terrace door sat on the LEFT wall — its whole geometry (gap, hinge
+    // end, leaf) must land reflected onto the RIGHT wall, leaf still opening
+    // INTO the room (swing flips because reflection negates the leaf normal)
+    const g0 = doorGeometry(sheetOf(terrace).openings[0], sheetOf(terrace).walls);
+    const g1 = doorGeometry(sheetOf(m).openings[0], sheetOf(m).walls);
+    expect(g1.center[0]).toBeCloseTo(MAP_W - g0.center[0], 6);
+    expect(g1.center[1]).toBeCloseTo(g0.center[1], 6);
+    expect(g1.h[0]).toBeCloseTo(MAP_W - g0.h[0], 6);
+    expect(g1.h[1]).toBeCloseTo(g0.h[1], 6);
+    expect(g1.leafEnd[0]).toBeCloseTo(MAP_W - g0.leafEnd[0], 6);
+    expect(g1.leafEnd[1]).toBeCloseTo(g0.leafEnd[1], 6);
+  });
+
+  it("mirroring twice restores the original geometry exactly (toggle on/off is lossless)", () => {
+    for (const map of state.maps) {
+      const twice = mirrorFloorMap(mirrorFloorMap(map));
+      expect(twice.tables).toEqual(map.tables);
+      expect(sheetOf(twice)).toEqual(sheetOf(map));
+    }
   });
 });
 

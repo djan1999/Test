@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import FloorMap from "./FloorMap.jsx";
 import FloorDock from "./FloorDock.jsx";
 import { DisplayBoardCard } from "../service/DisplayBoard.jsx";
 import {
   getActiveDiningMap, getTerraceMap, terraceOccupancy, boardIdsOf,
-  resolveReservationTable, floorStatusOf, mapTicker,
+  resolveReservationTable, floorStatusOf, mapTicker, mirrorFloorMap,
 } from "../../utils/floorMaps.js";
 import { visitStateOf } from "../../utils/terraceFlow.js";
 import { useFullscreenBoost } from "../../hooks/useIsFullscreen.js";
@@ -49,6 +49,22 @@ const actionBtn = (primary) => ({
   borderRadius: 0, cursor: "pointer", touchAction: "manipulation", fontWeight: primary ? 600 : 400,
 });
 
+// MIRROR preference — per DEVICE (it describes THIS tablet's physical
+// disposition at its station, so it must never sync to the other screens) and
+// per ROOM: "dining" covers every dining layout (same physical room, whatever
+// tonight's map), the terrace is its own space. Same localStorage register as
+// the kitchen minimap's remembered room.
+const MIRROR_LS_KEY = "milka_floor_mirror_v1";
+const readMirrorPrefs = () => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(MIRROR_LS_KEY) || "{}");
+    return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  } catch { return {}; }
+};
+const storeMirrorPrefs = (prefs) => {
+  try { localStorage.setItem(MIRROR_LS_KEY, JSON.stringify(prefs)); } catch {}
+};
+
 export default function FloorView({
   // "terrace" | "dining": the caller owns which map shows (the 11.07
   // flattening — BOARD/TERRACE/DINING ROOM one row up in App); the inner
@@ -77,6 +93,7 @@ export default function FloorView({
   const [dockLabel, setDockLabel] = useState(null); // the table the side dock follows (last tap)
   const [dockSeatNo, setDockSeatNo] = useState(null); // chair tap → that ONE seat's quick access, in the dock column
   const [movingParty, setMovingParty] = useState(null); // terrace CHANGE TABLE: the reservation being re-seated
+  const [mirrorPrefs, setMirrorPrefs] = useState(readMirrorPrefs); // { dining?: bool, terrace?: bool }
   // Fullscreen WITH a laptop-sized screen behind it (the gate toggle / F11 /
   // the PWA's fullscreen display mode): the extra pixels go to the map and
   // the dock, not to margins. Space-gated, not flag-gated — the tablet PWA is
@@ -90,6 +107,21 @@ export default function FloorView({
   useEffect(() => {
     if (mapKind) { setDockLabel(null); setDockSeatNo(null); setMovingParty(null); }
   }, [mapKind]);
+
+  // MIRROR (per Djan, 27.08): a tablet standing against the map's drawn
+  // orientation shows the room mirrored from where you look at it. The toggle
+  // flips the DRAWING only — a render-time reflection of the geometry.
+  // Identity (labels, seat numbers, taps, every write) is untouched, so the
+  // dock, strips and swaps behave exactly the same on a mirrored floor.
+  const mirrorKind = map?.kind === "terrace" ? "terrace" : "dining";
+  const mirrored = !!mirrorPrefs[mirrorKind];
+  const shownMap = useMemo(() => (mirrored ? mirrorFloorMap(map) : map), [map, mirrored]);
+  const toggleMirror = () => {
+    const next = { ...mirrorPrefs, [mirrorKind]: !mirrored };
+    setMirrorPrefs(next);
+    storeMirrorPrefs(next);
+  };
+
   if (!map) return null;
 
   // No confirmation toast (per Djan, 22.08): it mounted above the ticker and
@@ -413,6 +445,14 @@ export default function FloorView({
         {/* no bulk SEND SET here — the dock is the ONE set surface (per Djan,
             22.08). The button also flashed back for the render(s) between the
             dock's FIRE consuming courseReady and the strip watcher's clear. */}
+        <button
+          style={{ ...btn(mirrored), padding: "5px 10px", marginLeft: 0 }}
+          onClick={toggleMirror}
+          aria-pressed={mirrored}
+          title="Flip the map left–right to match the room as seen from this tablet's station"
+        >
+          MIRROR
+        </button>
         <span style={{ color: tokens.ink[3], fontSize: 8 }}>TAP TABLE → DOCK · TAP CHAIR → QUICK ACCESS</span>
       </div>
 
@@ -477,7 +517,7 @@ export default function FloorView({
       }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <FloorMap
-            map={map}
+            map={shownMap}
             mode="service"
             tableState={tableState}
             restrictionsByLabel={restrictionsByLabel}
