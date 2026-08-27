@@ -382,82 +382,106 @@ describe("seatDisplayPoints", () => {
   });
 });
 
-describe("mirrorFloorMap (the per-device MIRROR view — upside down: geometry flips, identity does not)", () => {
-  it("reflects tables top↔bottom (never left–right); labels, slots and merges ride along", () => {
-    const m = mirrorFloorMap(mapA);
-    const t1 = findMapTable(m, "T1"); // stored at y 8, h 9
-    expect(t1.y).toBe(MAP_H - 8 - 9);
-    expect(t1.x).toBe(8); // left–right stays put (per Djan: mirror = upside down)
-    expect(boardIdsOf(t1)).toEqual([1]);
-    expect(findMapTable(m, "T2-3").members).toEqual(["T2", "T3"]);
-    // the stored state is never touched — a pure view of it
-    expect(findMapTable(mapA, "T1").y).toBe(8);
+describe("mirrorFloorMap (per-device MIRROR view — selectable axes; geometry flips, identity does not)", () => {
+  const UP_DOWN = { upDown: true };
+  const LEFT_RIGHT = { leftRight: true };
+  const BOTH = { upDown: true, leftRight: true };
+  // each combo with how a point and an outward normal must map under it
+  const COMBOS = [
+    ["updown", UP_DOWN, ([x, y]) => [x, MAP_H - y], ([ox, oy]) => [ox, -oy]],
+    ["leftright", LEFT_RIGHT, ([x, y]) => [MAP_W - x, y], ([ox, oy]) => [-ox, oy]],
+    ["both (the 180° turn)", BOTH, ([x, y]) => [MAP_W - x, MAP_H - y], ([ox, oy]) => [-ox, -oy]],
+  ];
+
+  it("no axes selected returns the very same map object", () => {
+    expect(mirrorFloorMap(mapA, {})).toBe(mapA);
+    expect(mirrorFloorMap(mapA)).toBe(mapA);
   });
 
-  it("seat NUMBERS stay with their guests while the chairs flip: N↔S, W/E offsets reflect, ring angles reflect", () => {
-    const m = mirrorFloorMap(mapA);
-    // T6's P1 sat the N edge → draws on the S edge now (that IS where the
-    // mirrored viewer sees that guest); P2 the other way
-    expect(findMapTable(m, "T6").seats).toEqual([
+  it("reflects tables per chosen axis; labels, slots and merges ride along; stored state untouched", () => {
+    // T1 stored at x 8, y 8, 12×9
+    expect(findMapTable(mirrorFloorMap(mapA, UP_DOWN), "T1")).toMatchObject({ x: 8, y: MAP_H - 8 - 9 });
+    expect(findMapTable(mirrorFloorMap(mapA, LEFT_RIGHT), "T1")).toMatchObject({ x: MAP_W - 8 - 12, y: 8 });
+    const both = mirrorFloorMap(mapA, BOTH);
+    expect(findMapTable(both, "T1")).toMatchObject({ x: 80, y: 75 });
+    expect(boardIdsOf(findMapTable(both, "T1"))).toEqual([1]);
+    expect(findMapTable(both, "T2-3").members).toEqual(["T2", "T3"]);
+    expect(findMapTable(mapA, "T1")).toMatchObject({ x: 8, y: 8 }); // a pure view of the stored state
+  });
+
+  it("seat NUMBERS stay with their guests while the chairs flip with the chosen axes", () => {
+    // ↕: N/S chairs swap sides (T6); ↔: W/E chairs swap sides (T1)
+    expect(findMapTable(mirrorFloorMap(mapA, UP_DOWN), "T6").seats).toEqual([
       { no: 1, side: "S", offset: 0.5 }, { no: 2, side: "N", offset: 0.5 },
     ]);
-    // merge corners cross vertically: SW (S @ 0.22) ↔ NW (N @ 0.22)
-    const corners = findMapTable(m, "T2-3").seats;
-    expect(corners[0]).toEqual({ no: 1, side: "N", offset: 0.22 });
-    expect(corners[1]).toEqual({ no: 2, side: "S", offset: 0.22 });
-    // a W/E chair keeps its side but its offset (which runs along y) reflects
-    const tiny = mirrorFloorMap({ id: "tiny", tables: [
-      { label: "T1", shape: "rect", x: 0, y: 0, w: 10, h: 6, seats: [{ no: 1, side: "E", offset: 0.22 }] },
-    ] });
-    expect(tiny.tables[0].seats[0]).toEqual({ no: 1, side: "E", offset: 0.78 });
-    // round T5: NW (315°) → SW (225°), NE (45°) → SE (135°)
-    expect(findMapTable(m, "T5").seats.map((s) => s.angle)).toEqual([225, 135]);
+    expect(findMapTable(mirrorFloorMap(mapA, LEFT_RIGHT), "T1").seats).toEqual([
+      { no: 1, side: "E", offset: 0.5 }, { no: 2, side: "W", offset: 0.5 },
+    ]);
+    // the merge's SW corner (S @ 0.22): ↕ crosses to NW, ↔ slides to SE,
+    // both land it on NE — the corner the 180° turn puts that guest at
+    const corner = (axes) => findMapTable(mirrorFloorMap(mapA, axes), "T2-3").seats[0];
+    expect(corner(UP_DOWN)).toEqual({ no: 1, side: "N", offset: 0.22 });
+    expect(corner(LEFT_RIGHT)).toEqual({ no: 1, side: "S", offset: 0.78 });
+    expect(corner(BOTH)).toEqual({ no: 1, side: "N", offset: 0.78 });
+    // round T5 (NW 315°, NE 45°): ↕ → SW/SE, ↔ → NE/NW, both → SE/SW
+    const angles = (axes) => findMapTable(mirrorFloorMap(mapA, axes), "T5").seats.map((s) => s.angle);
+    expect(angles(UP_DOWN)).toEqual([225, 135]);
+    expect(angles(LEFT_RIGHT)).toEqual([45, 315]);
+    expect(angles(BOTH)).toEqual([135, 225]);
   });
 
-  it("every seed table's display points come out as the EXACT reflection of the original's", () => {
-    for (const map of state.maps) {
-      const mirroredMap = mirrorFloorMap(map);
-      for (const table of map.tables) {
-        const orig = seatDisplayPoints(table);
-        const mir = seatDisplayPoints(findMapTable(mirroredMap, table.label));
-        orig.forEach((p, i) => {
-          expect(mir[i].no).toBe(p.no);
-          expect(mir[i].x).toBeCloseTo(p.x, 6);
-          expect(mir[i].y).toBeCloseTo(MAP_H - p.y, 6);
-          expect(mir[i].out.x).toBeCloseTo(p.out.x, 6);
-          expect(mir[i].out.y).toBeCloseTo(-p.out.y, 6);
-        });
+  it("every seed table's display points come out as the EXACT reflection for every axis choice", () => {
+    for (const [, axes, fpt, fout] of COMBOS) {
+      for (const map of state.maps) {
+        const mirroredMap = mirrorFloorMap(map, axes);
+        for (const table of map.tables) {
+          const orig = seatDisplayPoints(table);
+          const mir = seatDisplayPoints(findMapTable(mirroredMap, table.label));
+          orig.forEach((p, i) => {
+            const [ex, ey] = fpt([p.x, p.y]);
+            const [eox, eoy] = fout([p.out.x, p.out.y]);
+            expect(mir[i].no).toBe(p.no);
+            expect(mir[i].x).toBeCloseTo(ex, 6);
+            expect(mir[i].y).toBeCloseTo(ey, 6);
+            expect(mir[i].out.x).toBeCloseTo(eox, 6);
+            expect(mir[i].out.y).toBeCloseTo(eoy, 6);
+          });
+        }
       }
     }
   });
 
-  it("mirrors the sheet: walls/zones/planters reflect, doors keep their spot AND their side of the room", () => {
+  it("mirrors the sheet per axis: walls/planters land reflected, doors keep their spot AND their side of the room", () => {
     const terrace = getTerraceMap(state);
-    const m = mirrorFloorMap(terrace);
-    expect(sheetOf(m).walls[0].pts).toEqual([[2, 90], [98, 90], [98, 2], [2, 2]]);
-    // the planter row along the bottom edge moves to the top; x never moves
-    expect(sheetOf(m).planters.map((p) => [p.x, p.y])).toEqual([[13, 7], [34, 7], [55, 7]]);
-    const dining = mirrorFloorMap(mapA);
-    expect(sheetOf(dining).zones[0]).toMatchObject({ x: 2, y: 2, w: 96, h: 8, label: "PASS / KITCHEN" }); // pass strip: bottom → top
-    // the terrace door sat near the BOTTOM of its wall — its whole geometry
-    // (gap, hinge end, leaf) must land reflected toward the TOP, leaf still
-    // opening INTO the room (swing flips because reflection negates the
-    // leaf normal)
-    const g0 = doorGeometry(sheetOf(terrace).openings[0], sheetOf(terrace).walls);
-    const g1 = doorGeometry(sheetOf(m).openings[0], sheetOf(m).walls);
-    expect(g1.center[0]).toBeCloseTo(g0.center[0], 6);
-    expect(g1.center[1]).toBeCloseTo(MAP_H - g0.center[1], 6);
-    expect(g1.h[0]).toBeCloseTo(g0.h[0], 6);
-    expect(g1.h[1]).toBeCloseTo(MAP_H - g0.h[1], 6);
-    expect(g1.leafEnd[0]).toBeCloseTo(g0.leafEnd[0], 6);
-    expect(g1.leafEnd[1]).toBeCloseTo(MAP_H - g0.leafEnd[1], 6);
+    for (const [, axes, fpt] of COMBOS) {
+      const m = mirrorFloorMap(terrace, axes);
+      expect(sheetOf(m).walls[0].pts).toEqual(sheetOf(terrace).walls[0].pts.map(fpt));
+      expect(sheetOf(m).planters.map((p) => [p.x, p.y]))
+        .toEqual(sheetOf(terrace).planters.map((p) => fpt([p.x, p.y])));
+      // the door's whole geometry (gap, hinge end, leaf) lands reflected and
+      // the leaf still opens INTO the room: ONE reflection flips the swing
+      // (it negates the leaf normal); both together are the 180° turn, where
+      // orientation survives and the swing stays
+      const g0 = doorGeometry(sheetOf(terrace).openings[0], sheetOf(terrace).walls);
+      const g1 = doorGeometry(sheetOf(m).openings[0], sheetOf(m).walls);
+      for (const key of ["center", "h", "leafEnd"]) {
+        const [ex, ey] = fpt(g0[key]);
+        expect(g1[key][0]).toBeCloseTo(ex, 6);
+        expect(g1[key][1]).toBeCloseTo(ey, 6);
+      }
+    }
+    // the dining pass strip: ↕ sends the bottom zone to the top edge
+    expect(sheetOf(mirrorFloorMap(mapA, UP_DOWN)).zones[0])
+      .toMatchObject({ x: 2, y: 2, w: 96, h: 8, label: "PASS / KITCHEN" });
   });
 
-  it("mirroring twice restores the original geometry exactly (toggle on/off is lossless)", () => {
-    for (const map of state.maps) {
-      const twice = mirrorFloorMap(mirrorFloorMap(map));
-      expect(twice.tables).toEqual(map.tables);
-      expect(sheetOf(twice)).toEqual(sheetOf(map));
+  it("applying the same axes twice restores the original geometry exactly (lossless toggles)", () => {
+    for (const [, axes] of COMBOS) {
+      for (const map of state.maps) {
+        const twice = mirrorFloorMap(mirrorFloorMap(map, axes), axes);
+        expect(twice.tables).toEqual(map.tables);
+        expect(sheetOf(twice)).toEqual(sheetOf(map));
+      }
     }
   });
 });

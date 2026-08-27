@@ -905,44 +905,64 @@ export function hitTestSheet(sheet, point) {
 
 // ── MIRROR view transform ───────────────────────────────────────────────────
 // A station's tablet can stand facing AGAINST the map's drawn orientation, so
-// the floor reads UPSIDE DOWN from where you hold it — what's near you draws
-// at the far edge (per Djan, 27.08: mirror means upside down, NOT left–right).
-// MIRROR fixes that as a pure reflection across the horizontal axis applied
-// at RENDER time: geometry flips top↔bottom, identity does not. Labels,
-// boardIds, members and seat NUMBERS ride along untouched, so every
-// identity-keyed structure (SET strips, seat swaps, reservations, the dock)
-// behaves exactly the same on a mirrored floor — and text stays readable
-// because the DATA reflects, never the SVG. Stored maps are never mirrored;
-// the preference is per device by nature (it describes one tablet's physical
-// disposition) and lives with the caller.
-export function mirrorFloorMap(map) {
-  if (!map) return map;
+// the floor reads flipped from where you hold it. Which way depends on the
+// station, so BOTH axes are selectable (per Djan, 27.08): `upDown` reflects
+// top↔bottom (what's near you draws at the far edge), `leftRight` reflects
+// left↔right, and both together are the 180° turn. A pure reflection of the
+// GEOMETRY applied at RENDER time: identity does not flip. Labels, boardIds,
+// members and seat NUMBERS ride along untouched, so every identity-keyed
+// structure (SET strips, seat swaps, reservations, the dock) behaves exactly
+// the same on a mirrored floor — and text stays readable because the DATA
+// reflects, never the SVG. Stored maps are never mirrored; the preference is
+// per device by nature (it describes one tablet's physical disposition) and
+// lives with the caller. No axes → the same map object back.
+export function mirrorFloorMap(map, { upDown = false, leftRight = false } = {}) {
+  if (!map || (!upDown && !leftRight)) return map;
+  const mx = (x, w = 0) => (leftRight ? MAP_W - x - w : x);
+  const my = (y, h = 0) => (upDown ? MAP_H - y - h : y);
+  // Offsets quantise to 6dp (same trick as the ring snap in
+  // seatDisplayPoints) so mirroring twice restores them EXACTLY — 1-0.78
+  // alone lands a hair off 0.22 in floating point.
+  const flipOffset = (t) => Number((1 - (t ?? 0.5)).toFixed(6));
   const seat = (s) => {
-    // angle 0 = N, clockwise → a top↔bottom reflection is 180 − angle
-    if (s.angle != null) return { ...s, angle: ((180 - s.angle) % 360 + 360) % 360 };
-    if (s.side === "N" || s.side === "S") return { ...s, side: s.side === "N" ? "S" : "N" };
-    // W/E offsets run along y. Quantised to 6dp (same trick as the ring snap
-    // in seatDisplayPoints) so mirroring twice restores offsets EXACTLY —
-    // 1-0.78 alone lands a hair off 0.22 in floating point.
-    return { ...s, offset: Number((1 - (s.offset ?? 0.5)).toFixed(6)) };
+    if (s.angle != null) {
+      // angle 0 = N, clockwise: top↔bottom is 180 − a, left↔right is −a,
+      // composed in that order — both together lands on a + 180 (the turn)
+      let a = s.angle;
+      if (upDown) a = 180 - a;
+      if (leftRight) a = -a;
+      return { ...s, angle: ((a % 360) + 360) % 360 };
+    }
+    const onNS = s.side === "N" || s.side === "S";
+    // the axis ALONG the seat's edge reflects the offset; the axis ACROSS
+    // it swaps the side (N/S edges run along x, W/E edges along y)
+    const side = onNS
+      ? (upDown ? (s.side === "N" ? "S" : "N") : s.side)
+      : (leftRight ? (s.side === "W" ? "E" : "W") : s.side);
+    const flip = onNS ? leftRight : upDown;
+    return { ...s, side, offset: flip ? flipOffset(s.offset) : s.offset ?? 0.5 };
   };
   const sheet = sheetOf(map);
+  // ONE reflection reverses orientation, so the door leaf's computed normal
+  // negates and the swing must flip to keep opening into the room; both
+  // reflections together are a rotation — orientation survives, swing stays.
+  const flipSwing = upDown !== leftRight;
   return {
     ...map,
     tables: (map.tables || []).map((t) => ({
       ...t,
-      y: MAP_H - t.y - t.h,
+      x: mx(t.x, t.w),
+      y: my(t.y, t.h),
       seats: (t.seats || []).map(seat),
     })),
     sheet: {
-      walls: sheet.walls.map((w) => ({ ...w, pts: arr(w.pts).map(([x, y]) => [x, MAP_H - y]) })),
-      // Openings keep seg + t: reflection is affine, so "t along the segment"
-      // lands on the reflected point by itself. The leaf's computed normal
-      // NEGATES under reflection though — flip the swing so a door that
-      // opened into the room still opens into the room.
-      openings: sheet.openings.map((o) => ({ ...o, swing: (o.swing || 1) === -1 ? 1 : -1 })),
-      zones: sheet.zones.map((z) => ({ ...z, y: MAP_H - z.y - z.h })),
-      planters: sheet.planters.map((p) => ({ ...p, y: MAP_H - p.y })),
+      walls: sheet.walls.map((w) => ({ ...w, pts: arr(w.pts).map(([x, y]) => [mx(x), my(y)]) })),
+      // Openings keep seg + t: reflection is affine, so "t along the
+      // segment" lands on the reflected point by itself.
+      openings: sheet.openings.map((o) =>
+        flipSwing ? { ...o, swing: (o.swing || 1) === -1 ? 1 : -1 } : { ...o }),
+      zones: sheet.zones.map((z) => ({ ...z, x: mx(z.x, z.w), y: my(z.y, z.h) })),
+      planters: sheet.planters.map((p) => ({ ...p, x: mx(p.x), y: my(p.y) })),
     },
   };
 }
