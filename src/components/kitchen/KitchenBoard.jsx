@@ -1478,14 +1478,26 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
     "Our Story":{ color: tokens.ink[2], bg: tokens.neutral[0], border: tokens.ink[4] },
   };
   return (
+    // The scroller and the centering are SEPARATE layers. Centering with
+    // justify-content on the scroller itself broke under a busy service: a
+    // burst of Sends overflowed the viewport, the cards (overflow:hidden flex
+    // children of a fixed-height column) shrank into each other, and the
+    // overflow spilled past BOTH edges — above the top is beyond scrollTop 0,
+    // so the upper CONFIRMs could not be reached at all. The inner column's
+    // auto margins center it while it fits and collapse to 0 when it doesn't,
+    // so every card keeps its full height and every CONFIRM scrolls into reach.
     <div role="dialog" aria-label="Kitchen pairing alerts" style={{
       position: "fixed", inset: 0, zIndex: 9999,
       background: "rgba(0,0,0,0.72)",
-      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-      gap: 16, padding: "24px 16px", overflowY: "auto",
+      display: "flex", flexDirection: "column", alignItems: "center",
+      padding: "24px 16px", overflowY: "auto",
       paddingTop: "calc(24px + env(safe-area-inset-top))",
       paddingBottom: "calc(24px + env(safe-area-inset-bottom))",
     }}>
+      <div style={{
+        margin: "auto", width: "100%",
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 16,
+      }}>
       {alerts.map(({ tableId, alert }) => {
         const seats = alert.seats || [];
         const pairSeats = seats.filter(s => s.pairing && s.pairing !== "—");
@@ -1518,7 +1530,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
           <div key={tableId} style={{
             background: tokens.neutral[0], borderRadius: 0, maxWidth: 480, width: "100%",
             border: `1px solid ${tokens.ink[4]}`,
-            overflow: "hidden",
+            overflow: "hidden", flexShrink: 0,
           }}>
             {/* Header */}
             <div style={{
@@ -1599,6 +1611,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
