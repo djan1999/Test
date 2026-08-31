@@ -124,7 +124,7 @@ function resolveGuestTemplate(table, profiles, assignments) {
   return isShort ? (p.shortMenuTemplate || p.menuTemplate) : p.menuTemplate;
 }
 
-export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, kitchenTemplate = null, editable = false, quickNotes = {}, compact = false, inlineMods = false, quickAccess = false, heightCap = null, roomGaps = [], historyGaps = [] }) {
+export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, kitchenTemplate = null, editable = false, quickNotes = {}, compact = false, quickAccess = false, heightCap = null, roomGaps = [], historyGaps = [] }) {
   // Density. Compact keeps two full rows of tickets on a 720px-tall kitchen
   // display (32" 1280×720 → 5 columns × 2 rows = 10 tickets). Gated to large
   // boards by the caller.
@@ -1106,48 +1106,29 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                 <span style={{ fontFamily: FONT, fontSize: dz.courseGlyph, color: fired ? tokens.green.border : tokens.ink[4], flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : pending ? "＋" : "○"}</span>
                 {(() => {
                   const hasSub = (pairingAlert || mods || (kcNote.note && showCourseNotes)) && !fired;
-                  const nameEl = (
-                    <div style={{
-                      fontFamily: FONT, fontSize: dz.courseFont, fontWeight: 700, lineHeight: dz.courseLH,
-                      color: fired ? tokens.ink[4] : kcNote.name ? tokens.red.text : pending ? tokens.ink[2] : tokens.ink[0],
-                      textDecoration: fired ? "line-through" : "none",
-                      letterSpacing: "0.02em",
-                      ...(inlineMods ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 0, maxWidth: hasSub ? "60%" : "100%" } : {}),
-                    }}>
-                      {displayName}
-                      {kcNote.name && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[3], marginLeft: 5 }}>({baseName})</span>}
-                      {pending && <span style={{ fontFamily: FONT, fontSize: "7px", fontWeight: 600, letterSpacing: "0.10em", color: tokens.ink[3], border: `1px solid ${tokens.ink[4]}`, padding: "0 3px", marginLeft: 6 }}>NOT ADDED</span>}
-                      {extraLabel && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[4], marginLeft: 6 }}>{extraLabel}</span>}
-                    </div>
-                  );
                   const modSegments = !hasSub ? [] : [
                     pairingAlert && { text: pairingAlert, color: tokens.ink[3] },
                     ...(mods ? Object.entries(mods).map(([mod, count]) => ({ text: `${count}× ${mod}`, color: tokens.red.text })) : []),
                     (kcNote.note && showCourseNotes) ? { text: `⚑ ${kcNote.note}`, color: tokens.red.text } : null,
                   ].filter(Boolean);
-                  if (inlineMods) {
-                    // One line per course: dietaries/mods sit beside the name and
-                    // ellipsize instead of wrapping to a second row. fontSize and
-                    // lineHeight live on the container so its line box hugs the
-                    // small type instead of inheriting the 16px browser strut.
-                    return (
-                      <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: 6 }}>
-                        {nameEl}
-                        {modSegments.length > 0 && (
-                          <div style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontFamily: FONT, fontSize: dz.modsFont, lineHeight: dz.courseLH }}>
-                            {modSegments.map((seg, i) => (
-                              <span key={i} style={{ color: seg.color, fontWeight: 600 }}>
-                                {i > 0 ? " · " : ""}{seg.text}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  }
+                  // Dietaries/mods go UNDER the course name and wrap (per Djan,
+                  // 31.08). Beside the name they had to ellipsize, and a
+                  // restriction cut to "NO HAZELN…" is not one the pass can
+                  // cook from. Only rows carrying a mod pay the extra line, and
+                  // the height-capped course list absorbs it.
                   return (
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      {nameEl}
+                      <div style={{
+                        fontFamily: FONT, fontSize: dz.courseFont, fontWeight: 700, lineHeight: dz.courseLH,
+                        color: fired ? tokens.ink[4] : kcNote.name ? tokens.red.text : pending ? tokens.ink[2] : tokens.ink[0],
+                        textDecoration: fired ? "line-through" : "none",
+                        letterSpacing: "0.02em",
+                      }}>
+                        {displayName}
+                        {kcNote.name && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[3], marginLeft: 5 }}>({baseName})</span>}
+                        {pending && <span style={{ fontFamily: FONT, fontSize: "7px", fontWeight: 600, letterSpacing: "0.10em", color: tokens.ink[3], border: `1px solid ${tokens.ink[4]}`, padding: "0 3px", marginLeft: 6 }}>NOT ADDED</span>}
+                        {extraLabel && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[4], marginLeft: 6 }}>{extraLabel}</span>}
+                      </div>
                       {modSegments.length > 0 && (
                         <div style={{ marginTop: 2, display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
                           {modSegments.map((seg, i) => (
@@ -1383,7 +1364,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   );
 }
 
-export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, profiles = [], assignments = {}, compact = false, inlineMods = false, quickAccess = false, heightCap = null, roomGaps = [], historyGaps = [], onFocus = null }) {
+export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, profiles = [], assignments = {}, compact = false, quickAccess = false, heightCap = null, roomGaps = [], historyGaps = [], onFocus = null }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition } = useSortable({
     id: table.id,
   });
@@ -1434,7 +1415,6 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
           profiles={profiles}
           assignments={assignments}
           compact={compact}
-          inlineMods={inlineMods}
           quickAccess={quickAccess}
           heightCap={heightCap}
           roomGaps={roomGaps}
@@ -1942,7 +1922,6 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
                 profiles={profiles}
                 assignments={assignments}
                 compact={compact}
-                inlineMods={largeBoard}
                 quickAccess={!!upd}
                 heightCap={rowHeight}
                 roomGaps={roomGaps}
@@ -1971,7 +1950,6 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
                 profiles={profiles}
                 assignments={assignments}
                 compact={compact}
-                inlineMods={largeBoard}
                 // Same cap as the grid, so a lifted ticket is the size of the
                 // hole it left rather than growing under the chef's finger.
                 heightCap={rowHeight}
