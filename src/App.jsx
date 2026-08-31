@@ -265,7 +265,10 @@ const isPearOptionalKey = (key) => {
   return k === "pear" || k.startsWith("pear_") || k.endsWith("_pear") || k.includes("_pear_");
 };
 
-function optionalExtrasFromCourses(menuCourses = []) {
+// Exported for the quick-controls test: the Send → kitchenSnapshot path must
+// receive defs FROM THIS BUILDER, course row included — a hand-built def in a
+// unit test cannot catch this file forgetting a field.
+export function optionalExtrasFromCourses(menuCourses = []) {
   const byKey = new Map();
   (menuCourses || []).forEach((c) => {
     const category = normalizeCourseCategory(c?.course_category, c?.optional_flag);
@@ -286,6 +289,11 @@ function optionalExtrasFromCourses(menuCourses = []) {
       key,
       name: label,
       pairings: pairings.length > 0 ? pairings : ["—"],
+      // The dish's course row MUST ride along (same as the menuUtils builder):
+      // kitchenSnapshot derives the ordering seat's restriction mod from it,
+      // and a def without it sends a restricted guest's beetroot to the
+      // kitchen as a plain call.
+      course: existing?.course || c,
     });
   });
   return [...byKey.values()];
