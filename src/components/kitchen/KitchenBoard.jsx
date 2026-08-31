@@ -1508,7 +1508,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
             s.extras.forEach(ex => {
               if (!extrasMap[ex.key]) extrasMap[ex.key] = { name: ex.name, seats: [], anyShared: false };
               const sw = ex.sharedWith ?? null;
-              extrasMap[ex.key].seats.push({ id: s.id, gender: s.gender || null, pairing: ex.pairing, sharedWith: sw });
+              extrasMap[ex.key].seats.push({ id: s.id, gender: s.gender || null, pairing: ex.pairing, sharedWith: sw, restriction: ex.restriction ?? null });
               if (sw !== null) extrasMap[ex.key].anyShared = true;
             });
           } else {
@@ -1589,8 +1589,18 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                     {group.name.toUpperCase()}
                   </span>
                   {group.seats.map(s => (
-                    <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: tokens.green.bg, border: `1px solid ${tokens.green.border}`, color: tokens.green.text }}>
-                      P{s.id}{(() => { const p = extraPairingLabel(s.pairing); return p ? ` · ${p}` : ""; })()}
+                    // A restricted seat's call turns the chip red and spells
+                    // the modification out — the popup is where the pass
+                    // starts the plate, so "P1 · NO HAZELNUT OIL" has to be
+                    // read here, not discovered later on the ticket.
+                    <span key={s.id} style={{
+                      fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0,
+                      background: s.restriction ? tokens.red.bg : tokens.green.bg,
+                      border: `1px solid ${s.restriction ? tokens.red.border : tokens.green.border}`,
+                      color: s.restriction ? tokens.red.text : tokens.green.text,
+                      fontWeight: s.restriction ? 700 : 400,
+                    }}>
+                      P{s.id}{(() => { const p = extraPairingLabel(s.pairing); return p ? ` · ${p}` : ""; })()}{s.restriction ? ` · ${s.restriction}` : ""}
                     </span>
                   ))}
                   {group.anyShared && <span style={{ fontFamily: FONT, fontSize: "9px", fontWeight: 700, letterSpacing: "0.10em", color: tokens.ink[2], padding: "2px 6px", border: `1px solid ${tokens.ink[4]}`, background: tokens.ink[5] }}>SHARE</span>}

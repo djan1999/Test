@@ -52,7 +52,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
     // the confirm flow isn't part of service reality, so waiting on it made
     // every Send re-transmit the whole night's pairings and orders).
     // hasKitchenUpdate drives the button.
-    const kitchenCurrent = kitchenSnapshot(seats, optionalExtras, optionalPairings);
+    const kitchenCurrent = kitchenSnapshot(seats, optionalExtras, optionalPairings, t.restrictions || [], t.kitchenCourseNotes || {});
     const hasKitchenUpdate = kitchenDelta(kitchenCurrent, t.kitchenSent || {}).length > 0;
 
     const unassigned = allRestr.map((r, i) => ({ ...r, _i: i })).filter(r => !r.pos);
