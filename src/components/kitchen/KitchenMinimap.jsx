@@ -46,25 +46,8 @@ const readStoredKind = () => {
 };
 const storeKind = (kind) => { try { localStorage.setItem(LS_KEY, kind); } catch {} };
 
-// Where a live ticket sits right now. A party out on the terrace carries its
-// terrace label on the derived `_visit` decoration (App builds it); a seated
-// party resolves to a dining tile through the active layout, exactly as FOH
-// does. Anything else (upcoming banner, between rooms) has no place yet → null.
-function locateTable(table, diningMap) {
-  if (!table) return null;
-  if (table._visit?.visit === "terrace") {
-    const label = table._visit.terraceLabel;
-    return label ? { kind: "terrace", label } : null;
-  }
-  if (table.active) {
-    const label = resolveReservationTable(diningMap, table.id).table?.label || null;
-    return label ? { kind: "dining", label } : null;
-  }
-  return null;
-}
-
 export default function KitchenMinimap({
-  floorMaps, tables = [], focusedTableId = null,
+  floorMaps, tables = [],
   floorStatus = null, reservations = [],
   // Service actions (all optional — absent → read-only, exactly like the
   // kitchen floor view's contract).
@@ -78,18 +61,6 @@ export default function KitchenMinimap({
   const [kind, setKind] = useState(readStoredKind);
   const [sheetLabel, setSheetLabel] = useState(null);   // REAL terrace tile label
   const [movingParty, setMovingParty] = useState(null); // CHANGE TABLE in flight
-
-  const focusedTable = focusedTableId != null
-    ? tables.find(t => t.id === focusedTableId) || null
-    : null;
-  const located = useMemo(() => locateTable(focusedTable, diningMap), [focusedTable, diningMap]);
-
-  // The map follows the focused party into its room — the point is that the
-  // chef sees where THIS ticket's food goes, not whichever room they last
-  // browsed. Manual swipes (below) still win until the next ticket is touched.
-  useEffect(() => {
-    if (located && located.kind !== kind) { setKind(located.kind); storeKind(located.kind); }
-  }, [located]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setKindManual = (next) => {
     setKind(next); storeKind(next);
@@ -140,10 +111,6 @@ export default function KitchenMinimap({
   const diningLabelOfBoard = (boardId) =>
     resolveReservationTable(diningMap, boardId).table?.label || `T${boardId}`;
 
-  // The focused ticket's tile — only when it lives on the room now showing —
-  // gets the "you are here" ring on top of the normal occupied highlight.
-  const focusLabel = located && located.kind === kind ? located.label : null;
-
   // Same per-tile presentation the kitchen floor view feeds FloorMap. Occupied
   // terrace tiles are RENAMED to the party's dining label on the display copy
   // of the map; all keyed state follows the display label, while stored
@@ -164,7 +131,6 @@ export default function KitchenMinimap({
       ts[dLabel] = {
         status: live ? "occupied" : "free",
         strip: floorStatusOf(floorStatus, map.id, mt.label),
-        ...(mt.label === focusLabel ? { sent: true } : {}),
       };
       if (live) {
         const pk = floorPositionKey(map.id, mt.label); // REAL tile label — positions live under it
@@ -185,7 +151,7 @@ export default function KitchenMinimap({
       tableState: ts, restrictionsByLabel: rb, seatLabelsByLabel: sl, seatGendersByLabel: sg,
       realByDisplay: rd,
     };
-  }, [map, diningMap, liveByLabel, focusLabel, floorStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [map, diningMap, liveByLabel, floorStatus]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Parties offered by the free-tile picker: ONLY parties physically in the
   // house — seated inside ('dining', they may head out for dessert) or a

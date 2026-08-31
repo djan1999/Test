@@ -1364,21 +1364,14 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   );
 }
 
-export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, profiles = [], assignments = {}, compact = false, quickAccess = false, heightCap = null, roomGaps = [], historyGaps = [], onFocus = null }) {
+export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, profiles = [], assignments = {}, compact = false, quickAccess = false, heightCap = null, roomGaps = [], historyGaps = [] }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition } = useSortable({
     id: table.id,
   });
-  // Touching or hovering a ticket lights this table up on the minimap. This is
-  // a passive read of the pointer (no preventDefault / stopPropagation), so it
-  // never disturbs the drag-to-reorder or the fire/quick-access taps beneath —
-  // it just records "this is the ticket the chef is looking at right now".
-  const focus = onFocus ? () => onFocus(table.id) : undefined;
   return (
     <div
       ref={setNodeRef}
       {...attributes}
-      onPointerEnter={focus}
-      onPointerDown={focus}
       style={{
         // Fill the grid cell so ticket width tracks the column count.
         width: "100%", minWidth: 0,
@@ -1739,10 +1732,6 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
   const fitRows = !useIsMobile(FIT_ROWS_MIN_W);
   const rowHeight = useTicketRowHeight(gridRef, fitRows, gridGap);
 
-  // The ticket the chef is currently touching/hovering — drives the minimap
-  // highlight. Kept even after the pointer leaves (the last-touched table
-  // stays lit) so the map is a stable plating reference, not a flicker.
-  const [focusedTableId, setFocusedTableId] = useState(null);
   // The minimap lives in the empty bottom-right of the board and must NEVER
   // push a ticket. Only the large kitchen panel runs the fixed 5-up grid where
   // "spare space" is well defined; there, a full wall is exactly two rows of
@@ -1926,7 +1915,6 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
                 heightCap={rowHeight}
                 roomGaps={roomGaps}
                 historyGaps={gapsForMenuType(historyGapsByMenu, t.menuType)}
-                onFocus={showMinimap ? setFocusedTableId : null}
               />
             ))}
           </div>
@@ -1969,7 +1957,6 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
           <KitchenMinimap
             floorMaps={floorMaps}
             tables={displayTables}
-            focusedTableId={focusedTableId}
             floorStatus={floorStatus}
             reservations={reservations}
             onAssign={onAssignTerrace}
