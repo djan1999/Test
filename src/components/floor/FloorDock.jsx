@@ -113,7 +113,7 @@ export default function FloorDock({
   const seats = [...(bt?.seats || [])].sort((a, b) => Number(a.id) - Number(b.id));
   const restr = restrictions ?? (bt?.restrictions || []);
 
-  const kitchenCurrent = live ? kitchenSnapshot(bt.seats || [], optionalExtras, optionalPairings) : {};
+  const kitchenCurrent = live ? kitchenSnapshot(bt.seats || [], optionalExtras, optionalPairings, bt.restrictions || [], bt.kitchenCourseNotes || {}) : {};
   const deltaSeats = live ? kitchenDelta(kitchenCurrent, bt.kitchenSent || {}) : [];
   const upToDate = deltaSeats.length === 0;
   const extrasVisible = (optionalExtras || []).slice(0, 4);

@@ -1,4 +1,5 @@
 import { extraPairingForSeat } from "../constants/pairings.js";
+import { getCourseMod, applyModOverride } from "./menuUtils.js";
 
 // ── Kitchen "send" deltas ─────────────────────────────────────────────────────
 // Service pings the kitchen as a table's order firms up (pairings, optional
@@ -12,18 +13,30 @@ import { extraPairingForSeat } from "../constants/pairings.js";
 // The kitchen stores the snapshot it acknowledged (table.kitchenSent); the next
 // Send diffs the live snapshot against it.
 
-export function kitchenSnapshot(seats = [], optionalExtras = [], optionalPairings = []) {
+export function kitchenSnapshot(seats = [], optionalExtras = [], optionalPairings = [], restrictions = [], kitchenCourseNotes = {}) {
   const out = {};
   (seats || []).forEach((s) => {
+    // The dietaries pinned to THIS chair. An extra called for a restricted
+    // guest must reach the kitchen carrying the dish's modification — the
+    // beetroot for a nut allergy is a different plate, and the popup is the
+    // moment the pass starts it, not the ticket they read later.
+    const restrKeys = (restrictions || [])
+      .filter((r) => r && r.note && r.pos === s.id)
+      .map((r) => r.note);
     const extras = (optionalExtras || [])
       .filter((d) => !!(s.extras?.[d.key] || s.extras?.[d.id])?.ordered)
       .map((d) => {
         const ex = s.extras?.[d.key] || s.extras?.[d.id];
+        // Same derivation the ticket row shows (getCourseMod), including the
+        // per-table text override, so the popup and the ticket say the same
+        // thing about the same plate.
+        const mod = restrKeys.length && d.course ? getCourseMod(d.course, restrKeys) : null;
         return {
           key: d.key,
           name: d.name,
           pairing: extraPairingForSeat(s, d, optionalPairings),
           sharedWith: ex?.sharedWith ?? null,
+          restriction: mod ? applyModOverride(mod, kitchenCourseNotes?.[d.course?.course_key]) : null,
         };
       });
     out[s.id] = {
@@ -50,7 +63,10 @@ export function kitchenDelta(current = {}, baseline = {}) {
       const prev = baseExtras.find((p) => p.key === e.key);
       if (!prev) return true; // newly ordered
       return (prev.pairing ?? null) !== (e.pairing ?? null)
-        || (prev.sharedWith ?? null) !== (e.sharedWith ?? null);
+        || (prev.sharedWith ?? null) !== (e.sharedWith ?? null)
+        // An allergy recorded AFTER the dish was sent is exactly the update
+        // the kitchen must hear about — the plate may already be on the line.
+        || (prev.restriction ?? null) !== (e.restriction ?? null);
     });
     const pairingChanged = (cur.pairing ?? null) !== (base.pairing ?? null)
       || (cur.pairingSharedWith ?? null) !== (base.pairingSharedWith ?? null);

@@ -52,6 +52,22 @@ describe("KitchenAlertOverlay — a flood of alerts stays confirmable", () => {
     expect(inner.style.margin).toBe("auto");
   });
 
+  it("an extra sent for a restricted seat shows the modification on its chip", () => {
+    const alert = {
+      tableId: 8,
+      alert: {
+        timestamp: Date.now(),
+        seats: [{
+          id: 1, gender: null, pairing: null, pairingSharedWith: null,
+          extras: [{ key: "beetroot", name: "Beetroot", pairing: null, sharedWith: null, restriction: "NO HAZELNUT OIL" }],
+        }],
+      },
+    };
+    const { getByText } = render(<KitchenAlertOverlay alerts={[alert]} onConfirm={vi.fn()} />);
+    expect(getByText("BEETROOT")).toBeInTheDocument();
+    expect(getByText("P1 · NO HAZELNUT OIL")).toBeInTheDocument();
+  });
+
   it("each card's CONFIRM clears its own table", () => {
     const onConfirm = vi.fn();
     const { getAllByText } = render(

@@ -9,6 +9,20 @@ const EXTRAS = [
 const seat = (id, over = {}) => ({ id, gender: null, pairing: "—", extras: {}, ...over });
 const ordered = (extra = {}) => ({ ordered: true, ...extra });
 
+// Extras defs carrying their course row (as optionalExtrasFromCourses builds
+// them) — beetroot has a nut variant note, so a nut-allergy seat's call must
+// reach the kitchen as a modified plate.
+const BEET_COURSE = {
+  course_key: "beetroot",
+  menu: { name: "Beetroot", sub: "" },
+  restrictions: { nut_note: "no hazelnut oil" },
+};
+const EXTRAS_WITH_COURSE = [
+  { key: "beetroot", id: "beetroot", name: "Beetroot", course: BEET_COURSE },
+  { key: "cheese", id: "cheese", name: "Cheese", course: { course_key: "cheese", menu: { name: "Cheese", sub: "" }, restrictions: {} } },
+];
+const NUT_P1 = [{ pos: 1, note: "nut" }];
+
 describe("kitchenSnapshot", () => {
   it("captures pairing and ordered extras per seat", () => {
     const seats = [
@@ -25,6 +39,30 @@ describe("kitchenSnapshot", () => {
   it("ignores extras that aren't ordered", () => {
     const snap = kitchenSnapshot([seat(1, { extras: { beetroot: { ordered: false } } })], EXTRAS, []);
     expect(snap[1].extras).toEqual([]);
+  });
+
+  it("an extra called for a restricted seat carries the dish's modification", () => {
+    const seats = [
+      seat(1, { extras: { beetroot: ordered() } }), // nut allergy
+      seat(2, { extras: { beetroot: ordered() } }), // no restriction
+    ];
+    const snap = kitchenSnapshot(seats, EXTRAS_WITH_COURSE, [], NUT_P1);
+    expect(snap[1].extras[0].restriction).toBe("NO HAZELNUT OIL");
+    expect(snap[2].extras[0].restriction).toBe(null); // the allergy never leaks to the other chair
+  });
+
+  it("a restriction that doesn't touch the dish adds no modification", () => {
+    // cheese has no nut variant → the nut guest's cheese call stays plain
+    const snap = kitchenSnapshot(
+      [seat(1, { extras: { cheese: ordered() } })], EXTRAS_WITH_COURSE, [], NUT_P1);
+    expect(snap[1].extras[0].restriction).toBe(null);
+  });
+
+  it("the per-table text override rewrites the alert's restriction too", () => {
+    const kcNotes = { beetroot: { modOverrides: { "NO HAZELNUT OIL": "NO HAZELNUT OIL, EXTRA SAUCE" } } };
+    const snap = kitchenSnapshot(
+      [seat(1, { extras: { beetroot: ordered() } })], EXTRAS_WITH_COURSE, [], NUT_P1, kcNotes);
+    expect(snap[1].extras[0].restriction).toBe("NO HAZELNUT OIL, EXTRA SAUCE");
   });
 });
 
@@ -79,6 +117,18 @@ describe("kitchenDelta", () => {
   it("treats a missing baseline (null) as nothing-sent-yet", () => {
     const cur = kitchenSnapshot([seat(1, { extras: { beetroot: ordered() } })], EXTRAS, []);
     expect(hasKitchenUpdate(cur, null ?? {})).toBe(true);
+  });
+
+  it("an allergy recorded AFTER the dish was sent re-sends it with the restriction", () => {
+    // The plate may already be on the line — this delta is exactly the update
+    // the kitchen must hear about.
+    const seats = [seat(1, { extras: { beetroot: ordered() } })];
+    const base = kitchenSnapshot(seats, EXTRAS_WITH_COURSE, [], []);
+    const next = kitchenSnapshot(seats, EXTRAS_WITH_COURSE, [], NUT_P1);
+    const delta = kitchenDelta(next, base);
+    expect(delta).toHaveLength(1);
+    expect(delta[0].extras.map((e) => e.key)).toEqual(["beetroot"]);
+    expect(delta[0].extras[0].restriction).toBe("NO HAZELNUT OIL");
   });
 });
 
