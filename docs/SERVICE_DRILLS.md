@@ -177,6 +177,114 @@ workspace data, and valid writes resume. The revoked device can no longer sync.
 
 ---
 
+# Gate B additions — the untested seven
+
+Drills A–K cover the sync architecture. They do not cover a full room, tired
+hands, or hardware that goes to sleep. These seven were added because a
+restaurant that isn't us will meet all of them in its first week, and nothing
+in this repository has ever seen them.
+
+Every one of these needs the pilot's **actual** hardware. Record every failure
+in `FAILURE_LOG.md`, including the ones that look cosmetic — an unrecorded
+failure is indistinguishable from a passing drill.
+
+## Drill L — Device reboot mid-service
+
+**Setup:** a service running, this device holding at least one edit made while
+briefly offline (put it in airplane mode, make the edit, leave it offline).
+
+1. Hard-power the device off, without closing the app.
+2. Power it back on, unlock, reopen the app, and let it reconnect.
+
+**Pass:** the offline edit still uploads after the reboot — the write queue
+survives a power cut, not just a reload. The board repaints to the current
+service, not to the state at power-off. No duplicate rows appear.
+
+## Drill M — iPad sleep / wake across a service
+
+**Setup:** a service running, two devices, one of them a real iPad on its
+normal auto-lock setting.
+
+1. Let device 1 sleep for at least 30 minutes (a genuine lull, not 30 seconds).
+2. Make five changes on device 2 while device 1 sleeps, including one on the
+   kitchen path (SEND a table).
+3. Wake device 1 with a single tap. Do not reload it.
+
+**Pass:** device 1 shows all five changes within seconds of waking, without a
+reload. The status chip returns to live by itself. Tap **?** beside the chip
+during the first seconds after wake and confirm the readout does not accuse a
+healthy device of being stalled once it has caught up.
+
+## Drill N — Kitchen display restart mid-service
+
+**Setup:** a service running with at least four seated tables at different
+course progress, and one fired ticket.
+
+1. Fully close the app on the kitchen display (not a reload — kill it).
+2. Reopen it and go straight to the kitchen view.
+
+**Pass:** the display returns to the live service with every ticket at its
+correct course state, including the fired one. It does not re-alert already
+handled tickets, and it does not sit on NO ACTIVE SERVICE while a service is
+running.
+
+## Drill O — Twenty-plus reservations, one night
+
+**Setup:** an empty test service on the Demo workspace.
+
+1. Enter 25 reservations across the evening's sittings, several with dietary
+   restrictions and several as hotel guests if that feature is on.
+2. Seat 15 of them, working the board as a real service would.
+3. Switch to kitchen, fire courses across at least eight tables.
+
+**Pass:** every screen stays responsive on the pilot's oldest device — board
+taps under a quarter-second, kitchen repaint under a second. Reservation
+resolution against the active layout stays correct. Measure and record the
+numbers even when it passes; "felt fine" is not a result.
+
+## Drill P — Full restaurant, every table worked
+
+**Setup:** the Demo workspace with the pilot's real table count configured.
+
+1. Seat **every** table, with a mix of party sizes and at least three merges.
+2. Give each table drinks, restrictions and notes, then progress courses on all
+   of them until the last table has been served.
+
+**Pass:** no table loses content, no merge splits, the kitchen shows every
+table, and ending the service archives all of them. This is the drill most
+likely to surface a limit nobody has hit — record what breaks first, even if it
+is only layout.
+
+## Drill Q — Many kitchen tickets at once
+
+**Setup:** the state at the end of Drill P, kitchen display in tickets view.
+
+1. From the floor, SEND eight tables within one minute.
+2. While those alerts are live, change the menu type on two of them and
+   un-seat one.
+
+**Pass:** all eight tickets appear with correct seat deltas, the two edits
+repaint their tickets, and the un-seated table's ticket disappears rather than
+lingering. Nothing scrolls out of reach on the actual kitchen panel — record
+how many tickets fit before the ninth becomes invisible.
+
+## Drill R — Accidental double taps
+
+**Setup:** a service running. Assume gloved, wet, or hurried hands throughout.
+
+1. Double-tap SEAT on a free table.
+2. Double-tap SEND on a seated table.
+3. Double-tap END SERVICE and dismiss nothing.
+4. Double-tap a reservation's save button.
+5. Repeat 1–2 on a device that is offline.
+
+**Pass:** each action happens exactly once. No duplicate reservation, no
+duplicate service, no double-fired ticket, no second archive entry. A
+double-tapped destructive action still requires its confirmation. The offline
+repeats produce one queued write each, not two.
+
+---
+
 ## Fallback drill (PowerSync outage)
 
 Use a preview deployment with `VITE_POWERSYNC_URL` set to an empty string (or

@@ -114,6 +114,10 @@ export function foldFloorMaps(ancestor, mine, server) {
   if (config.conflict) conflicts.push({ type: "config" });
   const active = chooseThreeWay(base.activeDiningMapId, local.activeDiningMapId, remote.activeDiningMapId);
   if (active.conflict) conflicts.push({ type: "active-map" });
+  // Per-day layout bindings merge one DAY at a time: two devices setting
+  // different days keep both, and only the same day can actually conflict.
+  const byDate = mergeObjectFields(base.activeDiningByDate, local.activeDiningByDate, remote.activeDiningByDate);
+  if (byDate.conflict) conflicts.push({ type: "active-map-day" });
 
   const geometryVersion = Math.max(
     Number(base.geometryVersion) || 0,
@@ -130,6 +134,7 @@ export function foldFloorMaps(ancestor, mine, server) {
       geometryVersion,
       maps: mergedMaps,
       activeDiningMapId,
+      activeDiningByDate: byDate.value,
       config: config.value,
     },
     conflicts,

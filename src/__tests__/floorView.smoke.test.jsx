@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, fireEvent, within } from "@testing-library/react";
 import FloorView from "../components/floor/FloorView.jsx";
 import FloorMap from "../components/floor/FloorMap.jsx";
 import KitchenFloorView from "../components/kitchen/KitchenFloorView.jsx";
@@ -72,9 +72,10 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(container.textContent).toContain("SEATED 2");
     expect(container.textContent).toContain("RES 1");
     expect(container.textContent).toContain("SET 1");
-    // FOH tables are label-only (per Djan): no names, no ×pax, no course on
-    // the shape — the label ▲ is retired and the restriction CODE at the red
-    // chair is the signal instead
+    // FOH tables carry no names and no ×pax (per Djan) — the label ▲ is
+    // retired and the restriction CODE at the red chair is the signal
+    // instead. (The course readout DOES ride the tile now — but only when a
+    // menu exists; this fixture passes none.)
     expect(container.textContent).not.toContain("×2");
     expect(container.textContent).not.toContain("NOVAK");
     expect(container.textContent).not.toContain("WEISS");
@@ -88,40 +89,40 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(container.textContent).toContain("WP");
   });
 
-  it("a dining table is one big SET toggle — tap calls the status handler, no sheet", () => {
-    const { container, handlers } = setup();
-    fireEvent.click(findTable(container, "T1")); // occupied dining body — no sheet, toggles
-    expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T1");
-    expect(handlers.onCycleStatus).toHaveBeenCalledTimes(1);
+  it("a dining tap SELECTS only — no SET toggle, no sheet; the dock follows (per Djan, 21.08)", () => {
+    const { container, handlers, getByText } = setup();
+    fireEvent.click(findTable(container, "T1")); // occupied dining body
+    expect(handlers.onCycleStatus).not.toHaveBeenCalled(); // peeking can't flip SET
+    expect(getByText("[TABLE DOCK]").parentElement.textContent).toContain("T1");
   });
 
-  it("every dining table is a SET toggle — none of them opens a sheet", () => {
+  it("a free dining table's tap selects too — no set control on an empty table (22.08)", () => {
     // The one dining tap that used to open a sheet was an ARRIVING table's
     // MARK SEATED. That state is gone, so the dining map has no sheet at all.
-    const { container, handlers } = setup();
+    const { container, handlers, getByText } = setup();
     fireEvent.click(findTable(container, "T8"));
-    expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T8");
+    expect(handlers.onCycleStatus).not.toHaveBeenCalled();
     expect(container.textContent).not.toContain("MARK SEATED");
+    const dock = getByText("[TABLE DOCK]").parentElement;
+    expect(dock.textContent).toContain("NOT SEATED");
+    expect(within(dock).queryByText("SET")).toBeNull(); // the old strip SET is gone
   });
 
-  it("terrace tab: occupied sheet shows waters by position (no name) + MOVE; free table assigns", () => {
-    const { container, handlers, getByText } = setup();
+  it("terrace tap: ONE surface — the dock carries the party actions, no sheet (22.08)", () => {
+    const { container, handlers, getByText, queryByText } = setup();
     fireEvent.click(getByText("TERRACE"));
     expect(container.textContent).not.toContain("WEISS"); // no names on the floor
     expect(container.textContent).toContain("T9");        // the party's identity = its dining table
     expect(container.textContent).toContain("XC");        // the party's seat notes travel to the terrace table
     expect(container.textContent).not.toContain("LAST BITE"); // retired concept — stamp on r1 renders nothing
     fireEvent.click(findTable(container, "T23"));
-    expect(container.textContent).toContain("×4");        // pax lives in the sheet header
-    // the sheet: waters by seat position + pairings, reservation name omitted
-    const sheet = getByText("P1").closest("div").parentElement.parentElement;
-    expect(sheet.textContent).toContain("XC");
-    expect(sheet.textContent).toContain("Non-Alc");
-    expect(sheet.textContent).toContain("P2");
-    expect(sheet.textContent).not.toContain("WEISS");
-    fireEvent.click(getByText(/MOVE TO T9/));
+    expect(queryByText("✕")).toBeNull();                  // the old bottom sheet is gone
+    const dock = getByText("[TABLE DOCK]").parentElement;
+    expect(dock.textContent).toContain("×4");             // pax in the dock header
+    expect(dock.textContent).not.toContain("WEISS");
+    fireEvent.click(within(dock).getByText(/MOVE TO T9/));
     expect(handlers.onMove).toHaveBeenCalledWith(reservations[0]);
-    // free table → booked-party picker (MURN waits, HORVAT is mid-move)
+    // free table → the assign picker in the dock (MURN waits, HORVAT is mid-move)
     fireEvent.click(findTable(container, "T21"));
     fireEvent.click(getByText(/MURN ×2/));
     expect(handlers.onAssign).toHaveBeenCalledWith(reservations[1], "T21");
@@ -140,17 +141,28 @@ describe("FloorView (FOH FLOOR surface)", () => {
 });
 
 describe("terrace CHANGE TABLE (re-seat on the terrace)", () => {
-  it("occupied sheet arms the move; tapping a free table re-assigns, occupied tables refuse", () => {
+  it("dock CHANGE TABLE arms the move; a free table re-seats, the party's OWN table refuses", () => {
     const { container, handlers, getByText } = setup();
     fireEvent.click(getByText("TERRACE"));
-    fireEvent.click(findTable(container, "T23")); // WEISS's table
+    fireEvent.click(findTable(container, "T23")); // WEISS's table → dock
     fireEvent.click(getByText("CHANGE TABLE"));
-    expect(container.textContent).toContain("TAP A FREE TABLE FOR WEISS ×4");
-    fireEvent.click(findTable(container, "T23")); // still occupied — refused
+    expect(container.textContent).toContain("TAP A TABLE FOR WEISS ×4");
+    fireEvent.click(findTable(container, "T23")); // its own table — nothing to swap with
     expect(handlers.onAssign).not.toHaveBeenCalled();
     fireEvent.click(findTable(container, "T25")); // free → re-seat
     expect(handlers.onAssign).toHaveBeenCalledWith(reservations[0], "T25");
-    expect(container.textContent).not.toContain("TAP A FREE TABLE");
+    expect(container.textContent).not.toContain("TAP A TABLE FOR");
+  });
+
+  it("CHANGE TABLE onto an OCCUPIED table swaps the two parties (22.08)", () => {
+    const { container, handlers, getByText } = setup();
+    fireEvent.click(getByText("TERRACE"));
+    fireEvent.click(findTable(container, "T23")); // WEISS (on T23)
+    fireEvent.click(getByText("CHANGE TABLE"));
+    fireEvent.click(findTable(container, "T24")); // HORVAT's table → swap, not refuse
+    expect(handlers.onAssign).toHaveBeenCalledWith(reservations[0], "T24");
+    expect(handlers.onAssign).toHaveBeenCalledWith(reservations[2], "T23");
+    expect(container.textContent).not.toContain("TAP A TABLE FOR");
   });
 
   it("CANCEL disarms without assigning", () => {
@@ -160,7 +172,7 @@ describe("terrace CHANGE TABLE (re-seat on the terrace)", () => {
     fireEvent.click(getByText("CHANGE TABLE"));
     fireEvent.click(getByText("CANCEL"));
     fireEvent.click(findTable(container, "T25"));
-    expect(handlers.onAssign).not.toHaveBeenCalled(); // free-table tap = plain sheet again
+    expect(handlers.onAssign).not.toHaveBeenCalled(); // free-table tap = plain dock select again
   });
 });
 
@@ -173,7 +185,11 @@ describe("stranded terrace parties (no reachable tile)", () => {
     fireEvent.click(getByText(/MOVE TO T6/));
     expect(handlers.onMove).toHaveBeenCalledWith(stranded);
     fireEvent.click(getByText("CHANGE TABLE"));
-    expect(container.textContent).toContain("TAP A FREE TABLE FOR ZUPAN ×3");
+    expect(container.textContent).toContain("TAP A TABLE FOR ZUPAN ×3");
+    // a stranded party has no live tile to hand the other party — occupied
+    // stays refused for them, never a swap
+    fireEvent.click(findTable(container, "T23"));
+    expect(handlers.onAssign).not.toHaveBeenCalled();
     fireEvent.click(findTable(container, "T25")); // free tile → re-assign
     expect(handlers.onAssign).toHaveBeenCalledWith(stranded, "T25");
   });
@@ -193,43 +209,54 @@ describe("stranded terrace parties (no reachable tile)", () => {
   });
 });
 
-describe("terrace SET → KITCHEN (same handshake as the dining room)", () => {
-  it("an occupied party's sheet sends SET for the next course AND turns the strip on", () => {
+describe("terrace SET → KITCHEN (same handshake as the dining room, from the dock)", () => {
+  const MENU = [
+    { position: 1, course_key: "amuse", menu: { name: "Amuse" }, is_active: true, is_snack: false, optional_flag: "", course_category: "main" },
+  ];
+
+  it("the dock's set button announces the party's next course AND turns the strip on", () => {
     const onSend = vi.fn();
-    const { container, handlers, getByText } = setup({ onSendSetToKitchen: onSend });
+    const { container, handlers, getByText, getByTitle } = setup({ menuCourses: MENU, onSendSetToKitchen: onSend });
     fireEvent.click(getByText("TERRACE"));
-    fireEvent.click(findTable(container, "T23")); // WEISS's table
-    getByText(/MOVE TO T9/); // still the party sheet…
-    fireEvent.click(getByText("SET → KITCHEN"));
-    // …and SET informs the kitchen: the party's board table (T9) gets the
+    fireEvent.click(findTable(container, "T23")); // WEISS's table → dock
+    const setBtn = getByTitle("Tell the kitchen this course is set");
+    expect(setBtn.textContent).toContain("Amuse"); // the dish rides the big button
+    fireEvent.click(setBtn);
+    // SET informs the kitchen: the party's board table (T9) gets the
     // courseReady handshake, exactly like a dining SEND
     expect(onSend).toHaveBeenCalledWith([9]);
     expect(handlers.onCycleStatus).toHaveBeenCalledWith("terrace_main", "T23");
-    expect(container.textContent).toContain("SET → KITCHEN ✓");
+    // no confirmation toast (per Djan, 22.08) — the tile's state IS the receipt
   });
 
-  it("an already-SET party offers UNSET instead — no double-send", () => {
+  it("an announced party's button reads SET ✓ — it takes the set back, never double-sends", () => {
     const onSend = vi.fn();
-    const { container, handlers, getByText, queryByText } = setup({
+    const onUnsetKitchen = vi.fn();
+    const announced = tables.map((t) =>
+      t.id === 9 ? { ...t, courseReady: { key: "amuse", index: 1, name: "Amuse" } } : t);
+    const { container, handlers, getByText, getByTitle, queryByTitle } = setup({
       floorStatus: { terrace_main: { T23: "SET" } },
+      tables: announced,
+      menuCourses: MENU,
       onSendSetToKitchen: onSend,
+      onUnsetKitchen,
     });
     fireEvent.click(getByText("TERRACE"));
-    expect(container.textContent).toContain("SET"); // strip on the T23 tile
     fireEvent.click(findTable(container, "T23"));
-    expect(queryByText("SET → KITCHEN")).toBeNull();
-    fireEvent.click(getByText("UNSET"));
+    expect(queryByTitle("Tell the kitchen this course is set")).toBeNull(); // no second set press
+    fireEvent.click(getByTitle("Take back the SET signal"));
+    expect(onUnsetKitchen).toHaveBeenCalledWith(9);
     expect(handlers.onCycleStatus).toHaveBeenCalledWith("terrace_main", "T23");
     expect(onSend).not.toHaveBeenCalled();
   });
 
-  it("a free terrace table has NO set control ('set for bites' is retired)", () => {
-    const { container, getByText, queryByText } = setup({ onSendSetToKitchen: vi.fn() });
+  it("a free terrace table has NO set control — its dock is the assign picker", () => {
+    const { container, getByText, queryByText, queryByTitle } = setup({ menuCourses: MENU, onSendSetToKitchen: vi.fn() });
     fireEvent.click(getByText("TERRACE"));
     fireEvent.click(findTable(container, "T25")); // free
-    getByText("ASSIGN PARTY"); // the sheet is purely the assign picker
+    getByText("[ASSIGN PARTY]");
     expect(queryByText("SET FOR BITES")).toBeNull();
-    expect(queryByText("SET → KITCHEN")).toBeNull();
+    expect(queryByTitle("Tell the kitchen this course is set")).toBeNull();
   });
 
   it("a leftover strip on a now-free table still offers UNSET so it can't get stuck", () => {
@@ -239,7 +266,7 @@ describe("terrace SET → KITCHEN (same handshake as the dining room)", () => {
     });
     fireEvent.click(getByText("TERRACE"));
     fireEvent.click(findTable(container, "T25"));
-    fireEvent.click(getByText("UNSET"));
+    fireEvent.click(getByText("UNSET")); // the dock's cleanup — the one surface
     expect(handlers.onCycleStatus).toHaveBeenCalledWith("terrace_main", "T25");
   });
 });
@@ -360,86 +387,310 @@ describe("seat swap — drag a chair onto another chair of the same table", () =
     expect(onSwapSeats).not.toHaveBeenCalled();
   });
 
-  it("a plain tap on a chair still resolves as the table tap (SET toggle intact)", () => {
+  it("a plain tap on a chair (no drag) opens that seat's quick access, never a swap", () => {
     const onSwapSeats = vi.fn();
-    const { container, handlers } = setup({ onSwapSeats });
+    const { container, handlers, getByText } = setup({ onSwapSeats, upd: vi.fn(), updSeat: vi.fn() });
     mockBox(container);
     const seat = findTable(container, "T1").querySelector('[data-seat="0"]');
     fireEvent.pointerDown(seat, { clientX: 22, clientY: 50 });
     fireEvent.pointerUp(seat, { clientX: 22, clientY: 50 });
-    fireEvent.click(seat); // bubbles to the table group
+    fireEvent.click(seat); // the tap that follows the aborted drag
     expect(onSwapSeats).not.toHaveBeenCalled();
-    expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T1");
+    expect(handlers.onCycleStatus).not.toHaveBeenCalled(); // taps never toggle
+    getByText("[QUICK ACCESS · T1 · P1]");
   });
 });
 
-describe("SEND SET → KITCHEN", () => {
-  it("appears when a seated table is SET and forwards its board id", () => {
-    const onSend = vi.fn();
-    const { container, getByText } = setup({
-      // T1 seated + SET (sendable); T4 SET but only reserved (not sendable)
-      floorStatus: { dining_a: { T1: "SET", T4: "SET" } },
-      onSendSetToKitchen: onSend,
-    });
-    fireEvent.click(getByText(/SEND SET → KITCHEN \(1\)/));
-    expect(onSend).toHaveBeenCalledWith([1]);
-    expect(container.textContent).toContain("SENT TO KITCHEN ✓");
-  });
-
-  it("hidden when nothing is both seated and SET", () => {
-    const { queryByText } = setup({ onSendSetToKitchen: vi.fn() });
-    expect(queryByText(/SEND SET → KITCHEN/)).toBeNull(); // T4 SET is reserved-only
-  });
-});
-
-describe("SEND SET → KITCHEN — no double-send of an already-announced course", () => {
+describe("no bulk SEND SET in the ticker — the dock is the ONE set surface (22.08)", () => {
   const menuCourses = [
     { position: 1, course_key: "amuse", menu: { name: "Amuse" }, is_active: true, is_snack: false, optional_flag: "", course_category: "main" },
     { position: 2, course_key: "main", menu: { name: "Main" }, is_active: true, is_snack: false, optional_flag: "", course_category: "main" },
   ];
-  // T1 has already been sent for its next course (courseReady === its nextFire);
-  // T9 is freshly SET and never sent.
-  const withReady = tables.map((t) =>
-    t.id === 1 ? { ...t, courseReady: { key: "amuse", index: 1, name: "Amuse" } } : t);
 
-  it("an already-sent SET table is excluded from SEND and wears an amber ring", () => {
+  it("never appears, even in the old sendable state (seated + SET, not announced)", () => {
     const onSend = vi.fn();
-    const { container, queryByText } = setup({
-      floorStatus: { dining_a: { T1: "SET" } },
-      tables: withReady,
+    const { queryByText } = setup({
+      floorStatus: { dining_a: { T1: "SET", T4: "SET" } },
       menuCourses,
       onSendSetToKitchen: onSend,
     });
-    // Nothing left to send — T1 already holds the kitchen's SET banner.
     expect(queryByText(/SEND SET → KITCHEN/)).toBeNull();
-    // …and it shows the amber ring (signal.warn) so staff see it's been sent.
-    const t1 = findTable(container, "T1");
-    expect(t1.querySelector('[stroke="#c49a4a"]')).toBeTruthy();
   });
 
-  it("SEND forwards ONLY the table not yet announced (the new one), not the already-sent one", () => {
-    const onSend = vi.fn();
-    const { getByText } = setup({
-      floorStatus: { dining_a: { T1: "SET", T9: "SET" } },
-      tables: withReady, // T1 sent, T9 fresh
-      menuCourses,
-      onSendSetToKitchen: onSend,
-    });
-    fireEvent.click(getByText(/SEND SET → KITCHEN \(1\)/));
-    expect(onSend).toHaveBeenCalledWith([9]); // T1 (already sent) is not re-fired
-  });
-
-  it("a fresh SET table (no courseReady) still sends and shows no ring", () => {
-    const onSend = vi.fn();
-    const { container, getByText } = setup({
+  it("never flashes back in the dock's SET→FIRE window (strip on, courseReady consumed)", () => {
+    // The exact state the dock's FIRE leaves behind for a render or two, until
+    // App's strip watcher clears the strip: strip SET, courseReady null, the
+    // fired course in kitchenLog. The button used to pop back up here.
+    const fired = tables.map((t) =>
+      t.id === 1 ? { ...t, kitchenLog: { amuse: { firedAt: "20:10" } } } : t);
+    const { queryByText } = setup({
       floorStatus: { dining_a: { T1: "SET" } },
-      tables, // T1 has no courseReady
+      tables: fired,
       menuCourses,
-      onSendSetToKitchen: onSend,
+      onSendSetToKitchen: vi.fn(),
     });
-    const t1 = findTable(container, "T1");
-    expect(t1.querySelector('[stroke="#c49a4a"]')).toBeNull(); // not sent → no ring
-    fireEvent.click(getByText(/SEND SET → KITCHEN \(1\)/));
+    expect(queryByText(/SEND SET → KITCHEN/)).toBeNull();
+  });
+
+  it("the announced/not-announced rings still tell the states apart without it", () => {
+    const withReady = tables.map((t) =>
+      t.id === 1 ? { ...t, courseReady: { key: "amuse", index: 1, name: "Amuse" } } : t);
+    const announced = setup({
+      floorStatus: { dining_a: { T1: "SET" } }, tables: withReady, menuCourses,
+      onSendSetToKitchen: vi.fn(),
+    });
+    expect(findTable(announced.container, "T1").querySelector('[stroke="#c49a4a"]')).toBeTruthy();
+    announced.unmount();
+    const fresh = setup({
+      floorStatus: { dining_a: { T1: "SET" } }, tables, menuCourses,
+      onSendSetToKitchen: vi.fn(),
+    });
+    expect(findTable(fresh.container, "T1").querySelector('[stroke="#c49a4a"]')).toBeNull();
+  });
+});
+
+describe("FOH table dock (quick access beside the map)", () => {
+  const menuCourses = [
+    { position: 1, course_key: "amuse", menu: { name: "Amuse" }, is_active: true, is_snack: false, optional_flag: "", course_category: "main" },
+    { position: 2, course_key: "brioche", menu: { name: "Brioche" }, is_active: true, is_snack: false, optional_flag: "", course_category: "main" },
+  ];
+  const withFired = tables.map((t) =>
+    t.id === 1 ? { ...t, kitchenLog: { amuse: { firedAt: "19:47" } } } : t);
+  const dockOf = (getByText) => getByText("[TABLE DOCK]").parentElement;
+
+  it("a dining tap focuses the dock: course readout, restriction tags, no drink rows, no names", () => {
+    const { container, handlers, getByText } = setup({ tables: withFired, menuCourses });
+    expect(container.textContent).toContain("TAP A TABLE");
+    fireEvent.click(findTable(container, "T1"));
+    expect(handlers.onCycleStatus).not.toHaveBeenCalled(); // select-only tap
+    const dock = dockOf(getByText);
+    expect(dock.textContent).toContain("[COURSE · C1/2]");
+    expect(dock.textContent).toContain("C01 / Amuse");   // NOW — what's on the table
+    expect(dock.textContent).toContain("19:47");
+    expect(dock.textContent).toContain("C02 / Brioche"); // NEXT
+    // restriction tags stay; the per-seat drink rows are gone (the map's
+    // chair pills carry those — per Djan, 22.08), and names never reach the floor
+    expect(dock.textContent).toContain("[SHF]");
+    expect(dock.textContent).not.toContain("[SEATS]");
+    expect(dock.textContent).not.toContain("NOVAK");
+  });
+
+  it("the tile itself carries the course readout (C n/total), like the kitchen floor", () => {
+    const { container } = setup({ tables: withFired, menuCourses });
+    expect(findTable(container, "T1").textContent).toContain("C1/2");
+  });
+
+  it("a SET pressed kitchen/board-side (courseReady, NO strip) now shows on the floor", () => {
+    const announced = tables.map((t) =>
+      t.id === 1 ? { ...t, courseReady: { key: "amuse", index: 1, name: "Amuse" } } : t);
+    const { container } = setup({ tables: announced, menuCourses }); // no strip for T1
+    expect(findTable(container, "T1").querySelector('[stroke="#c49a4a"]')).toBeTruthy();
+  });
+
+  it("the ONE set button names the dish it announces, and turns the strip on", () => {
+    const onSend = vi.fn();
+    const { container, handlers, getByText } = setup({ tables: withFired, menuCourses, onSendSetToKitchen: onSend });
+    fireEvent.click(findTable(container, "T1"));
+    handlers.onCycleStatus.mockClear();
+    const setBtn = within(dockOf(getByText)).getByTitle("Tell the kitchen this course is set");
+    expect(setBtn.textContent).toContain("SET");
+    expect(setBtn.textContent).toContain("Brioche"); // the dish under the verb, kitchen-style
+    fireEvent.click(setBtn);
     expect(onSend).toHaveBeenCalledWith([1]);
+    expect(handlers.onCycleStatus).toHaveBeenCalledWith("dining_a", "T1");
+  });
+
+  it("once announced the big button reads SET ✓ in AMBER — it clears the banner, never re-sends", () => {
+    const announced = withFired.map((t) =>
+      t.id === 1 ? { ...t, courseReady: { key: "brioche", index: 2, name: "Brioche" } } : t);
+    const onSend = vi.fn();
+    const onUnsetKitchen = vi.fn();
+    const { container, getByText } = setup({
+      tables: announced, menuCourses, onSendSetToKitchen: onSend, onUnsetKitchen,
+    });
+    fireEvent.click(findTable(container, "T1"));
+    const dock = dockOf(getByText);
+    expect(within(dock).queryByTitle("Tell the kitchen this course is set")).toBeNull(); // no second set press
+    const setBtn = within(dock).getByTitle("Take back the SET signal");
+    expect(setBtn.textContent).toContain("SET ✓");
+    // set state is AMBER (per Djan, 22.08) — the same warn signal as the
+    // ANNOUNCED badge and the tile ring, not the kitchen's parchment
+    expect(setBtn.style.background.toLowerCase()).toMatch(/#c49a4a|rgb\(196,\s*154,\s*74\)/);
+    fireEvent.click(setBtn);
+    expect(onUnsetKitchen).toHaveBeenCalledWith(1);
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("dock extras: a P-chip toggles the seat's cheese; SEND merges into a pending SET popup", () => {
+    const upd = vi.fn();
+    const EXTRAS = [{ key: "cheese", id: "cheese", name: "Cheese", pairings: ["—"] }];
+    // P2 already wants cheese (never sent) AND an unconfirmed SET banner sits
+    // in the alert slot — the exact override case: neither may swallow the other.
+    const withCheese = withFired.map((t) =>
+      t.id === 1 ? {
+        ...t,
+        seats: [
+          { id: 1, water: "—", pairing: "", floorPositions: {} },
+          { id: 2, water: "—", pairing: "", extras: { cheese: { ordered: true, pairing: "—" } }, floorPositions: {} },
+        ],
+        kitchenAlert: { timestamp: "t0", tableName: null, seats: [], confirmed: false, course: { key: "brioche", index: 2, name: "Brioche" } },
+      } : t);
+    const { container, getByText } = setup({ tables: withCheese, menuCourses, optionalExtras: EXTRAS, upd });
+    fireEvent.click(findTable(container, "T1"));
+    const dock = dockOf(getByText);
+    // toggle P1's cheese on → a seats updater lands on the board table
+    fireEvent.click(within(dock).getAllByText("P1").find((el) => el.tagName === "BUTTON"));
+    expect(upd).toHaveBeenCalledWith(1, "seats", expect.any(Function));
+    const updater = upd.mock.calls.find((c) => c[1] === "seats")[2];
+    const nextSeats = updater(withCheese.find((t) => t.id === 1).seats);
+    expect(nextSeats.find((s) => s.id === 1).extras.cheese.ordered).toBe(true);
+    // SEND ORDER → the alert write MERGES: the SET course survives the cheese call
+    fireEvent.click(within(dock).getByText("SEND ORDER → KITCHEN"));
+    const alertCall = upd.mock.calls.find((c) => c[1] === "kitchenAlert");
+    expect(alertCall[0]).toBe(1);
+    expect(alertCall[2].course).toEqual({ key: "brioche", index: 2, name: "Brioche" });
+    expect(alertCall[2].seats.some((s) => (s.extras || []).some((e) => e.key === "cheese"))).toBe(true);
+    expect(upd.mock.calls.find((c) => c[1] === "kitchenSent")).toBeTruthy();
+  });
+
+  it("a chair tap swaps the dock column to that ONE seat's quick access (22.08)", () => {
+    const upd = vi.fn();
+    const { container, handlers, getByText, queryByText } = setup({
+      tables: withFired, menuCourses, upd, updSeat: vi.fn(),
+    });
+    fireEvent.click(findTable(container, "T1").querySelector('[data-seat="0"]'));
+    // the chair tap selects — it neither toggles nor reads as a table tap
+    expect(handlers.onCycleStatus).not.toHaveBeenCalled();
+    // the column IS the panel now — one surface, scoped to the tapped seat
+    getByText("[QUICK ACCESS · T1 · P1]");
+    expect(queryByText("[TABLE DOCK]")).toBeNull();
+    expect(container.textContent).toContain("NOVAK"); // the REAL board card
+    // ✕ brings the table dock back
+    fireEvent.click(getByText("✕"));
+    getByText("[TABLE DOCK]");
+    // another chair re-scopes the panel to ITS position
+    fireEvent.click(findTable(container, "T1").querySelector('[data-seat="1"]'));
+    getByText("[QUICK ACCESS · T1 · P2]");
+    // a table-body tap returns to the table dock
+    fireEvent.click(findTable(container, "T1"));
+    getByText("[TABLE DOCK]");
+    expect(queryByText(/\[QUICK ACCESS/)).toBeNull();
+  });
+
+  it("FIRE (small) fires the next course from the floor; UNDO puts it back", () => {
+    const upd = vi.fn();
+    const { container, getByText, queryByText } = setup({ tables: withFired, menuCourses, upd });
+    fireEvent.click(findTable(container, "T1"));
+    fireEvent.click(within(dockOf(getByText)).getByTitle("Fire Brioche"));
+    const logCall = upd.mock.calls.find((c) => c[1] === "kitchenLog");
+    expect(logCall[0]).toBe(1);
+    const applied = logCall[2]({ amuse: { firedAt: "19:47" } });
+    expect(applied.brioche.firedAt).toBeTruthy();
+    expect(applied.amuse).toBeTruthy(); // functional update keeps earlier fires
+    expect(upd.mock.calls.some((c) => c[1] === "courseReady")).toBe(false); // nothing was announced
+    // UNDO arms after the dock's own fire, and removes exactly that course
+    upd.mockClear();
+    fireEvent.click(within(dockOf(getByText)).getByText("UNDO"));
+    const undoCall = upd.mock.calls.find((c) => c[1] === "kitchenLog");
+    expect(undoCall[2]({ amuse: { firedAt: "19:47" }, brioche: { firedAt: "20:31" } }))
+      .toEqual({ amuse: { firedAt: "19:47" } });
+    // consumed — the slot stays (the kitchen bar's smallest segment) but disarms
+    expect(within(dockOf(getByText)).getByText("UNDO").disabled).toBe(true);
+  });
+
+  it("firing the announced course clears the banner; UNDO restores it (kitchen semantics)", () => {
+    const announced = withFired.map((t) =>
+      t.id === 1 ? { ...t, courseReady: { key: "brioche", index: 2, name: "Brioche" } } : t);
+    const upd = vi.fn();
+    const { container, getByText } = setup({
+      tables: announced, menuCourses, upd, onUnsetKitchen: vi.fn(),
+    });
+    fireEvent.click(findTable(container, "T1"));
+    fireEvent.click(within(dockOf(getByText)).getByTitle("Fire Brioche"));
+    expect(upd).toHaveBeenCalledWith(1, "courseReady", null); // the fire consumed the SET
+    upd.mockClear();
+    fireEvent.click(within(dockOf(getByText)).getByText("UNDO"));
+    expect(upd).toHaveBeenCalledWith(1, "courseReady", { key: "brioche", index: 2, name: "Brioche" });
+  });
+
+  it("the terrace dock follows the tapped party too — same info on both floors", () => {
+    const withFired9 = tables.map((t) =>
+      t.id === 9 ? { ...t, kitchenLog: { amuse: { firedAt: "20:02" } } } : t);
+    const { container, getByText } = setup({ tables: withFired9, menuCourses });
+    fireEvent.click(getByText("TERRACE"));
+    fireEvent.click(findTable(container, "T23")); // WEISS's table → board 9
+    const dock = dockOf(getByText);
+    expect(dock.textContent).toContain("[COURSE · C1/2]");
+    expect(dock.textContent).toContain("C01 / Amuse");
+  });
+});
+
+describe("MIRROR — selectable flips (↕ / ↔) to match the tablet's disposition (per Djan, 27.08)", () => {
+  // per-DEVICE preference in localStorage — isolate every case
+  beforeEach(() => { try { localStorage.clear(); } catch {} });
+  afterEach(() => { try { localStorage.clear(); } catch {} });
+
+  const tileBox = (container, label) => {
+    const r = findTable(container, label).querySelector("rect");
+    return { x: Number(r.getAttribute("x")), y: Number(r.getAttribute("y")) };
+  };
+
+  it("↕ and ↔ each flip their own axis, compose to the 180° turn, and unwind independently", () => {
+    const { container, getByText } = setup();
+    expect(tileBox(container, "T1")).toEqual({ x: 8, y: 8 }); // stored position (12×9)
+    fireEvent.click(getByText("MIRROR ↕"));
+    expect(tileBox(container, "T1")).toEqual({ x: 8, y: 75 });  // 92−8−9, x untouched
+    fireEvent.click(getByText("MIRROR ↔"));
+    expect(tileBox(container, "T1")).toEqual({ x: 80, y: 75 }); // +100−8−12 — both = 180°
+    fireEvent.click(getByText("MIRROR ↕"));
+    expect(tileBox(container, "T1")).toEqual({ x: 80, y: 8 });  // ↔ stays on alone
+    fireEvent.click(getByText("MIRROR ↔"));
+    expect(tileBox(container, "T1")).toEqual({ x: 8, y: 8 });   // back to the stored drawing
+  });
+
+  it("flipping never touches identity: taps, the dock and restriction codes follow the guests", () => {
+    const { container, handlers, getByText } = setup();
+    fireEvent.click(getByText("MIRROR ↕"));
+    fireEvent.click(getByText("MIRROR ↔"));
+    // P1's chair (W edge, at 5.6/12.5 stored) rides the 180° turn to the E
+    // edge of the turned tile: x 92+2.4, y 75+4.5
+    expect(findTable(container, "T1").querySelector('[data-seat="0"] g').getAttribute("transform"))
+      .toContain("translate(94.4,79.5");
+    expect(findTable(container, "T1").textContent).toContain("SHF"); // P1's code moved WITH the guest
+    fireEvent.click(findTable(container, "T1"));
+    expect(handlers.onCycleStatus).not.toHaveBeenCalled(); // select-only, as ever
+    expect(getByText("[TABLE DOCK]").parentElement.textContent).toContain("T1");
+  });
+
+  it("remembers per ROOM and per DEVICE; the retired one-flag format still reads as the ↕ it meant", () => {
+    const first = setup();
+    fireEvent.click(first.getByText("MIRROR ↕")); // dining ↕ ON
+    fireEvent.click(first.getByText("TERRACE"));
+    expect(tileBox(first.container, "T21")).toEqual({ x: 8, y: 18 }); // terrace keeps its own disposition
+    fireEvent.click(first.getByText("MIRROR ↔")); // terrace ↔ ON only
+    expect(tileBox(first.container, "T21")).toEqual({ x: 100 - 8 - 14, y: 18 });
+    first.unmount();
+    // a fresh mount on the same device restores both rooms' choices
+    const again = setup();
+    expect(tileBox(again.container, "T1")).toEqual({ x: 8, y: 75 });
+    fireEvent.click(again.getByText("TERRACE"));
+    expect(tileBox(again.container, "T21")).toEqual({ x: 78, y: 18 });
+    again.unmount();
+    // a boolean stored by the one-axis MIRROR builds means up↕down
+    try { localStorage.setItem("milka_floor_mirror_v1", JSON.stringify({ dining: true })); } catch {}
+    const migrated = setup();
+    expect(tileBox(migrated.container, "T1")).toEqual({ x: 8, y: 75 });
+  });
+
+  it("mirrored terrace tiles still resolve their party — occupancy, dock and MOVE all follow the label", () => {
+    const { container, handlers, getByText } = setup();
+    fireEvent.click(getByText("TERRACE"));
+    fireEvent.click(getByText("MIRROR ↕"));
+    fireEvent.click(getByText("MIRROR ↔"));
+    // WEISS still occupies T23 (identity), wherever the tile draws
+    const dock = (() => { fireEvent.click(findTable(container, "T23")); return getByText("[TABLE DOCK]").parentElement; })();
+    expect(dock.textContent).toContain("×4");
+    fireEvent.click(within(dock).getByText(/MOVE TO T9/));
+    expect(handlers.onMove).toHaveBeenCalledWith(reservations[0]);
   });
 });

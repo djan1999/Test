@@ -37,6 +37,49 @@ const multisetDelta = (beforeList, afterList) => {
 
 const DRINK_CATEGORIES = ["aperitifs", "glasses", "cocktails", "spirits", "beers"];
 
+// A table's dietary restrictions, normalised. This is ALLERGY data: the whole
+// reason the taxonomy had to grow before the fold could ever be the board —
+// a fold that cannot rebuild `restrictions` would drop a nut allergy off a
+// live table (measured against the 12.08 service, which carried restrictions,
+// kitchen notes and seat genders the log had never recorded).
+export const restrictionsOf = (table) =>
+  (Array.isArray(table?.restrictions) ? table.restrictions : [])
+    .filter((r) => r && r.note)
+    .map((r) => ({
+      note: String(r.note),
+      pos: r.pos == null ? null : Number(r.pos),
+      detail: r.detail == null ? "" : String(r.detail),
+      kitchenAdded: !!r.kitchenAdded,
+    }));
+
+// Order-insensitive identity, so re-ordering the same entries is not a change.
+const restrictionsKey = (list) => JSON.stringify(
+  list.map((r) => [r.note, r.pos, r.detail, r.kitchenAdded]).sort(),
+);
+
+// The kitchen's own operational state: the SET banner service raises, the
+// sent/alert markers, the archived flag, the pace. Carried verbatim as a
+// snapshot — the log needs no understanding of these shapes to rebuild them
+// faithfully, and snapshot semantics keep a replay idempotent.
+export const serviceStateOf = (table) => ({
+  courseReady: table?.courseReady ?? null,
+  kitchenSent: table?.kitchenSent ?? null,
+  kitchenAlert: table?.kitchenAlert ?? null,
+  kitchenArchived: !!table?.kitchenArchived,
+  pace: table?.pace ?? null,
+});
+
+// Staff-entered prose: the table note and the per-course kitchen notes.
+// Someone typed these, so parity treats a note that exists on one side and
+// not the other as CONTENT-LOSS rather than a tiebreak.
+export const notesOf = (table) => ({
+  notes: table?.notes == null ? "" : String(table.notes),
+  kitchenCourseNotes: table?.kitchenCourseNotes && typeof table.kitchenCourseNotes === "object"
+    ? table.kitchenCourseNotes : {},
+});
+
+const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
 const orderedKeys = (map) => new Set(
   Object.entries(map && typeof map === "object" ? map : {})
     .filter(([, v]) => v?.ordered)
@@ -116,6 +159,12 @@ export function boardFactsFromDiff(prevTable, nextTable) {
     if (bPairing !== aPairing) {
       facts.push({ type: "seat_pairing_set", tableId, payload: { seatId, from: bPairing, to: aPairing } });
     }
+    // Mr/Mrs on the chair — service-entered, and the kitchen minimap reads it.
+    const bGender = b.gender ?? null;
+    const aGender = a.gender ?? null;
+    if (bGender !== aGender) {
+      facts.push({ type: "seat_gender_set", tableId, payload: { seatId, to: aGender } });
+    }
     for (const category of DRINK_CATEGORIES) {
       const { added, removed } = multisetDelta(b[category], a[category]);
       if (added.length === 0 && removed.length === 0) continue;
@@ -162,6 +211,31 @@ export function boardFactsFromDiff(prevTable, nextTable) {
     });
   }
 
+  // ── dietary restrictions (table-level snapshot) ────────────────────────────
+  // Carries `resName` deliberately: the database's guest erasure matches
+  // payload->>'resName' and privacy_redact_party blanks BOTH the name and the
+  // restrictions array in the same pass, so an erased guest's allergies leave
+  // the log exactly as they leave the board — no new erasure path needed.
+  // ── kitchen / service state + staff notes (table-level snapshots) ──────────
+  if (!sameJson(serviceStateOf(before), serviceStateOf(after))) {
+    facts.push({ type: "table_service_state_set", tableId, payload: serviceStateOf(after) });
+  }
+  if (!sameJson(notesOf(before), notesOf(after))) {
+    facts.push({ type: "table_notes_set", tableId, payload: notesOf(after) });
+  }
+
+  const beforeRestrictions = restrictionsOf(before);
+  const afterRestrictions = restrictionsOf(after);
+  if (restrictionsKey(beforeRestrictions) !== restrictionsKey(afterRestrictions)) {
+    facts.push({
+      type: "table_restrictions_set", tableId,
+      payload: {
+        resName: after.resName || before.resName || "",
+        restrictions: afterRestrictions,
+      },
+    });
+  }
+
   return facts;
 }
 
@@ -203,6 +277,10 @@ const aspectKeyOf = (serviceId, fact) => {
     case "seat_pairing_set": return `${base}|pairing|${p.seatId}`;
     case "seat_drinks_set": return `${base}|drinks|${p.seatId}|${p.category}`;
     case "table_bottles_set": return `${base}|bottles`;
+    case "table_restrictions_set": return `${base}|restrictions`;
+    case "table_service_state_set": return `${base}|serviceState`;
+    case "table_notes_set": return `${base}|notes`;
+    case "seat_gender_set": return `${base}|gender|${p.seatId}`;
     case "extra_ordered": case "extra_unordered":
       return `${base}|extra|${p.seatId}|${p.key}`;
     case "option_ordered": case "option_unordered":

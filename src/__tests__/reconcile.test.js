@@ -57,6 +57,31 @@ describe("reconcileTables — non-destructive reservation templating", () => {
     expect(next.find((t) => t.id === 3).resName).toBe("");
   });
 
+  it("REGRESSION (19.08 T8): a baseline-protected table is never rebuilt, even when THIS view looks blank", () => {
+    // The wipe: a device whose in-memory view of T8 was a stale pre-arrival
+    // template ran the reconcile mid-service; its own content check saw
+    // nothing to protect, rebuilt the booking template, and the upload's
+    // worked baseline attested the clear. The caller now passes the ids the
+    // SERVER-CONFIRMED baseline knows are worked — those are sacrosanct here
+    // no matter what the in-memory row says.
+    const prev = board({
+      2: { resName: "Dejan Kovačevič", resTime: "18:00", guests: 2 }, // looks like a mere template locally
+    });
+    const next = reconcileTables(
+      prev,
+      [resv(2, { resName: "Dejan Kovačevič", resTime: "18:00", guests: 2, birthday: true })],
+      ["cake"],
+      new Set([2]), // the confirmed baseline holds four hours of fires
+    );
+    expect(next.find((t) => t.id === 2)).toBe(prev.find((t) => t.id === 2)); // untouched, same reference
+  });
+
+  it("a baseline-protected id does not stop OTHER tables from reconciling", () => {
+    const prev = board({ 3: { resName: "Gone", resTime: "19:30" } });
+    const next = reconcileTables(prev, [], [], new Set([2]));
+    expect(next.find((t) => t.id === 3).resName).toBe(""); // ghost-clear still works
+  });
+
   it("HOTFIX REGRESSION: tableHasServiceContent survives point-free filter/some (index as 2nd arg)", async () => {
     const { tableHasServiceContent, blankTable: blank } = await import("../utils/tableHelpers.js");
     const tables = [

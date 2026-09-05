@@ -19,7 +19,22 @@
 // factories, so the whole app import graph — App, scopedDb, stateStore,
 // archiveStore, dynamic import()s — lands here.
 
-import { hasWorkedContent } from "../../lib/serviceTableCas.js";
+import { hasWorkedContent, hasStaffEnteredWork } from "../../lib/serviceTableCas.js";
+
+// The 19.08 T8 wipe shape: the SAME party kept, flipped inactive, all STAFF
+// work stripped in one write. Judged with hasStaffEnteredWork — a birthday
+// template's booking-seeded cake extra makes hasWorkedContent see it as
+// "worked", which is the disguise the real wipe wore. Refused by the shield
+// regardless of attestation (mirrors private.assert_worked_content_shield
+// since 20.08).
+const templateOverWorked = (currentData, incomingData) => {
+  const name = (d) => String(d?.resName || "").trim();
+  return hasStaffEnteredWork(currentData)
+    && !hasStaffEnteredWork(incomingData)
+    && name(incomingData) !== ""
+    && name(incomingData) === name(currentData)
+    && incomingData?.active !== true;
+};
 
 const nowISO = () => new Date().toISOString();
 const clone = (v) => (v == null ? v : structuredClone(v));
@@ -302,8 +317,10 @@ export const fakeSupabase = {
           const expected = item.expected_updated_at ?? null;
           const versionMatches = (!hit && expected == null)
             || (hit && expected != null && hit.updated_at === expected);
-          const shielded = Boolean(hit && expected != null && !item.allow_clear
-            && hasWorkedContent(hit.data) && !hasWorkedContent(item.data));
+          const shielded = Boolean(hit && expected != null
+            && (templateOverWorked(hit.data, item.data)
+              || (!item.allow_clear
+                && hasWorkedContent(hit.data) && !hasWorkedContent(item.data))));
           return { item, versionMatches, shielded };
         });
       const blocked = pending.find(({ shielded }) => shielded);
@@ -340,9 +357,15 @@ export const fakeSupabase = {
       const expected = args.p_expected_updated_at ?? null;
       // Worked-content shield (mirrors private.assert_worked_content_shield):
       // the whole suite running green against this emulation proves no
-      // legitimate flow ever trips the database's refusal.
-      if (hit && expected != null && !args.p_allow_clear
-          && hasWorkedContent(hit.data) && !hasWorkedContent(args.p_data)) {
+      // legitimate flow ever trips the database's refusal. Since 20.08 the
+      // attestation cannot excuse a template-over-worked write (same party
+      // kept, flipped inactive, all STAFF work stripped — the 19.08 T8
+      // shape, judged extras-blind so a birthday template cannot disguise
+      // itself as worked content).
+      if (hit && expected != null
+          && (templateOverWorked(hit.data, args.p_data)
+            || (!args.p_allow_clear
+              && hasWorkedContent(hit.data) && !hasWorkedContent(args.p_data)))) {
         return { data: null, error: { code: "23514", message: "fake shield: worked content may not be replaced by a skeleton" } };
       }
       if ((!hit && expected != null) || (hit && expected == null) || (hit && hit.updated_at !== expected)) {

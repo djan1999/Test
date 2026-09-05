@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   buildDefaultFloorMaps, sanitizeFloorMaps, getActiveDiningMap, getTerraceMap,
   findMapTable, resolveReservationTable, boardIdsOf, mapSeatCountForBoardTable,
-  planLayoutSwitch, applyLayoutSwitchRow, seatDisplayPoints, assignSeatNumbers,
+  planLayoutSwitch, applyLayoutSwitchRow, layoutSwitchBlockers, isCurrentServiceRow,
+  activeDiningMapIdForDay, setActiveDiningForDay, resolveFloorMapsForDay,
+  seatDisplayPoints, assignSeatNumbers, mirrorFloorMap,
   terraceOccupancy,
   GEOMETRY_VERSION, MAP_W, MAP_H,
   moveTable, resizeTable, rotateTable, setTableShape, renameTable,
@@ -222,6 +224,125 @@ describe("planLayoutSwitch (acceptance 12)", () => {
   });
 });
 
+describe("per-day active layout — Tuesday's room does not drag Wednesday", () => {
+  // Reported 12.08: "the floor editor doesn't let me use a different layout
+  // for today's service because it wouldn't function on tomorrow's".
+  const base = buildDefaultFloorMaps();
+
+  it("a day with no binding falls back to the house default", () => {
+    expect(activeDiningMapIdForDay(base, "2026-08-12")).toBe(base.activeDiningMapId);
+    expect(resolveFloorMapsForDay(base, "2026-08-12")).toBe(base); // no needless copy
+  });
+
+  it("binding a day changes THAT day only", () => {
+    const next = setActiveDiningForDay(base, "2026-08-12", "dining_b");
+    expect(activeDiningMapIdForDay(next, "2026-08-12")).toBe("dining_b");
+    expect(activeDiningMapIdForDay(next, "2026-08-13")).toBe(base.activeDiningMapId);
+    // and the house default is untouched, so unbound days are unaffected
+    expect(next.activeDiningMapId).toBe(base.activeDiningMapId);
+  });
+
+  it("resolveFloorMapsForDay hands every consumer the day's room", () => {
+    const next = setActiveDiningForDay(base, "2026-08-12", "dining_b");
+    expect(getActiveDiningMap(resolveFloorMapsForDay(next, "2026-08-12")).id).toBe("dining_b");
+    expect(getActiveDiningMap(resolveFloorMapsForDay(next, "2026-08-13")).id).toBe(base.activeDiningMapId);
+  });
+
+  it("bindings to deleted maps and junk dates are dropped by the sanitizer", () => {
+    const dirty = { ...base, activeDiningByDate: {
+      "2026-08-12": "dining_b",
+      "2026-08-13": "map-that-was-deleted",
+      "not-a-date": "dining_b",
+      "2026-08-14": base.maps.find((m) => m.kind === "terrace").id, // not a dining map
+    } };
+    const clean = sanitizeFloorMaps(dirty);
+    expect(clean.activeDiningByDate).toEqual({ "2026-08-12": "dining_b" });
+  });
+
+  it("the binding window is bounded so the settings blob cannot grow forever", () => {
+    const many = {};
+    for (let d = 1; d <= 200; d += 1) many[`2026-01-${String(d).padStart(2, "0")}`] = "dining_b";
+    const clean = sanitizeFloorMaps({ ...base, activeDiningByDate: many });
+    expect(Object.keys(clean.activeDiningByDate).length).toBeLessThanOrEqual(120);
+  });
+});
+
+describe("layoutSwitchBlockers — a switch is FOR today's service", () => {
+  const row = (status, date) => ({ id: `${status}-${date}`, status, date });
+
+  it("only TODAY's unresolved rows block; future needs_table/conflict are warnings", () => {
+    const today = "2026-08-12";
+    const rows = [
+      row("unchanged", today),
+      row("move", today),
+      row("needs_table", "2026-08-13"), // future — warning, not a wall
+      row("conflict", "2026-08-15"),    // future — warning, not a wall
+    ];
+    expect(layoutSwitchBlockers(rows, today)).toEqual([]);
+  });
+
+  it("a needs_table on TODAY still blocks", () => {
+    const today = "2026-08-12";
+    const rows = [row("needs_table", today), row("needs_table", "2026-08-20")];
+    expect(layoutSwitchBlockers(rows, today).map((r) => r.date)).toEqual([today]);
+  });
+
+  it("an undated unresolved row is treated as current and blocks", () => {
+    expect(layoutSwitchBlockers([row("needs_table", null)], "2026-08-12")).toHaveLength(1);
+    expect(isCurrentServiceRow({ date: null }, "2026-08-12")).toBe(true);
+    expect(isCurrentServiceRow({ date: "2026-08-13" }, "2026-08-12")).toBe(false);
+  });
+
+  it("Hotel Milka's real 12.08 case: switching to DINNING ROOM #3 is NOT blocked", () => {
+    // #3 drops T4/T5/T6-solo. Tonight's book is on T1/T6/T9/T10 (all resolve:
+    // T6 → the T6-7 merge). The T4 bookings that DO strand are on 13.08/15.08 —
+    // future, so they warn, they don't wall. This is the exact fix.
+    const map3 = { id: "dining_c", kind: "dining", tables: [
+      { label: "T1" }, { label: "T2-3", members: ["T2", "T3"] }, { label: "T7" },
+      { label: "T6-7", members: ["T6", "T7"] }, { label: "T8" }, { label: "T9" }, { label: "T10" },
+    ] };
+    const tonight = "2026-08-12";
+    const rows = planLayoutSwitch(map3, [
+      { id: "inge", date: tonight, table_id: 1, data: { resName: "Inge" } },
+      { id: "seanna", date: tonight, table_id: 6, data: { resName: "Seanna" } },
+      { id: "philippe", date: tonight, table_id: 9, data: { resName: "Philippe" } },
+      { id: "sarah", date: tonight, table_id: 10, data: { resName: "Sarah" } },
+      { id: "benedikt", date: "2026-08-13", table_id: 4, data: { resName: "Benedikt" } }, // strands under #3
+      { id: "stacy", date: "2026-08-15", table_id: 4, data: { resName: "Stacy" } },       // strands under #3
+    ]);
+    // Benedikt & Stacy are needs_table, but they are future → not blockers.
+    expect(rows.filter((r) => r.status === "needs_table").map((r) => r.id).sort()).toEqual(["benedikt", "stacy"]);
+    expect(layoutSwitchBlockers(rows, tonight)).toEqual([]); // tonight can switch to #3
+  });
+});
+
+describe("seatDisplayPoints — ring snapping is numerically stable", () => {
+  // The ring rotation snaps to the nearest 15°. When the stored angles average
+  // to an EXACT half-step the tie must resolve deterministically: T9's real
+  // angles (0, 165) mean -7.5°, which atan2 returns as -7.499999999999998, and
+  // the whole ring used to tip 15° off-axis. The kitchen minimap draws chair
+  // BARS, so the tilt showed there while the editor's numbered DOTS hid it
+  // (reported 12.08). Every one of these is a real Hotel Milka round table.
+  const ringAngles = (seats) =>
+    seatDisplayPoints({ x: 0, y: 0, w: 10, h: 10, seats })
+      .map((p) => Math.round(Math.atan2(p.out.y, p.out.x) * 180 / Math.PI))
+      .map((deg) => (deg === 0 ? 0 : deg)); // normalise -0 so the pin reads plainly
+
+  it("T9 (0, 165) — the exact-tie case — lands square, not 15° off", () => {
+    expect(ringAngles([{ no: 1, angle: 0 }, { no: 2, angle: 165 }])).toEqual([-90, 90]);
+  });
+
+  it("T7 (285, 75) and T10 (0, 177) keep landing square", () => {
+    expect(ringAngles([{ no: 1, angle: 285 }, { no: 2, angle: 75 }])).toEqual([180, 0]);
+    expect(ringAngles([{ no: 1, angle: 0 }, { no: 2, angle: 177 }])).toEqual([-90, 90]);
+  });
+
+  it("a deliberately diagonal ring still reads diagonal (snapping, not flattening)", () => {
+    // 45°/225° is a real arrangement, not a tie — it must be preserved.
+    expect(ringAngles([{ no: 1, angle: 45 }, { no: 2, angle: 225 }])).toEqual([-45, 135]);
+  });
+});
+
 describe("seatDisplayPoints", () => {
   it("rect seats land on the named edge with an outward normal", () => {
     const pts = seatDisplayPoints({ x: 10, y: 20, w: 10, h: 6, seats: [{ no: 1, side: "W", offset: 0.5 }, { no: 2, side: "E", offset: 0.5 }] });
@@ -258,6 +379,110 @@ describe("seatDisplayPoints", () => {
     expect(pts[1].x).toBeCloseTo(6);
     expect(pts[2].x).toBeCloseTo(10);
     expect(pts[3].x).toBeCloseTo(6);  // lone S chair centers
+  });
+});
+
+describe("mirrorFloorMap (per-device MIRROR view — selectable axes; geometry flips, identity does not)", () => {
+  const UP_DOWN = { upDown: true };
+  const LEFT_RIGHT = { leftRight: true };
+  const BOTH = { upDown: true, leftRight: true };
+  // each combo with how a point and an outward normal must map under it
+  const COMBOS = [
+    ["updown", UP_DOWN, ([x, y]) => [x, MAP_H - y], ([ox, oy]) => [ox, -oy]],
+    ["leftright", LEFT_RIGHT, ([x, y]) => [MAP_W - x, y], ([ox, oy]) => [-ox, oy]],
+    ["both (the 180° turn)", BOTH, ([x, y]) => [MAP_W - x, MAP_H - y], ([ox, oy]) => [-ox, -oy]],
+  ];
+
+  it("no axes selected returns the very same map object", () => {
+    expect(mirrorFloorMap(mapA, {})).toBe(mapA);
+    expect(mirrorFloorMap(mapA)).toBe(mapA);
+  });
+
+  it("reflects tables per chosen axis; labels, slots and merges ride along; stored state untouched", () => {
+    // T1 stored at x 8, y 8, 12×9
+    expect(findMapTable(mirrorFloorMap(mapA, UP_DOWN), "T1")).toMatchObject({ x: 8, y: MAP_H - 8 - 9 });
+    expect(findMapTable(mirrorFloorMap(mapA, LEFT_RIGHT), "T1")).toMatchObject({ x: MAP_W - 8 - 12, y: 8 });
+    const both = mirrorFloorMap(mapA, BOTH);
+    expect(findMapTable(both, "T1")).toMatchObject({ x: 80, y: 75 });
+    expect(boardIdsOf(findMapTable(both, "T1"))).toEqual([1]);
+    expect(findMapTable(both, "T2-3").members).toEqual(["T2", "T3"]);
+    expect(findMapTable(mapA, "T1")).toMatchObject({ x: 8, y: 8 }); // a pure view of the stored state
+  });
+
+  it("seat NUMBERS stay with their guests while the chairs flip with the chosen axes", () => {
+    // ↕: N/S chairs swap sides (T6); ↔: W/E chairs swap sides (T1)
+    expect(findMapTable(mirrorFloorMap(mapA, UP_DOWN), "T6").seats).toEqual([
+      { no: 1, side: "S", offset: 0.5 }, { no: 2, side: "N", offset: 0.5 },
+    ]);
+    expect(findMapTable(mirrorFloorMap(mapA, LEFT_RIGHT), "T1").seats).toEqual([
+      { no: 1, side: "E", offset: 0.5 }, { no: 2, side: "W", offset: 0.5 },
+    ]);
+    // the merge's SW corner (S @ 0.22): ↕ crosses to NW, ↔ slides to SE,
+    // both land it on NE — the corner the 180° turn puts that guest at
+    const corner = (axes) => findMapTable(mirrorFloorMap(mapA, axes), "T2-3").seats[0];
+    expect(corner(UP_DOWN)).toEqual({ no: 1, side: "N", offset: 0.22 });
+    expect(corner(LEFT_RIGHT)).toEqual({ no: 1, side: "S", offset: 0.78 });
+    expect(corner(BOTH)).toEqual({ no: 1, side: "N", offset: 0.78 });
+    // round T5 (NW 315°, NE 45°): ↕ → SW/SE, ↔ → NE/NW, both → SE/SW
+    const angles = (axes) => findMapTable(mirrorFloorMap(mapA, axes), "T5").seats.map((s) => s.angle);
+    expect(angles(UP_DOWN)).toEqual([225, 135]);
+    expect(angles(LEFT_RIGHT)).toEqual([45, 315]);
+    expect(angles(BOTH)).toEqual([135, 225]);
+  });
+
+  it("every seed table's display points come out as the EXACT reflection for every axis choice", () => {
+    for (const [, axes, fpt, fout] of COMBOS) {
+      for (const map of state.maps) {
+        const mirroredMap = mirrorFloorMap(map, axes);
+        for (const table of map.tables) {
+          const orig = seatDisplayPoints(table);
+          const mir = seatDisplayPoints(findMapTable(mirroredMap, table.label));
+          orig.forEach((p, i) => {
+            const [ex, ey] = fpt([p.x, p.y]);
+            const [eox, eoy] = fout([p.out.x, p.out.y]);
+            expect(mir[i].no).toBe(p.no);
+            expect(mir[i].x).toBeCloseTo(ex, 6);
+            expect(mir[i].y).toBeCloseTo(ey, 6);
+            expect(mir[i].out.x).toBeCloseTo(eox, 6);
+            expect(mir[i].out.y).toBeCloseTo(eoy, 6);
+          });
+        }
+      }
+    }
+  });
+
+  it("mirrors the sheet per axis: walls/planters land reflected, doors keep their spot AND their side of the room", () => {
+    const terrace = getTerraceMap(state);
+    for (const [, axes, fpt] of COMBOS) {
+      const m = mirrorFloorMap(terrace, axes);
+      expect(sheetOf(m).walls[0].pts).toEqual(sheetOf(terrace).walls[0].pts.map(fpt));
+      expect(sheetOf(m).planters.map((p) => [p.x, p.y]))
+        .toEqual(sheetOf(terrace).planters.map((p) => fpt([p.x, p.y])));
+      // the door's whole geometry (gap, hinge end, leaf) lands reflected and
+      // the leaf still opens INTO the room: ONE reflection flips the swing
+      // (it negates the leaf normal); both together are the 180° turn, where
+      // orientation survives and the swing stays
+      const g0 = doorGeometry(sheetOf(terrace).openings[0], sheetOf(terrace).walls);
+      const g1 = doorGeometry(sheetOf(m).openings[0], sheetOf(m).walls);
+      for (const key of ["center", "h", "leafEnd"]) {
+        const [ex, ey] = fpt(g0[key]);
+        expect(g1[key][0]).toBeCloseTo(ex, 6);
+        expect(g1[key][1]).toBeCloseTo(ey, 6);
+      }
+    }
+    // the dining pass strip: ↕ sends the bottom zone to the top edge
+    expect(sheetOf(mirrorFloorMap(mapA, UP_DOWN)).zones[0])
+      .toMatchObject({ x: 2, y: 2, w: 96, h: 8, label: "PASS / KITCHEN" });
+  });
+
+  it("applying the same axes twice restores the original geometry exactly (lossless toggles)", () => {
+    for (const [, axes] of COMBOS) {
+      for (const map of state.maps) {
+        const twice = mirrorFloorMap(mirrorFloorMap(map, axes), axes);
+        expect(twice.tables).toEqual(map.tables);
+        expect(sheetOf(twice)).toEqual(sheetOf(map));
+      }
+    }
   });
 });
 

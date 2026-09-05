@@ -11,7 +11,7 @@ describe("KitchenMinimap", () => {
 
   it("renders the active dining layout through the floor map, with guest labels", () => {
     const { container, queryByText, getAllByText } = render(
-      <KitchenMinimap floorMaps={floorMaps} tables={[]} focusedTableId={null} />
+      <KitchenMinimap floorMaps={floorMaps} tables={[]} />
     );
     expect(queryByText("T1")).toBeTruthy(); // dining tile
     expect(queryByText("T5")).toBeTruthy(); // dining only
@@ -20,10 +20,10 @@ describe("KitchenMinimap", () => {
     expect(container.querySelector("svg")).toBeTruthy();
   });
 
-  it("marks a focused dining table occupied and labels its live guests", () => {
+  it("marks a live dining table occupied and labels its guests", () => {
     const table = { id: 8, active: true, seats: [{ id: 1 }, { id: 2 }] };
     const { queryByText, getAllByText } = render(
-      <KitchenMinimap floorMaps={floorMaps} tables={[table]} focusedTableId={8} />
+      <KitchenMinimap floorMaps={floorMaps} tables={[table]} />
     );
     expect(queryByText("T8")).toBeTruthy();
     expect(getAllByText("P1").length).toBeGreaterThanOrEqual(1);
@@ -42,7 +42,7 @@ describe("KitchenMinimap", () => {
       { id: "r-later", table_id: 9, data: { resName: "Zupan", resTime: "20:30" } },        // booked, NOT here yet
     ];
     const { container, queryByText, getByText } = render(
-      <KitchenMinimap floorMaps={floorMaps} tables={tables} focusedTableId={null}
+      <KitchenMinimap floorMaps={floorMaps} tables={tables}
         reservations={reservations} onAssign={onAssign} onSwapSeats={vi.fn()} onCycleStatus={vi.fn()} />
     );
     fireEvent.click(container.querySelector('[data-table="T21"]')); // free terrace tile
@@ -64,7 +64,7 @@ describe("KitchenMinimap", () => {
       { id: "r8", table_id: 8, data: { resName: "Kovac", resTime: "19:00", visit_state: "terrace", terrace_table: "T22" } },
     ];
     const { container, queryByText } = render(
-      <KitchenMinimap floorMaps={floorMaps} tables={tables} focusedTableId={null}
+      <KitchenMinimap floorMaps={floorMaps} tables={tables}
         reservations={reservations} onAssign={vi.fn()} onSwapSeats={vi.fn()} onCycleStatus={onCycleStatus} />
     );
     fireEvent.click(container.querySelector('[data-table="T8"]')); // renamed occupied tile
@@ -73,15 +73,26 @@ describe("KitchenMinimap", () => {
     expect(queryByText("SET → KITCHEN")).toBeTruthy();
   });
 
-  it("follows a terrace party onto the terrace map and names the tile after its dining table", () => {
+  it("names an occupied terrace tile after its party's dining table; the room never switches on its own", () => {
+    try { localStorage.setItem("milka_kitchen_minimap_map", "terrace"); } catch {}
     const table = { id: 8, _visit: { visit: "terrace", terraceLabel: "T21" }, seats: [{ id: 1 }] };
     const { queryByText } = render(
-      <KitchenMinimap floorMaps={floorMaps} tables={[table]} focusedTableId={8} />
+      <KitchenMinimap floorMaps={floorMaps} tables={[table]} />
     );
     // the occupied tile borrows the party's DINING label; its own name drops
     expect(queryByText("T8")).toBeTruthy();
     expect(queryByText("T21")).toBeFalsy();
     expect(queryByText("T22")).toBeTruthy(); // empty tiles keep their own name
-    expect(queryByText("T5")).toBeFalsy();   // dining-only table gone → map switched
+    expect(queryByText("T5")).toBeFalsy();   // dining-only table — this is the terrace map
+  });
+
+  it("stays on the room the chef chose even while a party is live in the other one", () => {
+    // The map used to jump rooms to follow whichever ticket was touched (the
+    // removed focus feature); it now moves ONLY on a manual swipe/header tap.
+    const table = { id: 8, _visit: { visit: "terrace", terraceLabel: "T21" }, seats: [{ id: 1 }] };
+    const { queryByText } = render(
+      <KitchenMinimap floorMaps={floorMaps} tables={[table]} />
+    );
+    expect(queryByText("T5")).toBeTruthy(); // still the dining map (the default)
   });
 });

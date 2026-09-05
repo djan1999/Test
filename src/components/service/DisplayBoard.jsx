@@ -3,7 +3,7 @@ import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
 import { tokens } from "../../styles/tokens.js";
 import { restrCompact, restrLabel } from "../../constants/dietary.js";
 import { PAIRINGS, waterStyle, extraPairingForSeat } from "../../constants/pairings.js";
-import { kitchenSnapshot, kitchenDelta } from "../../utils/kitchenAlerts.js";
+import { kitchenSnapshot, kitchenDelta, mergeKitchenAlert } from "../../utils/kitchenAlerts.js";
 import { groupDrinks, qtySuffix } from "../../utils/drinkQuantities.js";
 import {
   resolveAperitifFromQuickAccessOption,
@@ -30,7 +30,10 @@ const WATER_QUICK = ["XC", "XW", "OC", "OW"];
 
 // Extracted as a stable module-level component to prevent React from unmounting/remounting
 // cards on every DisplayBoard re-render (which caused the visual overlap animation glitch).
-export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onAssignTerrace, optionalExtras = [], optionalPairings = [], aperitifOptions, wines = [], cocktails = [], spirits = [], beers = [] }) {
+// onlySeatId: render just that seat's row (the floor's chair-tap quick
+// access) — the seat LOGIC still sees the whole party, so share cycles and
+// the Send delta stay correct.
+export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onAssignTerrace, optionalExtras = [], optionalPairings = [], aperitifOptions, wines = [], cocktails = [], spirits = [], beers = [], onlySeatId = null }) {
     const isSeated = t.active;
     // Terrace-flow decoration (derived in App, never persisted on the row):
     // 'terrace' = party outside on t._visit.terraceLabel.
@@ -49,7 +52,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
     // the confirm flow isn't part of service reality, so waiting on it made
     // every Send re-transmit the whole night's pairings and orders).
     // hasKitchenUpdate drives the button.
-    const kitchenCurrent = kitchenSnapshot(seats, optionalExtras, optionalPairings);
+    const kitchenCurrent = kitchenSnapshot(seats, optionalExtras, optionalPairings, t.restrictions || [], t.kitchenCourseNotes || {});
     const hasKitchenUpdate = kitchenDelta(kitchenCurrent, t.kitchenSent || {}).length > 0;
 
     const unassigned = allRestr.map((r, i) => ({ ...r, _i: i })).filter(r => !r.pos);
@@ -239,7 +242,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
         {/* Seat rows — in quick mode, show controls for reserved tables as well (pre-seat prep) */}
         {seats.length > 0 && (isSeated || quickMode) ? (
           <div style={{ display: "flex", flexDirection: "column", gap: quickMode ? 4 : 0, padding: quickMode ? "6px 8px" : "4px 0" }}>
-            {seats.map(s => {
+            {seats.filter(s => onlySeatId == null || s.id === onlySeatId).map(s => {
               const ws      = waterStyle(s.water);
               const pc      = PC[s.pairing];
               const restr   = allRestr.filter(r => r.pos === s.id);
@@ -708,13 +711,15 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                   // the confirm flow unused, every Send re-sent everything.)
                   const deltaSeats = kitchenDelta(kitchenCurrent, t.kitchenSent || {});
                   if (deltaSeats.length === 0) return;
-                  upd(t.id, "kitchenAlert", {
+                  // merge, never overwrite: an unconfirmed SET banner in the
+                  // slot must survive this Send (and vice versa)
+                  upd(t.id, "kitchenAlert", mergeKitchenAlert(t.kitchenAlert, {
                     timestamp: new Date().toISOString(),
                     tableName: t.resName || null,
                     seats: deltaSeats,
                     confirmed: false,
                     snapshot: kitchenCurrent,
-                  });
+                  }));
                   upd(t.id, "kitchenSent", kitchenCurrent);
                   // a Send to an archived ticket proves it's still live —
                   // bring it back next to its alert (Archive mis-taps)

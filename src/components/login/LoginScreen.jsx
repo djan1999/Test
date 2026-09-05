@@ -5,14 +5,14 @@ import GlobalStyle from "../ui/GlobalStyle.jsx";
 import { PRODUCT_NAME as APP_NAME, PRODUCT_SUBTITLE as APP_SUBTITLE } from "../../config/product.js";
 
 const FONT = tokens.font;
-const { ink, rule, neutral, green, red, charcoal } = tokens;
+const { ink, rule, neutral } = tokens;
 
 const PINS = {
   admin: String(import.meta.env.VITE_PIN_ADMIN || "").trim(),
   menu:  String(import.meta.env.VITE_PIN_MENU  || "").trim(),
 };
 
-export default function LoginScreen({ onEnter, onSyncAll, role = null, canAdmin = false, appName = APP_NAME, workspaceName = "", canSwitchProfile = false, onSwitchProfile, onSignOut }) {
+export default function LoginScreen({ onEnter, role = null, canAdmin = false, appName = APP_NAME, workspaceName = "", canSwitchProfile = false, onSwitchProfile, onSignOut }) {
   // `canAdmin` remains as a compatibility bridge for old callers/tests. New
   // code passes the actual workspace role so a Kitchen login cannot even see
   // the Service or Admin entry points.
@@ -34,7 +34,7 @@ export default function LoginScreen({ onEnter, onSyncAll, role = null, canAdmin 
   const [picking, setPicking] = useState(null);
   const [pin, setPin]         = useState("");
   const [shake, setShake]     = useState(false);
-  const [syncSt, setSyncSt]   = useState(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const timersRef = useRef(new Set());
   const schedule = (fn, delay) => {
     const timer = setTimeout(() => {
@@ -49,18 +49,34 @@ export default function LoginScreen({ onEnter, onSyncAll, role = null, canAdmin 
     timersRef.current.clear();
   }, []);
 
-  const handleSync = async () => {
-    if (!onSyncAll || syncSt === "syncing") return;
-    setSyncSt("syncing");
+  // ── Fullscreen toggle (replaces the gate's wine-sync button, 22.08 — the
+  // sync lives on in Admin → Inventory / System). The PWA manifest asks for
+  // fullscreen, but desktop Chrome ignores that; this button is the desktop
+  // path, and it also serves browser tabs and the kitchen display. The
+  // webkit fallbacks cover older embedded Chromium / iPad Safari.
+  useEffect(() => {
+    const onChange = () =>
+      setIsFullscreen(!!(document.fullscreenElement || document.webkitFullscreenElement));
+    onChange();
+    document.addEventListener("fullscreenchange", onChange);
+    document.addEventListener("webkitfullscreenchange", onChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      document.removeEventListener("webkitfullscreenchange", onChange);
+    };
+  }, []);
+  const el = typeof document !== "undefined" ? document.documentElement : null;
+  const fullscreenSupported = !!(el && (el.requestFullscreen || el.webkitRequestFullscreen));
+  const toggleFullscreen = () => {
     try {
-      const r = await onSyncAll();
-      console.log("[LoginSync]", r);
-      setSyncSt(r?.ok ? "ok" : "err");
-    } catch (e) {
-      console.error("[LoginSync] threw:", e);
-      setSyncSt("err");
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        (document.exitFullscreen || document.webkitExitFullscreen)?.call(document)?.catch?.(() => {});
+      } else {
+        (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el)?.catch?.(() => {});
+      }
+    } catch {
+      // unsupported surface (e.g. iPhone Safari) — the button does nothing
     }
-    schedule(() => setSyncSt(null), 3000);
   };
 
   const handleTile = mode => {
@@ -114,11 +130,6 @@ export default function LoginScreen({ onEnter, onSyncAll, role = null, canAdmin 
     touchAction: "manipulation",
   };
 
-  // Sync button style
-  const syncBorder = syncSt === "ok" ? green.border : syncSt === "err" ? red.border : ink[4];
-  const syncBg     = syncSt === "ok" ? green.bg     : syncSt === "err" ? red.bg     : neutral[50];
-  const syncColor  = syncSt === "ok" ? green.text   : syncSt === "err" ? red.text   : ink[3];
-  const syncText   = syncSt === "syncing" ? "SYNCING…" : syncSt === "ok" ? "✓ SYNCED" : syncSt === "err" ? "✗ FAILED" : "[↻] SYNC WINES";
 
   return (
     <div style={{
@@ -179,11 +190,11 @@ export default function LoginScreen({ onEnter, onSyncAll, role = null, canAdmin 
             ))}
           </div>
 
-          {/* Sync button */}
-          {onSyncAll && effectiveRole === WORKSPACE_ROLES.ADMIN && (
+          {/* Fullscreen toggle — every role gets it (the kitchen tablets
+              need it most); hidden only where the API doesn't exist */}
+          {fullscreenSupported && (
             <button
-              onClick={handleSync}
-              disabled={syncSt === "syncing"}
+              onClick={toggleFullscreen}
               style={{
                 fontFamily:    FONT,
                 fontSize:      "9px",
@@ -191,13 +202,14 @@ export default function LoginScreen({ onEnter, onSyncAll, role = null, canAdmin 
                 textTransform: "uppercase",
                 padding:       "7px 18px",
                 borderRadius:  0,
-                cursor:        syncSt === "syncing" ? "not-allowed" : "pointer",
-                border:        `${rule.hairline} solid ${syncBorder}`,
-                background:    syncBg,
-                color:         syncColor,
-                fontWeight:    400,
+                cursor:        "pointer",
+                border:        `${rule.hairline} solid ${isFullscreen ? neutral[500] : ink[4]}`,
+                background:    isFullscreen ? tokens.tint.parchment : neutral[50],
+                color:         isFullscreen ? neutral[700] : ink[3],
+                fontWeight:    isFullscreen ? 600 : 400,
+                touchAction:   "manipulation",
               }}
-            >{syncText}</button>
+            >{isFullscreen ? "EXIT FULLSCREEN" : "FULLSCREEN"}</button>
           )}
 
           {/* Current restaurant + switch / sign out */}

@@ -94,6 +94,67 @@ const blankBootTable = {
   kitchenLog: {}, bottleWines: [], restrictions: [], seats: [],
 };
 
+describe("saveServiceTableWithCas — template-over-worked guard (19.08 T8 incident)", () => {
+  // The exact production shape: the SAME party kept, flipped inactive, all
+  // STAFF work stripped in one write — a booking template rebuilt over four
+  // hours of fires by a stale device's reconcile. Its synced baseline HELD
+  // the work, so the ancestor attested and every older guard passed. The
+  // booking is a BIRTHDAY, so the template carries a celebration extra with
+  // ordered:true — to hasWorkedContent the wipe row itself looks "worked",
+  // which is precisely the disguise that let the real one through (and let
+  // the first version of this guard miss it: proven by replaying the real
+  // 19.08 row against production).
+  const t8Template = {
+    ...skeletonTable, active: false, arrivedAt: null, birthday: true,
+    seats: skeletonTable.seats.map((s) => ({
+      ...s, extras: { cake: { ordered: true, pairing: "—" } },
+    })),
+  };
+
+  it("REGRESSION: a party-keeping work-strip is refused even with a WORKED (attesting) ancestor", async () => {
+    const client = makeClient({ data: workedTable, updated_at: "2026-08-19T20:08:13Z" });
+    await expect(saveServiceTableWithCas(args(client, t8Template, workedTable))).rejects.toMatchObject({
+      code: "MILKA_TABLE_CONFLICT",
+      conflict: "template-over-worked",
+    });
+    expect(client.rpc).not.toHaveBeenCalled();
+  });
+
+  it("the birthday disguise: the wipe row itself passes hasWorkedContent, so the guard must judge extras-blind", async () => {
+    // Pin the disguise itself: if this ever stops holding, the predicate
+    // split can be revisited.
+    expect(hasWorkedContent(t8Template)).toBe(true);
+  });
+
+  it("un-firing/clearing the LAST worked item on a still-seated party passes (active stays true)", async () => {
+    // A legitimate write can leave a seated party with zero worked content —
+    // clearing the final drink. The tell of the wipe is the active flip.
+    const lastClear = JSON.parse(JSON.stringify(workedTable));
+    lastClear.seats.forEach((s) => { s.water = "—"; s.aperitifs = []; });
+    const client = makeClient({ data: workedTable, updated_at: "2026-08-19T20:08:13Z" });
+    const result = await saveServiceTableWithCas(args(client, lastClear, workedTable));
+    expect(result.conflict).toBeNull();
+    expect(client.rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("a CLEAR TABLE (party removed too) still passes with its attesting ancestor", async () => {
+    const client = makeClient({ data: workedTable, updated_at: "2026-08-19T20:08:13Z" });
+    const result = await saveServiceTableWithCas(args(client, blankBootTable, workedTable));
+    expect(result.conflict).toBeNull();
+    expect(client.rpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("the surgical unseat (work kept, active flipped) passes untouched", async () => {
+    const unseated = JSON.parse(JSON.stringify(workedTable));
+    unseated.active = false;
+    unseated.arrivedAt = null;
+    const client = makeClient({ data: workedTable, updated_at: "2026-08-19T20:08:13Z" });
+    const result = await saveServiceTableWithCas(args(client, unseated, workedTable));
+    expect(result.conflict).toBeNull();
+    expect(client.rpc).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("saveServiceTableWithCas — content-less ancestor guard (08.08 incident)", () => {
   it("REGRESSION: a template write with a BLANK (non-null) ancestor may NOT replace a worked server table", async () => {
     // The 08.08 wipe: a joining device's reconcile rebuilt reservation

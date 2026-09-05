@@ -1,11 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import FloorMap from "./FloorMap.jsx";
+import FloorDock from "./FloorDock.jsx";
+import { DisplayBoardCard } from "../service/DisplayBoard.jsx";
 import {
   getActiveDiningMap, getTerraceMap, terraceOccupancy, boardIdsOf,
-  resolveReservationTable, floorStatusOf, mapTicker,
+  resolveReservationTable, floorStatusOf, mapTicker, mirrorFloorMap,
 } from "../../utils/floorMaps.js";
 import { visitStateOf } from "../../utils/terraceFlow.js";
+import { useFullscreenBoost } from "../../hooks/useIsFullscreen.js";
 import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
 import {
   floorPositionKey, seatFloorPosition, restrictionsAtFloorPositions,
@@ -18,11 +21,13 @@ const FONT = tokens.font;
 // layout + terrace), a ticker strip, and the shared FloorMap renderer in
 // `service` mode.
 //
-// Tap model (per Djan): a DINING table is one big SET toggle. The board
-// stays the place for guest details; no quick-access sheet on the floor.
-// The exception that DOES open a sheet, because it carries actions the tap
-// can't mean: every terrace table (assign / MOVE / CHANGE / CLEAR, plus the
-// party's waters by seat position + pairings — the runner's crib sheet).
+// Tap model (per Djan, 21–22.08): a TABLE tap SELECTS — the dock beside the
+// map follows it and carries every action. On the terrace that includes the
+// party actions (MOVE IN / CHANGE TABLE / CLEAR, and the assign picker on a
+// free table) — the old bottom sheet is gone, ONE surface instead of two.
+// A CHAIR tap opens the board's QUICK ACCESS card for that table in a side
+// panel — the same editor as board mode, not a copy. Nothing toggles on any
+// tap, so peeking can never flip a SET.
 //
 // STRICTLY service — geometry editing is an admin concern and lives in the
 // Floor & Terrace panel (FloorEditor), not here.
@@ -44,6 +49,30 @@ const actionBtn = (primary) => ({
   borderRadius: 0, cursor: "pointer", touchAction: "manipulation", fontWeight: primary ? 600 : 400,
 });
 
+// MIRROR preference — per DEVICE (it describes THIS tablet's physical
+// disposition at its station, so it must never sync to the other screens) and
+// per ROOM: "dining" covers every dining layout (same physical room, whatever
+// tonight's map), the terrace is its own space. Same localStorage register as
+// the kitchen minimap's remembered room. Each room stores WHICH axes flip:
+// { upDown, leftRight } — selectable per Djan (27.08), both on = the 180°
+// turn. Builds that shipped the one-axis MIRROR stored a plain boolean;
+// normalize it to the up↔down flip it meant, so updated tablets keep their
+// setting.
+const MIRROR_LS_KEY = "milka_floor_mirror_v1";
+const mirrorAxesOf = (v) => ({
+  upDown: v === true || !!v?.upDown,
+  leftRight: !!v?.leftRight,
+});
+const readMirrorPrefs = () => {
+  try {
+    const raw = JSON.parse(localStorage.getItem(MIRROR_LS_KEY) || "{}");
+    return raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  } catch { return {}; }
+};
+const storeMirrorPrefs = (prefs) => {
+  try { localStorage.setItem(MIRROR_LS_KEY, JSON.stringify(prefs)); } catch {}
+};
+
 export default function FloorView({
   // "terrace" | "dining": the caller owns which map shows (the 11.07
   // flattening — BOARD/TERRACE/DINING ROOM one row up in App); the inner
@@ -51,10 +80,17 @@ export default function FloorView({
   mapKind = null,
   floorMaps, floorStatus, reservations = [], tables = [],
   menuCourses = [], profiles = [], assignments = {},
+  optionalExtras = [], optionalPairings = [],
+  aperitifOptions = [],     // quick-access panel: the same catalogs the board card gets
+  wines = [], cocktails = [], spirits = [], beers = [],
   onCycleStatus,
   onAssign, onClear, onMove,
   onSendSetToKitchen,
   onSwapSeats,
+  onOpenDetail,             // (boardId) → App raises the board's table sheet
+  onUnsetKitchen,           // (boardId) → clears the kitchen banner (courseReady)
+  upd,                      // (boardId, field, value|fn) — dock + quick-access writes
+  updSeat,                  // (boardId, seatId, field, value) — quick-access seat writes
   isMobile,
 }) {
   const diningMap = getActiveDiningMap(floorMaps);
@@ -62,24 +98,51 @@ export default function FloorView({
   const tabs = [diningMap, terraceMap].filter(Boolean);
 
   const [tabId, setTabId] = useState(null);
-  const [sheetLabel, setSheetLabel] = useState(null);
+  const [dockLabel, setDockLabel] = useState(null); // the table the side dock follows (last tap)
+  const [dockSeatNo, setDockSeatNo] = useState(null); // chair tap → that ONE seat's quick access, in the dock column
   const [movingParty, setMovingParty] = useState(null); // terrace CHANGE TABLE: the reservation being re-seated
-  const [toast, setToast] = useState(null);
+  const [mirrorPrefs, setMirrorPrefs] = useState(readMirrorPrefs); // { dining?: bool, terrace?: bool }
+  // Fullscreen WITH a laptop-sized screen behind it (the gate toggle / F11 /
+  // the PWA's fullscreen display mode): the extra pixels go to the map and
+  // the dock, not to margins. Space-gated, not flag-gated — the tablet PWA is
+  // always "fullscreen" but has no extra pixels to hand out (22.08).
+  const isFullscreen = useFullscreenBoost();
 
   const forcedMap = mapKind === "terrace" ? terraceMap : mapKind === "dining" ? diningMap : null;
   const map = forcedMap || tabs.find((m) => m.id === tabId) || tabs[0];
-  // Leaving the map (App's toggle) must drop the open sheet / pending CHANGE
-  // TABLE, exactly like the old tab switch did.
+  // Leaving the map (App's toggle) must drop the dock focus / quick panel /
+  // pending CHANGE TABLE, exactly like the old tab switch did.
   useEffect(() => {
-    if (mapKind) { setSheetLabel(null); setMovingParty(null); }
+    if (mapKind) { setDockLabel(null); setDockSeatNo(null); setMovingParty(null); }
   }, [mapKind]);
+
+  // MIRROR (per Djan, 27.08): a tablet standing against the map's drawn
+  // orientation shows the room flipped from where you look at it — and which
+  // way depends on the station, so BOTH axes are selectable: ↕ flips
+  // top↔bottom (what's near you draws at the near edge), ↔ flips left↔right,
+  // both together turn the map 180°. A render-time reflection of the DRAWING
+  // only. Identity (labels, seat numbers, taps, every write) is untouched,
+  // so the dock, strips and swaps behave exactly the same on a mirrored
+  // floor.
+  const mirrorKind = map?.kind === "terrace" ? "terrace" : "dining";
+  const mirrorAxes = mirrorAxesOf(mirrorPrefs[mirrorKind]);
+  const shownMap = useMemo(
+    () => mirrorFloorMap(map, mirrorAxes),
+    [map, mirrorAxes.upDown, mirrorAxes.leftRight],
+  );
+  const toggleMirror = (axis) => {
+    const next = { ...mirrorPrefs, [mirrorKind]: { ...mirrorAxes, [axis]: !mirrorAxes[axis] } };
+    setMirrorPrefs(next);
+    storeMirrorPrefs(next);
+  };
+
   if (!map) return null;
 
-  const flash = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2600);
-  };
-  const switchTab = (id) => { setTabId(id); setSheetLabel(null); setMovingParty(null); };
+  // No confirmation toast (per Djan, 22.08): it mounted above the ticker and
+  // shoved the whole floor down for a beat on every action. The map and the
+  // dock already show each outcome — chips, rings, labels — so nothing is
+  // announced twice.
+  const switchTab = (id) => { setTabId(id); setDockLabel(null); setDockSeatNo(null); setMovingParty(null); };
 
   const progressOf = (boardTable) => {
     if (!boardTable) return "";
@@ -187,6 +250,9 @@ export default function FloorView({
             sub: diningLabelOf(r),
             allergy: restr.length > 0,
             strip,
+            // announced to the kitchen (SET on a kitchen ticket, the board
+            // sheet, or here) → amber ring, whatever surface pressed it
+            sent: alreadySent(bt),
           }
         : { status: "free", strip };
       if (restr.length) restrictionsByLabel[t.label] = restr;
@@ -210,9 +276,14 @@ export default function FloorView({
           pax: bt.guests || undefined, // ticker covers; not rendered
           allergy: restr.length > 0,
           strip,
-          // SET and already announced to the kitchen for its next course →
-          // amber ring, and excluded from the next SEND (no duplicate).
-          sent: strip === "SET" && alreadySent(bt),
+          // the table's course readout ("C3/7") rides the tile like the
+          // kitchen floor's — the same information wherever you look
+          sub: progressOf(bt),
+          // announced to the kitchen for its next course → amber ring. NOT
+          // gated on the strip: a SET pressed on the kitchen ticket or the
+          // board sheet writes courseReady only, and the floor must show it
+          // all the same. Announced tables stay excluded from the next SEND.
+          sent: alreadySent(bt),
         };
         const notes = seatNotesOf(bt, positionKey);
         if (notes) seatNotesByLabel[t.label] = notes;
@@ -246,23 +317,18 @@ export default function FloorView({
     const positionKey = floorPositionKey(map.id, label);
     const source = (bt.seats || []).find((seat) => seatFloorPosition(seat, positionKey) === Number(aNo));
     if (!source) return;
-    const target = (bt.seats || []).find((seat) => seatFloorPosition(seat, positionKey) === Number(bNo));
     if (map.kind === "terrace") {
       onSwapSeats(bt.id, Number(aNo), Number(bNo), positionKey);
-      flash(target
-        ? `${label} · P${source.id} ⇄ P${target.id}`
-        : `${label} · P${source.id} → CHAIR ${bNo}`);
       return;
     }
     onSwapSeats(bt.id, Number(aNo), Number(bNo), positionKey, { identity: true });
-    flash(target ? `${label} · P${aNo} ⇄ P${bNo}` : `${label} · P${aNo} → P${bNo}`);
   };
 
   // Parties the terrace tab must keep reachable even without a tile: any
   // terrace party whose label no longer exists on the current map (tile
-  // renamed/deleted mid-service). No tile means no sheet and no MOVE — this
-  // banner is the only way back in. (A table-less 'terrace' row never gets
-  // here: visitStateOf self-heals it to 'booked'.)
+  // renamed/deleted mid-service). No tile means no dock actions and no MOVE —
+  // this banner is the only way back in. (A table-less 'terrace' row never
+  // gets here: visitStateOf self-heals it to 'booked'.)
   const mapLabels = new Set((map.tables || []).map((t) => t.label));
   const stranded = map.kind === "terrace"
     ? reservations.filter((r) =>
@@ -290,153 +356,91 @@ export default function FloorView({
   const bookedParties = reservations.filter((r) =>
     ["booked", "dining"].includes(visitStateOf(r.data)) && !r.data?.clearedFromBoard);
 
-  // SET tables with a live board ticket, grouped by board id (a merge shares one
-  // ticket). SEND forwards only the ones not yet announced for their next course.
-  const setBoardTables = map.kind === "terrace" ? [] : [...new Map(
-    (map.tables || [])
-      .filter((t) => floorStatusOf(floorStatus, map.id, t.label) === "SET")
-      .map((t) => boardTableOf(t))
-      .filter((bt) => bt?.active)
-      .map((bt) => [bt.id, bt]),
-  ).values()];
-  const sendableIds = setBoardTables.filter((bt) => !alreadySent(bt)).map((bt) => bt.id);
+  // ── dock content — the last tapped table, resolved to its merge-primary
+  // board table exactly the way the tiles themselves resolve it ─────────────
+  const dockTable = dockLabel ? (map.tables || []).find((t) => t.label === dockLabel) : null;
+  const dockParty = map.kind === "terrace" && dockTable ? occ[dockLabel] : null;
+  const dockBoard = dockTable
+    ? (map.kind === "terrace" ? terracePartyBoardTable(dockParty) : boardTableOf(dockTable))
+    : null;
+  const dockStrip = dockTable ? floorStatusOf(floorStatus, map.id, dockLabel) : null;
+  // same restriction source rule as the tiles: the board table, falling back
+  // to the reservation blob for terrace parties not templated onto a board
+  // table yet — the dock must never disagree with the chair it sits beside
+  const dockRestrictions = map.kind === "terrace"
+    ? ((dockBoard?.restrictions?.length ? dockBoard.restrictions : dockParty?.data?.restrictions) || [])
+    : (dockBoard?.restrictions || []);
+  // chair tap → the guest at that floor position; resolved with the same
+  // per-map mapping the swap drags use, so the panel can never show the
+  // wrong person after a seat swap
+  const dockSeat = dockSeatNo != null && dockBoard
+    ? (dockBoard.seats || []).find(
+        (s) => seatFloorPosition(s, floorPositionKey(map.id, dockLabel)) === Number(dockSeatNo),
+      ) || null
+    : null;
+  // announce THIS table — the kitchen banner plus the local strip (when not
+  // on yet); the dock is the ONE surface for it on both floors
+  const announceDock = onSendSetToKitchen && dockBoard ? () => {
+    onSendSetToKitchen([dockBoard.id]);
+    if (dockStrip !== "SET") onCycleStatus(map.id, dockLabel);
+  } : undefined;
+  // the one set button's other face: announced → UNSET clears the kitchen
+  // banner AND the strip together (mirrors the sheet's onUnsetKitchen)
+  const unannounceDock = onUnsetKitchen && dockBoard ? () => {
+    onUnsetKitchen(dockBoard.id);
+    if (dockStrip === "SET") onCycleStatus(map.id, dockLabel);
+  } : undefined;
 
-  // ── sheet content for the tapped table ────────────────────────────────────
-  const sheetTable = sheetLabel ? (map.tables || []).find((t) => t.label === sheetLabel) : null;
-  const sheetParty = sheetTable && map.kind === "terrace" ? occ[sheetLabel] : null;
-  const sheetBoard = sheetTable && map.kind !== "terrace" ? boardTableOf(sheetTable) : null;
+  // Terrace party actions live IN the dock (per Djan, 22.08 — the old bottom
+  // sheet made every terrace tap two pop-ups).
+  const partyActions = map.kind === "terrace" && dockParty ? {
+    moveLabel: diningLabelOf(dockParty),
+    onMoveIn: onMove ? () => { onMove(dockParty); setDockLabel(null); setDockSeatNo(null); } : undefined,
+    onChangeTable: () => setMovingParty(dockParty),
+    onClear: onClear ? () => { onClear(dockParty); setDockLabel(null); setDockSeatNo(null); } : undefined,
+  } : null;
+  // Free terrace table → the assign picker, also in the dock.
+  const assignOptions = map.kind === "terrace" && dockTable && !dockParty && onAssign
+    ? bookedParties.map((r) => ({
+        id: r.id,
+        label: `${r.data?.resName || "—"} ×${r.data?.guests || "?"}`
+          + (visitStateOf(r.data) === "dining" ? ` · ${diningLabelOf(r)} ↩`
+            : r.data?.resTime ? ` · ${r.data.resTime}` : ""),
+        onPick: () => onAssign(r, dockLabel),
+      }))
+    : null;
 
-  const sheetBody = () => {
-    if (map.kind === "terrace") {
-      // Terrace SET works exactly like the dining room's (per Djan — the old
-      // "set for bites" toggle told the kitchen nothing): one press in the
-      // sheet raises the SAME kitchen banner, courseReady for the party's
-      // next unfired course, and turns the strip on. The strip then clears
-      // by itself when that course fires (App's courseReady-resolve watcher).
-      const sheetStrip = floorStatusOf(floorStatus, map.id, sheetLabel);
-      if (sheetParty) {
-        // A merged group's kitchen ticket lives on the PRIMARY board table.
-        const primaryBoardId = (() => {
-          const tid = Number(sheetParty.table_id);
-          const bt = tables.find((x) => x.id === tid);
-          return bt?.tableGroup?.length ? Math.min(...bt.tableGroup.map(Number)) : tid;
-        })();
-        const setToggle = sheetStrip === "SET" ? (
-          <button
-            style={actionBtn(false)}
-            onClick={() => { onCycleStatus(map.id, sheetLabel); setSheetLabel(null); }}>
-            UNSET
-          </button>
-        ) : (
-          <button
-            style={actionBtn(true)}
-            onClick={() => {
-              onSendSetToKitchen?.([primaryBoardId]);
-              onCycleStatus(map.id, sheetLabel);
-              flash(`${sheetLabel} SET → KITCHEN ✓`);
-              setSheetLabel(null);
-            }}>
-            SET → KITCHEN
-          </button>
-        );
-        // the runner's crib sheet: waters by seat position + pairings, from
-        // the party's board table (no reservation name — per Djan)
-        const bt = tables.find((x) => x.id === Number(sheetParty.table_id)) || null;
-        const seats = (bt?.seats || []).filter((s) => (s.water && s.water !== "—") || (s.pairing && s.pairing !== "—"));
-        return (
-          <div>
-            {seats.length > 0 ? (
-              <div style={{ marginBottom: 10 }}>
-                {seats.map((s) => (
-                  <div key={s.id} style={{ display: "flex", gap: 12, alignItems: "baseline", padding: "4px 0", borderBottom: `1px solid ${tokens.ink[5]}` }}>
-                    <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: tokens.ink[0], minWidth: 28 }}>P{s.id}</span>
-                    <span style={{ fontFamily: FONT, fontSize: 10, color: (s.water && s.water !== "—") ? tokens.ink[1] : tokens.ink[4], textTransform: "uppercase", minWidth: 48 }}>
-                      {s.water || "—"}
-                    </span>
-                    <span style={{ fontFamily: FONT, fontSize: 10, color: (s.pairing && s.pairing !== "—") ? tokens.ink[1] : tokens.ink[4], textTransform: "uppercase" }}>
-                      {s.pairing || "—"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], marginBottom: 10 }}>no waters / pairings yet</div>
-            )}
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button style={actionBtn(true)} onClick={() => { onMove(sheetParty); setSheetLabel(null); }}>
-                MOVE TO {diningLabelOf(sheetParty)} →
-              </button>
-              <button style={actionBtn(false)} onClick={() => { setMovingParty(sheetParty); setSheetLabel(null); }}>
-                CHANGE TABLE
-              </button>
-              <button style={actionBtn(false)} onClick={() => { onClear(sheetParty); setSheetLabel(null); }}>
-                CLEAR TABLE
-              </button>
-              {setToggle}
-            </div>
-          </div>
-        );
-      }
-      // Free terrace table — no SET here: with no party there is no course to
-      // announce, so the sheet is purely the assign picker. (A leftover strip
-      // from a departed party still offers UNSET so it can't get stuck.)
-      return (
-        <div>
-          {sheetStrip === "SET" && (
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-              <button
-                style={actionBtn(false)}
-                onClick={() => { onCycleStatus(map.id, sheetLabel); setSheetLabel(null); }}>
-                UNSET
-              </button>
-            </div>
-          )}
-          <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: "0.12em", color: tokens.ink[3], textTransform: "uppercase", margin: "2px 0 6px" }}>
-            ASSIGN PARTY
-          </div>
-          {bookedParties.length === 0 && (
-            <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3] }}>no waiting parties</div>
-          )}
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {bookedParties.map((r) => (
-              <button key={r.id} style={actionBtn(false)}
-                onClick={() => {
-                  onAssign(r, sheetLabel);
-                  flash(`${sheetLabel} → ${(r.data?.resName || "—").toUpperCase()} ×${r.data?.guests || "?"}`);
-                  setSheetLabel(null);
-                }}>
-                {/* a dining party's identity is its table — going back OUT */}
-                {r.data?.resName || "—"} ×{r.data?.guests || "?"}
-                {visitStateOf(r.data) === "dining" ? ` · ${diningLabelOf(r)} ↩`
-                  : r.data?.resTime ? ` · ${r.data.resTime}` : ""}
-              </button>
-            ))}
-          </div>
-        </div>
-      );
+  // CHANGE TABLE armed: the next terrace tap lands the party — on a FREE
+  // table it re-seats; on an OCCUPIED one the two parties SWAP tables (per
+  // Djan, 22.08). A stranded party (no live tile) can't swap — nowhere to
+  // send the other party — so occupied stays refused for them.
+  const resolveMovingTap = (label) => {
+    if (!movingParty || map.kind !== "terrace") return false;
+    const targetParty = occ[label];
+    if (targetParty) {
+      const fromLabel = movingParty.data?.terrace_table || null;
+      const fromOnMap = fromLabel && mapLabels.has(fromLabel);
+      if (!fromOnMap || targetParty.id === movingParty.id) return true; // nothing to swap with
+      onAssign(movingParty, label);
+      onAssign(targetParty, fromLabel);
+      setMovingParty(null);
+      return true;
     }
-    return null; // dining taps cycle status instead — no sheet
+    onAssign(movingParty, label);
+    setMovingParty(null);
+    return true;
   };
 
   return (
     <div style={{ margin: isMobile ? "0 12px 40px" : "0 24px 48px" }}>
-      {/* map tabs — hidden when the caller owns the map choice (mapKind);
-          the toast still needs a home then. */}
-      {!mapKind ? (
+      {/* map tabs — hidden when the caller owns the map choice (mapKind) */}
+      {!mapKind && (
         <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 0, marginBottom: 8 }}>
           {tabs.map((m) => (
             <button key={m.id} style={btn(m.id === map.id)} onClick={() => switchTab(m.id)}>
               {m.name}
             </button>
           ))}
-          <span style={{ flex: 1 }} />
-          {toast && (
-            <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.green.text, letterSpacing: "0.08em", fontWeight: 700, marginRight: 10 }}>{toast}</span>
-          )}
-        </div>
-      ) : toast && (
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
-          <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.green.text, letterSpacing: "0.08em", fontWeight: 700, marginRight: 10 }}>{toast}</span>
         </div>
       )}
 
@@ -452,21 +456,32 @@ export default function FloorView({
         <span style={{ color: tokens.ink[2] }}>RES {ticker.reserved}</span>
         <span style={{ color: tokens.green.text }}>SET {ticker.set}</span>
         <span style={{ flex: 1 }} />
-        {sendableIds.length > 0 && onSendSetToKitchen ? (
+        {/* no bulk SEND SET here — the dock is the ONE set surface (per Djan,
+            22.08). The button also flashed back for the render(s) between the
+            dock's FIRE consuming courseReady and the strip watcher's clear. */}
+        {/* one segmented control, two independent flips — both on = 180° */}
+        <span style={{ display: "flex" }}>
           <button
-            style={{ ...actionBtn(true), padding: "7px 12px", fontSize: 8 }}
-            onClick={() => {
-              onSendSetToKitchen(sendableIds);
-              flash(`SENT TO KITCHEN ✓ (${sendableIds.length})`);
-            }}>
-            SEND SET → KITCHEN ({sendableIds.length})
+            style={{ ...btn(mirrorAxes.upDown), padding: "5px 10px", marginLeft: 0 }}
+            onClick={() => toggleMirror("upDown")}
+            aria-pressed={mirrorAxes.upDown}
+            title="Flip the map top↔bottom to match the room as seen from this tablet's station"
+          >
+            MIRROR ↕
           </button>
-        ) : (
-          <span style={{ color: tokens.ink[3], fontSize: 8 }}>TAP TABLE → SET / UNSET · TERRACE → SHEET</span>
-        )}
+          <button
+            style={{ ...btn(mirrorAxes.leftRight), padding: "5px 10px" }}
+            onClick={() => toggleMirror("leftRight")}
+            aria-pressed={mirrorAxes.leftRight}
+            title="Flip the map left↔right to match the room as seen from this tablet's station"
+          >
+            MIRROR ↔
+          </button>
+        </span>
+        <span style={{ color: tokens.ink[3], fontSize: 8 }}>TAP TABLE → DOCK · TAP CHAIR → QUICK ACCESS</span>
       </div>
 
-      {/* CHANGE TABLE banner — armed until a free table is tapped */}
+      {/* CHANGE TABLE banner — armed until a table is tapped */}
       {movingParty && (
         <div style={{
           display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
@@ -474,7 +489,7 @@ export default function FloorView({
           padding: "8px 12px", marginBottom: 6,
         }}>
           <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase", fontWeight: 700, color: tokens.ink[0] }}>
-            TAP A FREE TABLE FOR {(movingParty.data?.resName || "—").toUpperCase()} ×{movingParty.data?.guests || "?"}
+            TAP A TABLE FOR {(movingParty.data?.resName || "—").toUpperCase()} ×{movingParty.data?.guests || "?"} — OCCUPIED SWAPS
           </span>
           <span style={{ flex: 1 }} />
           <button style={actionBtn(false)} onClick={() => setMovingParty(null)}>CANCEL</button>
@@ -519,66 +534,116 @@ export default function FloorView({
         </div>
       ))}
 
-      <FloorMap
-        map={map}
-        mode="service"
-        tableState={tableState}
-        restrictionsByLabel={restrictionsByLabel}
-        // The label ▲ read as a dead button (per Djan) — the restriction CODE
-        // in red at the exact chair replaces it on the FOH floor too.
-        seatCodes
-        seatNotesByLabel={seatNotesByLabel}
-        seatGendersByLabel={seatGendersByLabel}
-        onSeatSwap={onSwapSeats ? swapSeatPositions : undefined}
-        showPartyLines={false}
-        height={isMobile ? 380 : 480}
-        onTableTap={(t) => {
-          // CHANGE TABLE in flight: the next FREE terrace table tap re-seats
-          // the party there.
-          if (movingParty && map.kind === "terrace") {
-            if (tableState[t.label]?.status === "occupied") { flash("Table occupied"); return; }
-            onAssign(movingParty, t.label);
-            flash(`${t.label} → ${(movingParty.data?.resName || "—").toUpperCase()}`);
-            setMovingParty(null);
-            return;
-          }
-          // Terrace tables carry actions → sheet; every dining table is one
-          // big SET toggle.
-          if (map.kind === "terrace") setSheetLabel(t.label);
-          else onCycleStatus(map.id, t.label);
-        }}
-      />
-
-      {/* table sheet — fixed bottom, thumb-first */}
-      {sheetTable && (
-        <>
-          <div onClick={() => setSheetLabel(null)}
-            style={{ position: "fixed", inset: 0, background: tokens.surface.overlay, zIndex: 40 }} />
-          <div style={{
-            position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 50,
-            maxWidth: 760, margin: "0 auto", background: tokens.neutral[0],
-            borderTop: `2px solid ${tokens.ink[0]}`, maxHeight: "74vh", overflowY: "auto",
-            padding: isMobile ? "12px 12px 24px" : "14px 18px 28px",
-          }}>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 10 }}>
-              <span style={{ fontFamily: FONT, fontSize: 20, fontWeight: 700, color: tokens.ink[0], letterSpacing: "-0.02em" }}>
-                {sheetLabel}
-              </span>
-              <span style={{ fontFamily: FONT, fontSize: 9, letterSpacing: "0.14em", color: tokens.ink[3], textTransform: "uppercase" }}>
-                {map.kind === "terrace"
-                  ? (sheetParty ? `×${sheetParty.data?.guests || "?"}` : "free")
-                  : (tableState[sheetLabel]?.status || "free")}
-              </span>
-              <span style={{ flex: 1 }} />
-              <button onClick={() => setSheetLabel(null)}
-                style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, border: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[0], color: tokens.ink[2], width: 32, height: 32, cursor: "pointer", borderRadius: 0 }}>
-                ✕
-              </button>
+      {/* map + dock: the dock lives in the gutter the capped map leaves
+          free (below the map on mobile) and follows the last tapped table */}
+      <div style={{
+        display: "flex", flexDirection: isMobile ? "column" : "row",
+        gap: 16, alignItems: isMobile ? "stretch" : "flex-start",
+      }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <FloorMap
+            map={shownMap}
+            mode="service"
+            tableState={tableState}
+            restrictionsByLabel={restrictionsByLabel}
+            // The label ▲ read as a dead button (per Djan) — the restriction CODE
+            // in red at the exact chair replaces it on the FOH floor too.
+            seatCodes
+            seatNotesByLabel={seatNotesByLabel}
+            seatGendersByLabel={seatGendersByLabel}
+            onSeatSwap={onSwapSeats ? swapSeatPositions : undefined}
+            showPartyLines={false}
+            serviceSelectedLabel={dockLabel}
+            serviceSelectedSeat={dockSeatNo != null && dockLabel ? { label: dockLabel, no: dockSeatNo } : null}
+            // a chair tap swaps the dock column to that ONE seat's quick
+            // access (per Djan, 22.08) — the same editor as board mode,
+            // scoped to the tapped position; it does not bubble to the
+            // table tap
+            onServiceSeatTap={(label, no) => {
+              if (resolveMovingTap(label)) return;
+              setDockLabel(label);
+              setDockSeatNo(Number(no));
+            }}
+            // fullscreen owns more pixels — the map takes them (22.08)
+            height={isMobile ? 380 : isFullscreen ? 680 : 560}
+            onTableTap={(t) => {
+              // CHANGE TABLE in flight: the tap lands the party (free) or
+              // swaps the two parties (occupied).
+              if (resolveMovingTap(t.label)) return;
+              // A tap SELECTS (per Djan, 21.08) — the dock follows it and
+              // holds every action, terrace party actions included. Nothing
+              // toggles on the tap itself; a table tap also returns the
+              // column from a seat's quick access to the table dock.
+              setDockLabel(t.label);
+              setDockSeatNo(null);
+            }}
+          />
+        </div>
+        {/* the dock column — a chair tap swaps it to that ONE seat's quick
+            access (the real board editor, scoped by onlySeatId); a table
+            tap or ✕ brings the table dock back. The width is CONSTANT: the
+            board card's designed 340 (the board grid's minmax), 400 in
+            fullscreen — a per-state width made the centered map re-shift
+            sideways on every chair tap (per Djan, 22.08). The gutter absorbs
+            the column once; the map never moves and still fits at full
+            size at both widths. */}
+        <div style={{
+          width: isMobile ? "100%" : isFullscreen ? 400 : 340,
+          flexShrink: 0,
+        }}>
+          {dockSeat && dockBoard ? (
+            <div>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+                <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: "0.16em", textTransform: "uppercase", color: tokens.ink[3] }}>
+                  [QUICK ACCESS · {dockLabel} · P{dockSeat.id}]
+                </span>
+                <span style={{ flex: 1 }} />
+                <button onClick={() => setDockSeatNo(null)} aria-label="Back to table dock"
+                  style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, border: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[0], color: tokens.ink[2], width: 26, height: 26, cursor: "pointer", borderRadius: 0, touchAction: "manipulation" }}>
+                  ✕
+                </button>
+              </div>
+              <DisplayBoardCard
+                t={dockBoard}
+                quickMode
+                onlySeatId={dockSeat.id}
+                upd={upd}
+                updSeat={updSeat}
+                onOpenDetail={onOpenDetail}
+                optionalExtras={optionalExtras}
+                optionalPairings={optionalPairings}
+                aperitifOptions={aperitifOptions}
+                wines={wines}
+                cocktails={cocktails}
+                spirits={spirits}
+                beers={beers}
+              />
             </div>
-            {sheetBody()}
-          </div>
-        </>
-      )}
+          ) : (
+            <FloorDock
+              label={dockLabel}
+              mapKind={map.kind === "terrace" ? "terrace" : "dining"}
+              boardTable={dockBoard}
+              restrictions={dockRestrictions}
+              strip={dockStrip}
+              menuCourses={menuCourses}
+              profiles={profiles}
+              assignments={assignments}
+              optionalExtras={optionalExtras}
+              optionalPairings={optionalPairings}
+              onToggleStrip={dockLabel ? () => onCycleStatus(map.id, dockLabel) : undefined}
+              onAnnounce={announceDock}
+              onUnannounce={unannounceDock}
+              onOpenDetail={onOpenDetail}
+              partyActions={partyActions}
+              assignOptions={assignOptions}
+              upd={upd}
+              isMobile={isMobile}
+              wide={isFullscreen && !isMobile}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 }

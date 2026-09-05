@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
-import { DndContext, DragOverlay, MouseSensor, TouchSensor, MeasuringStrategy, rectIntersection, useSensor, useSensors } from "@dnd-kit/core";
+import { DndContext, DragOverlay, MouseSensor, TouchSensor, MeasuringStrategy, closestCenter, pointerWithin, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
 import { optionalPairingsFromCourses, courseRestrictionModCounts, overrideModCounts } from "../../utils/menuUtils.js";
@@ -82,6 +82,23 @@ function useTicketRowHeight(gridRef, enabled, gap) {
   return rowH;
 }
 
+// ── Where a dragged card lands ────────────────────────────────
+// WHERE THE FINGER IS, not what the card overlaps. dnd-kit's rectIntersection
+// scores each cell by how much of the DRAGGED CARD covers it, and a ticket is
+// ten times the height of an unseated banner: dragged one row straight up, a
+// ticket still overlapped the hole it came from far more than the banner it
+// was sitting on, so the board kept answering "you are over yourself" and
+// nothing swapped. Dragging up AND sideways cleared its own column and worked,
+// which is why this read as "I have to bring it in from the side".
+//
+// pointerWithin asks the only question the chef is asking: what is under my
+// finger? closestCenter covers the rest — a finger over a gap between cards,
+// or out past the last one — so a drop always lands somewhere sensible.
+export function ticketCollisions(args) {
+  const under = pointerWithin(args);
+  return under.length > 0 ? under : closestCenter(args);
+}
+
 // In-ticket dividers. Deliberately softer than the grammar hairline (ink[4]):
 // 17 course rows × 5 tickets reads as a glowing grid otherwise. Crucially the
 // dividers are NOT borders — sections/rows are solid blocks separated by 1px
@@ -107,7 +124,7 @@ function resolveGuestTemplate(table, profiles, assignments) {
   return isShort ? (p.shortMenuTemplate || p.menuTemplate) : p.menuTemplate;
 }
 
-export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, kitchenTemplate = null, editable = false, quickNotes = {}, compact = false, inlineMods = false, quickAccess = false, heightCap = null, roomGaps = [], historyGaps = [] }) {
+export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, kitchenTemplate = null, editable = false, quickNotes = {}, compact = false, quickAccess = false, heightCap = null, roomGaps = [], historyGaps = [] }) {
   // Density. Compact keeps two full rows of tickets on a 720px-tall kitchen
   // display (32" 1280×720 → 5 columns × 2 rows = 10 tickets). Gated to large
   // boards by the caller.
@@ -1089,48 +1106,29 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                 <span style={{ fontFamily: FONT, fontSize: dz.courseGlyph, color: fired ? tokens.green.border : tokens.ink[4], flexShrink: 0, lineHeight: 1 }}>{fired ? "✓" : pending ? "＋" : "○"}</span>
                 {(() => {
                   const hasSub = (pairingAlert || mods || (kcNote.note && showCourseNotes)) && !fired;
-                  const nameEl = (
-                    <div style={{
-                      fontFamily: FONT, fontSize: dz.courseFont, fontWeight: 700, lineHeight: dz.courseLH,
-                      color: fired ? tokens.ink[4] : kcNote.name ? tokens.red.text : pending ? tokens.ink[2] : tokens.ink[0],
-                      textDecoration: fired ? "line-through" : "none",
-                      letterSpacing: "0.02em",
-                      ...(inlineMods ? { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flexShrink: 0, maxWidth: hasSub ? "60%" : "100%" } : {}),
-                    }}>
-                      {displayName}
-                      {kcNote.name && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[3], marginLeft: 5 }}>({baseName})</span>}
-                      {pending && <span style={{ fontFamily: FONT, fontSize: "7px", fontWeight: 600, letterSpacing: "0.10em", color: tokens.ink[3], border: `1px solid ${tokens.ink[4]}`, padding: "0 3px", marginLeft: 6 }}>NOT ADDED</span>}
-                      {extraLabel && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[4], marginLeft: 6 }}>{extraLabel}</span>}
-                    </div>
-                  );
                   const modSegments = !hasSub ? [] : [
                     pairingAlert && { text: pairingAlert, color: tokens.ink[3] },
                     ...(mods ? Object.entries(mods).map(([mod, count]) => ({ text: `${count}× ${mod}`, color: tokens.red.text })) : []),
                     (kcNote.note && showCourseNotes) ? { text: `⚑ ${kcNote.note}`, color: tokens.red.text } : null,
                   ].filter(Boolean);
-                  if (inlineMods) {
-                    // One line per course: dietaries/mods sit beside the name and
-                    // ellipsize instead of wrapping to a second row. fontSize and
-                    // lineHeight live on the container so its line box hugs the
-                    // small type instead of inheriting the 16px browser strut.
-                    return (
-                      <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: 6 }}>
-                        {nameEl}
-                        {modSegments.length > 0 && (
-                          <div style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontFamily: FONT, fontSize: dz.modsFont, lineHeight: dz.courseLH }}>
-                            {modSegments.map((seg, i) => (
-                              <span key={i} style={{ color: seg.color, fontWeight: 600 }}>
-                                {i > 0 ? " · " : ""}{seg.text}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  }
+                  // Dietaries/mods go UNDER the course name and wrap (per Djan,
+                  // 31.08). Beside the name they had to ellipsize, and a
+                  // restriction cut to "NO HAZELN…" is not one the pass can
+                  // cook from. Only rows carrying a mod pay the extra line, and
+                  // the height-capped course list absorbs it.
                   return (
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      {nameEl}
+                      <div style={{
+                        fontFamily: FONT, fontSize: dz.courseFont, fontWeight: 700, lineHeight: dz.courseLH,
+                        color: fired ? tokens.ink[4] : kcNote.name ? tokens.red.text : pending ? tokens.ink[2] : tokens.ink[0],
+                        textDecoration: fired ? "line-through" : "none",
+                        letterSpacing: "0.02em",
+                      }}>
+                        {displayName}
+                        {kcNote.name && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[3], marginLeft: 5 }}>({baseName})</span>}
+                        {pending && <span style={{ fontFamily: FONT, fontSize: "7px", fontWeight: 600, letterSpacing: "0.10em", color: tokens.ink[3], border: `1px solid ${tokens.ink[4]}`, padding: "0 3px", marginLeft: 6 }}>NOT ADDED</span>}
+                        {extraLabel && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 400, color: tokens.ink[4], marginLeft: 6 }}>{extraLabel}</span>}
+                      </div>
                       {modSegments.length > 0 && (
                         <div style={{ marginTop: 2, display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
                           {modSegments.map((seg, i) => (
@@ -1366,21 +1364,14 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   );
 }
 
-export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, profiles = [], assignments = {}, compact = false, inlineMods = false, quickAccess = false, heightCap = null, roomGaps = [], historyGaps = [], onFocus = null }) {
+export function SortableTicket({ table, menuCourses, upd, isDragging, anyDragging, profiles = [], assignments = {}, compact = false, quickAccess = false, heightCap = null, roomGaps = [], historyGaps = [] }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition } = useSortable({
     id: table.id,
   });
-  // Touching or hovering a ticket lights this table up on the minimap. This is
-  // a passive read of the pointer (no preventDefault / stopPropagation), so it
-  // never disturbs the drag-to-reorder or the fire/quick-access taps beneath —
-  // it just records "this is the ticket the chef is looking at right now".
-  const focus = onFocus ? () => onFocus(table.id) : undefined;
   return (
     <div
       ref={setNodeRef}
       {...attributes}
-      onPointerEnter={focus}
-      onPointerDown={focus}
       style={{
         // Fill the grid cell so ticket width tracks the column count.
         width: "100%", minWidth: 0,
@@ -1417,7 +1408,6 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
           profiles={profiles}
           assignments={assignments}
           compact={compact}
-          inlineMods={inlineMods}
           quickAccess={quickAccess}
           heightCap={heightCap}
           roomGaps={roomGaps}
@@ -1488,14 +1478,26 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
     "Our Story":{ color: tokens.ink[2], bg: tokens.neutral[0], border: tokens.ink[4] },
   };
   return (
+    // The scroller and the centering are SEPARATE layers. Centering with
+    // justify-content on the scroller itself broke under a busy service: a
+    // burst of Sends overflowed the viewport, the cards (overflow:hidden flex
+    // children of a fixed-height column) shrank into each other, and the
+    // overflow spilled past BOTH edges — above the top is beyond scrollTop 0,
+    // so the upper CONFIRMs could not be reached at all. The inner column's
+    // auto margins center it while it fits and collapse to 0 when it doesn't,
+    // so every card keeps its full height and every CONFIRM scrolls into reach.
     <div role="dialog" aria-label="Kitchen pairing alerts" style={{
       position: "fixed", inset: 0, zIndex: 9999,
       background: "rgba(0,0,0,0.72)",
-      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-      gap: 16, padding: "24px 16px", overflowY: "auto",
+      display: "flex", flexDirection: "column", alignItems: "center",
+      padding: "24px 16px", overflowY: "auto",
       paddingTop: "calc(24px + env(safe-area-inset-top))",
       paddingBottom: "calc(24px + env(safe-area-inset-bottom))",
     }}>
+      <div style={{
+        margin: "auto", width: "100%",
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 16,
+      }}>
       {alerts.map(({ tableId, alert }) => {
         const seats = alert.seats || [];
         const pairSeats = seats.filter(s => s.pairing && s.pairing !== "—");
@@ -1506,7 +1508,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
             s.extras.forEach(ex => {
               if (!extrasMap[ex.key]) extrasMap[ex.key] = { name: ex.name, seats: [], anyShared: false };
               const sw = ex.sharedWith ?? null;
-              extrasMap[ex.key].seats.push({ id: s.id, gender: s.gender || null, pairing: ex.pairing, sharedWith: sw });
+              extrasMap[ex.key].seats.push({ id: s.id, gender: s.gender || null, pairing: ex.pairing, sharedWith: sw, restriction: ex.restriction ?? null });
               if (sw !== null) extrasMap[ex.key].anyShared = true;
             });
           } else {
@@ -1528,7 +1530,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
           <div key={tableId} style={{
             background: tokens.neutral[0], borderRadius: 0, maxWidth: 480, width: "100%",
             border: `1px solid ${tokens.ink[4]}`,
-            overflow: "hidden",
+            overflow: "hidden", flexShrink: 0,
           }}>
             {/* Header */}
             <div style={{
@@ -1587,8 +1589,18 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                     {group.name.toUpperCase()}
                   </span>
                   {group.seats.map(s => (
-                    <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: tokens.green.bg, border: `1px solid ${tokens.green.border}`, color: tokens.green.text }}>
-                      P{s.id}{(() => { const p = extraPairingLabel(s.pairing); return p ? ` · ${p}` : ""; })()}
+                    // A restricted seat's call turns the chip red and spells
+                    // the modification out — the popup is where the pass
+                    // starts the plate, so "P1 · NO HAZELNUT OIL" has to be
+                    // read here, not discovered later on the ticket.
+                    <span key={s.id} style={{
+                      fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0,
+                      background: s.restriction ? tokens.red.bg : tokens.green.bg,
+                      border: `1px solid ${s.restriction ? tokens.red.border : tokens.green.border}`,
+                      color: s.restriction ? tokens.red.text : tokens.green.text,
+                      fontWeight: s.restriction ? 700 : 400,
+                    }}>
+                      P{s.id}{(() => { const p = extraPairingLabel(s.pairing); return p ? ` · ${p}` : ""; })()}{s.restriction ? ` · ${s.restriction}` : ""}
                     </span>
                   ))}
                   {group.anyShared && <span style={{ fontFamily: FONT, fontSize: "9px", fontWeight: 700, letterSpacing: "0.10em", color: tokens.ink[2], padding: "2px 6px", border: `1px solid ${tokens.ink[4]}`, background: tokens.ink[5] }}>SHARE</span>}
@@ -1609,6 +1621,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
           </div>
         );
       })}
+      </div>
     </div>
   );
 }
@@ -1742,10 +1755,6 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
   const fitRows = !useIsMobile(FIT_ROWS_MIN_W);
   const rowHeight = useTicketRowHeight(gridRef, fitRows, gridGap);
 
-  // The ticket the chef is currently touching/hovering — drives the minimap
-  // highlight. Kept even after the pointer leaves (the last-touched table
-  // stays lit) so the map is a stable plating reference, not a flicker.
-  const [focusedTableId, setFocusedTableId] = useState(null);
   // The minimap lives in the empty bottom-right of the board and must NEVER
   // push a ticket. Only the large kitchen panel runs the fixed 5-up grid where
   // "spare space" is well defined; there, a full wall is exactly two rows of
@@ -1868,7 +1877,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
     <KitchenAlertOverlay alerts={pendingAlerts} onConfirm={confirmAlert} />
     <DndContext
       sensors={sensors}
-      collisionDetection={rectIntersection}
+      collisionDetection={ticketCollisions}
       measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
       onDragStart={({ active }) => {
         setActiveId(active.id);
@@ -1925,12 +1934,10 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
                 profiles={profiles}
                 assignments={assignments}
                 compact={compact}
-                inlineMods={largeBoard}
                 quickAccess={!!upd}
                 heightCap={rowHeight}
                 roomGaps={roomGaps}
                 historyGaps={gapsForMenuType(historyGapsByMenu, t.menuType)}
-                onFocus={showMinimap ? setFocusedTableId : null}
               />
             ))}
           </div>
@@ -1954,7 +1961,6 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
                 profiles={profiles}
                 assignments={assignments}
                 compact={compact}
-                inlineMods={largeBoard}
                 // Same cap as the grid, so a lifted ticket is the size of the
                 // hole it left rather than growing under the chef's finger.
                 heightCap={rowHeight}
@@ -1974,7 +1980,6 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
           <KitchenMinimap
             floorMaps={floorMaps}
             tables={displayTables}
-            focusedTableId={focusedTableId}
             floorStatus={floorStatus}
             reservations={reservations}
             onAssign={onAssignTerrace}

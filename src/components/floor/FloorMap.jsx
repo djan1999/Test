@@ -200,6 +200,14 @@ export default function FloorMap({
                             // chairs stay red-filled with the gender outline)
   seatPositionLabels = false, // chairs render as little P1/P2 blocks so the
                             // kitchen reads positions off the map directly
+  serviceSelectedLabel = null, // service mode: the table the FOH dock follows
+                            // — dashed focus outline; default off so the
+                            // picker/kitchen/editor consumers are untouched
+  onServiceSeatTap = null,  // (label, seatNo) — service mode: a plain tap on a
+                            // chair selects that GUEST for the dock instead of
+                            // bubbling to the table tap; default off
+  serviceSelectedSeat = null, // { label, no } — the chair the dock's guest
+                            // card is showing; dashed focus ring
   seatLabelsByLabel = {},   // { [label]: { [chairNo]: guestNo } } — keeps
                             // guest labels stable when P2 sits at chair 6
   onSeatSwap,               // (label, fromNo, toNo) — service mode: drag a
@@ -476,6 +484,7 @@ export default function FloorMap({
         const pickable = mode === "picker" ? st.selectable !== false && !occupied : false;
         const seatEditing = mode === "seats" && seatsEditLabel === t.label;
         const selected = editing && selectedLabel === t.label;
+        const dockFocused = mode === "service" && serviceSelectedLabel === t.label;
         const dimmed = (mode === "picker" && !pickable) || (mode === "seats" && seatsEditLabel && !seatEditing);
 
         // Seated tables read SOLID green with white type — the old pale-green
@@ -529,6 +538,10 @@ export default function FloorMap({
             {sent && (
               <TableShape t={{ ...t, x: t.x - 1.1, y: t.y - 1.1, w: t.w + 2.2, h: t.h + 2.2 }}
                 fill="none" stroke={tokens.signal.warn} strokeWidth={0.7} />
+            )}
+            {dockFocused && (
+              <TableShape t={{ ...t, x: t.x - 2, y: t.y - 2, w: t.w + 4, h: t.h + 4 }}
+                fill="none" stroke={tokens.ink[0]} strokeWidth={0.4} dash="1.6 1.2" />
             )}
             {selected && (
               <>
@@ -652,9 +665,23 @@ export default function FloorMap({
                   onPointerMove={swappable ? onPointerMove : undefined}
                   onPointerUp={swappable ? onSeatSwapPointerUp(t) : undefined}
                   onClick={(e) => {
-                    if (!seatEditing) return;
-                    e.stopPropagation();
-                    onSeatTap && onSeatTap(t.label, i);
+                    if (seatEditing) {
+                      e.stopPropagation();
+                      onSeatTap && onSeatTap(t.label, i);
+                      return;
+                    }
+                    // Service: a plain chair tap selects the guest. A finished
+                    // swap drag's trailing click must die HERE — consumed and
+                    // stopped, or it would bubble and read as a table tap.
+                    if (mode === "service" && onServiceSeatTap && p.no != null) {
+                      if (swallowTapRef.current) {
+                        swallowTapRef.current = false;
+                        e.stopPropagation();
+                        return;
+                      }
+                      e.stopPropagation();
+                      onServiceSeatTap(t.label, p.no);
+                    }
                   }}>
                   {numbered ? (
                     <>
@@ -710,6 +737,12 @@ export default function FloorMap({
                       fill={tokens.signal.alert} fontWeight={700}>
                       {restrictionCode(seatRestr[0].note)}
                     </text>
+                  )}
+                  {mode === "service" && serviceSelectedSeat
+                    && serviceSelectedSeat.label === t.label
+                    && Number(serviceSelectedSeat.no) === Number(p.no) && (
+                    <circle cx={sx} cy={sy} r={2.7} fill="none"
+                      stroke={tokens.ink[0]} strokeWidth={0.4} strokeDasharray="1.2 0.9" />
                   )}
                 </g>
               );

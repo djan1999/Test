@@ -1,5 +1,12 @@
 # Rework handoff
 
+> **HISTORICAL — the local-first rework it hands off is shipped.** Kept as the
+> release record. The figures below are the numbers *at the pilot-hardening
+> release*, not current ones (the suite is 1,388 tests as of 2026-08-11), and
+> the deployment order describes that release. `docs/DEPLOYMENT_RUNBOOK.md` is
+> the authoritative promotion procedure; `docs/ARCHITECTURE.md` is the current
+> description of the system.
+
 ## What changed
 
 The live service path is now local-first:

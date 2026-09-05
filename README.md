@@ -6,8 +6,12 @@ fresh board namespace — clears nothing); ENDing flips that one row to
 `ended` (destroys nothing — the ended service and its `service_tables` rows
 ARE the archive entry). A stale/offline device can only ever end the old
 service it knows about, so the historical "board wiped mid-service" incident
-class is structurally impossible. See `docs/SERVICE_ENTITY_RELEASE.md` for
-the model, the migration, and the release-night runbook.
+class — a *lifecycle step* that also cleared rows — is structurally
+impossible. Blanking the board is still possible deliberately, through the
+Admin CLEAR ALL and CLEAR TABLE actions; those are outside the lifecycle and
+go through the normal write path. See `docs/SERVICE_ENTITY_RELEASE.md` for
+the model, the migration, and the release-night runbook, and
+`docs/ARCHITECTURE.md` for the board-history retention window.
 
 ## Multi-restaurant (workspaces) + login
 The app now requires a Supabase **email + password login**, and all data is

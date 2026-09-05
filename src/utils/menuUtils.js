@@ -125,6 +125,10 @@ export const optionalExtrasFromCourses = (menuCourses = []) => {
       key,
       name: label,
       pairings,
+      // The dish's course row rides along so a kitchen Send can derive the
+      // ordering seat's restriction mod (same getCourseMod the ticket uses)
+      // and carry it into the alert popup.
+      course: existing?.course || c,
     });
   });
   return [...byKey.values()];

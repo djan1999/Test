@@ -51,7 +51,9 @@ import {
 import {
   FLOOR_MAPS_KEY, sanitizeFloorMaps,
   getActiveDiningMap, getTerraceMap, mapSeatCountForBoardTable,
+  resolveFloorMapsForDay, setActiveDiningForDay,
   terraceOccupancy, applyLayoutSwitchRow, resolveReservationTable,
+  layoutSwitchBlockers, isCurrentServiceRow,
   sanitizeFloorStatus, setFloorStatus, cycleFloorStatus, pruneFloorStatus,
   renameFloorStatusLabel,
   clearStripsForBoardGroup,
@@ -63,7 +65,9 @@ import {
   closeVisit as closeVisitData,
 } from "./utils/terraceFlow.js";
 import { getVisibleCoursesForTable, getCourseProgressState, isStaleCourseReady } from "./utils/courseProgress.js";
+import { mergeKitchenAlert } from "./utils/kitchenAlerts.js";
 import { useIsMobile, BP } from "./hooks/useIsMobile.js";
+import { useFullscreenBoost } from "./hooks/useIsFullscreen.js";
 import { useModalEscape } from "./hooks/useModalEscape.js";
 import {
   DEFAULT_RESTRICTIONS,
@@ -73,7 +77,8 @@ import { supabase, hasSupabaseConfig, supabaseUrl, TABLES, getWorkspaceId } from
 import { scopedFrom } from "./lib/scopedDb.js";
 import { readStateKey, saveStateKey, dropPendingStateKey, pendingStateKeys } from "./lib/stateStore.js";
 import { createWriteQueue } from "./lib/writeQueue.js";
-import { recordClientDiagnostic } from "./lib/clientDiagnostics.js";
+import { readClientDiagnostics, recordClientDiagnostic } from "./lib/clientDiagnostics.js";
+import DeviceHealthCard from "./components/ui/DeviceHealthCard.jsx";
 import {
   startServiceStore, endServiceStore, resumeServiceStore, updateServiceStore,
   fetchServicesStore, readLiveServiceStore, fetchSameDayLabelsStore,
@@ -105,6 +110,11 @@ import {
   removedLiveTableIds,
   sanitizeRestaurantConfig,
 } from "./config/restaurantConfig.js";
+import {
+  DEFAULT_QUICK_ACCESS_ITEMS,
+  DEFAULT_RESTAURANT_CONFIG,
+  DEFAULT_SITTING_TIMES,
+} from "./config/buildDefaults.js";
 import { PRODUCT_NAME as APP_NAME, PRODUCT_SUBTITLE as APP_SUBTITLE } from "./config/product.js";
 import {
   DEFAULT_SYNC_CONFIG,
@@ -160,18 +170,6 @@ const CHOSEN_ON_LS_KEY = "milka_service_chosen_on";
 // old service's strips writes to that old key and can never touch the live
 // service's strips. (The shared legacy `floor_status_v1` key is retired.)
 const floorStatusKeyFor = (serviceId) => (serviceId ? `floor_status_v2:${serviceId}` : null);
-const BUILD_ROOM_OPTIONS = String(import.meta.env.VITE_DEFAULT_ROOM_OPTIONS || "")
-  .split(",")
-  .map((room) => room.trim())
-  .filter(Boolean);
-const DEFAULT_RESTAURANT_CONFIG = makeDefaultRestaurantConfig({
-  name: APP_NAME,
-  subtitle: APP_SUBTITLE,
-  features: {
-    hotelGuests: String(import.meta.env.VITE_ENABLE_HOTEL_GUESTS || "").toLowerCase() === "true",
-    roomOptions: BUILD_ROOM_OPTIONS,
-  },
-});
 
 // Board sync history follows a table's stable id, never its screen position.
 // An array baseline can silently assign T2's history to T12 when an admin
@@ -179,38 +177,6 @@ const DEFAULT_RESTAURANT_CONFIG = makeDefaultRestaurantConfig({
 const makeTableJsonMap = (tables = []) => new Map(
   tables.map((table) => [Number(table.id), JSON.stringify(sanitizeTable(table))]),
 );
-
-const parseSittingTimes = () => {
-  const raw = String(import.meta.env.VITE_DEFAULT_SITTING_TIMES || "18:00,18:30,19:00,19:15")
-    .split(",")
-    .map(s => s.trim())
-    .filter(Boolean);
-  return raw.length > 0 ? raw : ["18:00", "18:30", "19:00", "19:15"];
-};
-const DEFAULT_SITTING_TIMES = parseSittingTimes();
-
-const parseDefaultQuickAccessItems = () => {
-  const raw = String(import.meta.env.VITE_DEFAULT_QUICK_ACCESS || "").trim();
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .map((item, idx) => ({
-        id: Number(item?.id) || idx + 1,
-        label: String(item?.label || "").trim(),
-        searchKey: String(item?.searchKey || item?.label || "").trim(),
-        linkedKey: item?.linkedKey != null && String(item.linkedKey).trim() !== "" ? String(item.linkedKey).trim() : undefined,
-        type: String(item?.type || "wine").trim() || "wine",
-        enabled: item?.enabled !== false,
-      }))
-      .filter(item => item.label);
-  } catch {
-    return [];
-  }
-};
-
-const DEFAULT_QUICK_ACCESS_ITEMS = parseDefaultQuickAccessItems();
 
 const SITTING_TIMES = DEFAULT_SITTING_TIMES;
 // Unified profile payload key. `menu_layout_profiles_v1` and the legacy
@@ -299,7 +265,10 @@ const isPearOptionalKey = (key) => {
   return k === "pear" || k.startsWith("pear_") || k.endsWith("_pear") || k.includes("_pear_");
 };
 
-function optionalExtrasFromCourses(menuCourses = []) {
+// Exported for the quick-controls test: the Send → kitchenSnapshot path must
+// receive defs FROM THIS BUILDER, course row included — a hand-built def in a
+// unit test cannot catch this file forgetting a field.
+export function optionalExtrasFromCourses(menuCourses = []) {
   const byKey = new Map();
   (menuCourses || []).forEach((c) => {
     const category = normalizeCourseCategory(c?.course_category, c?.optional_flag);
@@ -320,6 +289,11 @@ function optionalExtrasFromCourses(menuCourses = []) {
       key,
       name: label,
       pairings: pairings.length > 0 ? pairings : ["—"],
+      // The dish's course row MUST ride along (same as the menuUtils builder):
+      // kitchenSnapshot derives the ordering seat's restriction mod from it,
+      // and a def without it sends a restricted guest's beetroot to the
+      // kitchen as a plain call.
+      course: existing?.course || c,
     });
   });
   return [...byKey.values()];
@@ -356,6 +330,11 @@ export default function App() {
   const localBev = readLocalBeverages();
   const loadMenuCoursesRef = useRef(null);
   const appIsMobile = useIsMobile(BP.md);
+  // Fullscreen on a laptop-sized screen (gate toggle / F11 / the PWA's
+  // fullscreen display mode): the service column widens so the extra pixels
+  // reach the floor and board. Space-gated — the tablet PWA is always
+  // "fullscreen" but has no extra pixels to widen into (22.08).
+  const appIsFullscreen = useFullscreenBoost();
   const [restaurantConfig, setRestaurantConfig] = useState(DEFAULT_RESTAURANT_CONFIG);
   const restaurantConfigRef = useRef(restaurantConfig);
   restaurantConfigRef.current = restaurantConfig;
@@ -1676,6 +1655,19 @@ export default function App() {
   // occupancy, the terrace board visuals, and layout re-resolution.
   // Everything from the active service day forward (both sessions, future
   // dates) — the input set for layout-switch planning in Admin → Floor.
+  // THE DAY'S ROOM (docs: per-day active layout). `floorMapsState` holds the
+  // house default plus per-day bindings; this resolves the one in force for
+  // the service being worked. Every view calls getActiveDiningMap(floorMaps),
+  // so resolving here means the floor view, the kitchen view, the minimap,
+  // seat caps and NEEDS TABLE all follow the day's room with no extra wiring —
+  // and tomorrow keeps its own. The ADMIN floor editor deliberately gets the
+  // RAW state: it edits maps and writes the bindings.
+  const layoutServiceDay = serviceDate || currentServiceDay();
+  const floorMapsForDay = useMemo(
+    () => resolveFloorMapsForDay(floorMapsState, layoutServiceDay),
+    [floorMapsState, layoutServiceDay],
+  );
+
   const layoutPlanningReservations = useMemo(() => {
     const from = serviceDate || currentServiceDay();
     return (reservations || []).filter(r => r.date && String(r.date) >= String(from));
@@ -1726,10 +1718,16 @@ export default function App() {
   // content (a walk-in the plan can't see) is blocked entirely — neither
   // its board state nor its reservation move, so the two never disagree.
   const applyLayoutSwitchRows = async (rows) => {
-    if ((rows || []).some(r => r.status === "conflict" || r.status === "needs_table")) {
-      return { ok: false, error: new Error("Resolve every conflict and NEEDS TABLE row before switching layouts.") };
+    // The switch is FOR today's service: block only on TODAY's unresolved rows
+    // (a future date's needs_table is a warning, not a wall), and move only
+    // TODAY's reservations — future assignments keep their own layout, so
+    // activating tonight's room never rewrites next week's bookings. Different
+    // rooms on different nights work per-service until per-day binding lands.
+    const switchDay = serviceDate || currentServiceDay();
+    if (layoutSwitchBlockers(rows, switchDay).length) {
+      return { ok: false, error: new Error("Resolve today's conflicts and NEEDS TABLE rows before switching layouts.") };
     }
-    const moveRows = (rows || []).filter(r => r.status === "move");
+    const moveRows = (rows || []).filter(r => r.status === "move" && isCurrentServiceRow(r, switchDay));
     if (!moveRows.length) return { ok: true };
     const { blocked } = applyLayoutSwitchToTables(tablesRef.current || [], moveRows);
     const blockedIds = new Set(blocked.map(b => b.id));
@@ -2493,26 +2491,28 @@ export default function App() {
       let hasContent = false;
       let judgedRows = null; // kept for the end-of-night parity verdict below
       try {
-        let rows;
-        if (sqlitePrimaryRef.current) {
-          const { readServiceTables } = await loadPsReads();
-          rows = await readServiceTables(svc.id);
-        } else {
-          const { data, error } = await scopedFrom(TABLES.SERVICE_TABLES)
-            .select("service_id, table_id, data, updated_at")
-            .eq("service_id", svc.id);
-          if (error) throw error;
-          rows = data || [];
-        }
-        judgedRows = rows || [];
-        const contentRows = (rows || []).filter((r) =>
+        // The SERVER's rows, always — never this device's local mirror. A
+        // slept device boots with a stale mirror: judging liveness from it
+        // can end a service other devices are still working (the 22.07
+        // class), and grading parity from it filed a false CONTENT LOSS for
+        // a night this device never saw (13.08). If the server board is
+        // unreachable, the stale row costs nothing by waiting — the next
+        // online boot ends it with the truth in hand.
+        const { data, error } = await scopedFrom(TABLES.SERVICE_TABLES)
+          .select("service_id, table_id, data, updated_at")
+          .eq("service_id", svc.id);
+        if (error) throw error;
+        judgedRows = data || [];
+        const contentRows = judgedRows.filter((r) =>
           tableHasServiceContent(sanitizeTable({ id: Number(r.table_id), ...(r.data || {}) })));
         hasContent = contentRows.length > 0;
         latestMs = contentRows
           .map((r) => new Date(r.updated_at).getTime())
           .filter(Number.isFinite)
           .reduce((a, b) => Math.max(a, b), -Infinity);
-      } catch { /* unreadable board — the flip below is safe regardless */ }
+      } catch {
+        return; // server board unreadable — do not end and do not grade
+      }
       if (hasContent && isLiveServiceActivity(latestMs)) {
         const healDay = currentServiceDay();
         console.warn(
@@ -2566,9 +2566,10 @@ export default function App() {
         return;
       }
       // End-of-night parity verdict for the rolled-over night, from the
-      // judged service's OWN rows (never this device's namespace). An
-      // unreadable board (judgedRows null) records nothing — comparing the
-      // log against a board we couldn't read would file a false red.
+      // SERVER rows read above — the same picture the end decision used,
+      // never this device's mirror. (Belt: an unreadable board records
+      // nothing — comparing the log against a board we couldn't read files
+      // a false red; the early return above already guarantees this.)
       if (judgedRows) {
         void recordEndOfServiceParity({
           serviceId: svc.id, label, reason: "rollover",
@@ -2633,13 +2634,16 @@ export default function App() {
       const ready = { key: nextFire.key, index: nextFire.index, name: nextFire.name, at: fmt(new Date()) };
       updMany(id, {
         courseReady: ready,
-        kitchenAlert: {
+        // merge, never overwrite: a pending unconfirmed order delta (cheese,
+        // pairings) must survive a SET landing on the same slot — the popup
+        // shows both together
+        kitchenAlert: mergeKitchenAlert(t.kitchenAlert, {
           timestamp: new Date().toISOString(),
           tableName: t.resName || null,
           seats: [],
           confirmed: false,
           course: ready,
-        },
+        }),
         // a SET to an archived ticket proves it's still live — bring it back
         // next to its alert (Archive mis-taps)
         ...(t.kitchenArchived ? { kitchenArchived: false } : {}),
@@ -3068,7 +3072,22 @@ export default function App() {
   // service content; only templates blank/reserved tables and ghost-clears
   // departed reservations.
   const reconcileBoardWithReservations = (rows) => {
-    setTables(prev => reconcileTables(prev, rows, celebrationKeys));
+    // A table can look blank in THIS device's memory while the restaurant is
+    // mid-meal on it — a stale view waking up, a fresh join racing adoption
+    // (the 19.08 T8 wipe: the reconcile rebuilt a booking template over four
+    // hours of fires because its own view hadn't caught up). The last
+    // SERVER-CONFIRMED baseline knows better: any table whose confirmed row
+    // holds service content is off-limits to the reconcile, whatever the
+    // in-memory view says.
+    const protectedIds = new Set();
+    for (const [id, json] of confirmedTablesJsonRef.current || []) {
+      try {
+        if (json && tableHasServiceContent(JSON.parse(json), celebrationKeys)) {
+          protectedIds.add(Number(id));
+        }
+      } catch { /* unparseable baseline — it makes no claim */ }
+    }
+    setTables(prev => reconcileTables(prev, rows, celebrationKeys, protectedIds));
   };
 
   // Update a field in a reservation's data AND sync to service_tables so
@@ -4397,6 +4416,19 @@ export default function App() {
   // of the initial bundle. onStatus drives the header sync chip and the
   // sqlite-primary probe; the watches below drive every read once primary.
   const [powerSyncStatus, setPowerSyncStatus] = useState(null);
+  // The device-health readout (Gate D). Open from the "?" beside the status
+  // chip on any operating screen.
+  const [healthOpen, setHealthOpen] = useState(false);
+  // Planner truth, the empty case: the reservations watch (below) refuses to
+  // mark the planner loaded off an empty PRE-SYNC read — but a workspace with
+  // genuinely no reservations in the window would then never re-fire the
+  // watch. Once the first sync completes, an empty mirror IS the truth, so
+  // unlock here. (Lives after the powerSyncStatus declaration — TDZ.)
+  // Scoped to the sqlite-primary path only: on the direct fallback the
+  // planner's truth is the server read, which sets the flag itself.
+  useEffect(() => {
+    if (sqlitePrimary && !reservationsLoaded && powerSyncStatus?.hasSynced) setReservationsLoaded(true);
+  }, [sqlitePrimary, powerSyncStatus?.hasSynced, reservationsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
   // Init retry counter: bumping it re-runs the connect effect. A failed init
   // (the SDK chunk not fetching over a dying link at boot — the wifi-extender
   // incident) used to pin the session to the fragile direct-Supabase fallback
@@ -4551,6 +4583,15 @@ export default function App() {
           onReservations: (rows) => {
             if (cancelled) return;
             if (sandboxRef.current) { setReservationsLoaded(true); return; } // test service: keep the in-memory planner
+            // An empty read from a mirror that has not completed its first
+            // sync means "not yet synced", never "no reservations" — the same
+            // rule board truth applies above (serviceKnown) and wines/
+            // beverages apply below. Marking the planner loaded on that tick
+            // opened the CONNECTING gate onto an empty reservations list
+            // (reported 12.08: "opened reservations, they weren't loaded in
+            // yet"). The hasSynced flip is caught by the effect by the boot
+            // gate, so a genuinely empty planner still unlocks.
+            if (!rows.length && !powerSyncStatus?.hasSynced) return;
             setReservations(rows);
             setReservationsLoaded(true);
           },
@@ -5047,12 +5088,15 @@ export default function App() {
   const hProps = {
     appName: effectiveAppName,
     syncLabel, syncLive,
+    // The status chip IS the device-health entry (owner choice, 14.08): the
+    // separate "?" button is gone, and the chip no longer runs the catalogue
+    // sync — that stays on the admin's login screen.
+    onOpenHealth: () => setHealthOpen(true),
     activeCount: active.length, reserved, seated,
     onExit: switchMode,
     onSummary: () => setSummaryOpen(true),
     onArchive: () => setArchiveOpen(true),
     onInventory: () => setInventoryOpen(true),
-    onSyncAll: canAdmin && canRunCatalogSync ? syncWines : undefined,
   };
 
   // Loud warning when the active service date is in the past — the silent
@@ -5284,11 +5328,54 @@ export default function App() {
     </div>
   ) : null;
 
+  // Device health — the answer to the mid-service phone call, reachable from
+  // every operating screen via the "?" beside the status chip. It has to work
+  // for the Kitchen role, which cannot open Admin at all, and it must never
+  // depend on the network to render: everything it reads is already local.
+  const deviceHealthEl = healthOpen ? (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Device health"
+      onClick={() => setHealthOpen(false)}
+      style={{
+        position: "fixed", inset: 0, zIndex: 400, background: "rgba(0,0,0,0.45)",
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+        paddingTop: "max(16px, env(safe-area-inset-top))",
+        paddingBottom: "max(16px, env(safe-area-inset-bottom))",
+      }}
+    >
+      <div
+        onClick={(event) => event.stopPropagation()}
+        style={{ width: "min(560px, 100%)", maxHeight: "100%", overflowY: "auto", background: tokens.neutral[0] }}
+      >
+        <DeviceHealthCard
+          powerSyncStatus={powerSyncStatus}
+          syncStatus={syncStatus}
+          serviceActive={Boolean(serviceDate)}
+          diagnostics={readClientDiagnostics()}
+          buildId={typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "dev"}
+          role={currentRole || ""}
+          workspaceSlug={currentWorkspace?.slug || ""}
+        />
+        <button
+          onClick={() => setHealthOpen(false)}
+          style={{
+            width: "100%", fontFamily: FONT, fontSize: "10px", letterSpacing: "0.14em",
+            textTransform: "uppercase", fontWeight: 700, padding: "14px 18px",
+            border: `1px solid ${tokens.ink[4]}`, borderTop: "none", borderRadius: 0,
+            background: tokens.neutral[0], color: tokens.ink[0], cursor: "pointer",
+            touchAction: "manipulation", minHeight: 48,
+          }}
+        >CLOSE</button>
+      </div>
+    </div>
+  ) : null;
+
   const renderMode = mode && canAccessMode(currentRole, mode) ? mode : null;
 
   if (!renderMode) return <>{serviceDatePickerEl}{sandboxBannerEl}<LoginScreen
       onEnter={m => { if (canAccessMode(currentRole, m)) { changeMode(m); setSel(null); } }}
-      onSyncAll={canAdmin && canRunCatalogSync ? syncWines : undefined}
       role={currentRole}
       canAdmin={canAdmin}
       appName={effectiveAppName}
@@ -5318,7 +5405,7 @@ export default function App() {
       profiles={profilesState.profiles}
       assignments={profilesState.assignments}
       resolveTableFlag={(r) => ({
-        needsTable: !resolveReservationTable(getActiveDiningMap(floorMapsState), r.table_id).table,
+        needsTable: !resolveReservationTable(getActiveDiningMap(floorMapsForDay), r.table_id).table,
       })}
     />
     {archiveOpen && (
@@ -5342,7 +5429,7 @@ export default function App() {
   // staff need to fire/unfire and edit notes here, so this is NOT read-only.
   // The FLOOR sibling view (mode "kitchen_floor") is strictly read-only.
   if (renderMode === "display" || renderMode === "kitchen_floor") return (<>
-    {serviceDatePickerEl}{sandboxBannerEl}
+    {serviceDatePickerEl}{sandboxBannerEl}{deviceHealthEl}
     <div style={{ minHeight: "100vh", background: tokens.ink.bg, fontFamily: FONT, overflowX: "hidden", WebkitTextSizeAdjust: "100%" }}>
       <GlobalStyle />
       <Header
@@ -5382,7 +5469,7 @@ export default function App() {
           {mode === "kitchen_floor" ? (
             <KitchenFloorView
               mapKind={kitchenFloorMap}
-              floorMaps={floorMapsState}
+              floorMaps={floorMapsForDay}
               floorStatus={floorStatus}
               reservations={serviceReservations}
               tables={displayTables}
@@ -5416,7 +5503,7 @@ export default function App() {
             // handlers the kitchen floor view gets make it interactive — seat
             // swaps, terrace assign / change / SET — with the same local-first
             // writes (works with the Wi-Fi down, per Djan).
-            floorMaps={floorMapsState}
+            floorMaps={floorMapsForDay}
             floorStatus={floorStatus}
             reservations={serviceReservations}
             onAssignTerrace={assignTerraceTable}
@@ -5547,6 +5634,7 @@ export default function App() {
         // to prevent. planLayoutSwitch keys conflicts per date+session, so
         // the multi-date set never cross-flags different nights.
         floorReservations={layoutPlanningReservations}
+        layoutServiceDay={serviceDate || currentServiceDay()}
         boardTables={displayTables}
         onUpdateFloorMaps={updateFloorMaps}
         onApplyLayoutSwitch={applyLayoutSwitchRows}
@@ -5559,6 +5647,9 @@ export default function App() {
         onReadEventLog={readEventLogStatus}
         onCheckLogParity={checkLogParity}
         onRestoreToMoment={restoreBoardToMoment}
+        serviceActive={Boolean(serviceDate)}
+        role={currentRole || ""}
+        workspaceSlug={currentWorkspace?.slug || ""}
         onExit={() => changeMode(null)}
       /></Suspense>
     </div>
@@ -5566,7 +5657,7 @@ export default function App() {
 
   // Service mode only
   return (<>
-    {serviceDatePickerEl}{sandboxBannerEl}
+    {serviceDatePickerEl}{sandboxBannerEl}{deviceHealthEl}
     {/* The sheet is a LAYER over this column, not a column beside it — the
         board must not move when a table is opened. Reserving the sheet's
         width reflowed the whole room sideways on every open and close, which
@@ -5595,7 +5686,7 @@ export default function App() {
       {/* The board is ALWAYS mounted. Opening a table raises a side sheet over
           it — nothing navigates away, so the room stays readable (and live)
           behind the scrim while one table is worked. */}
-      <div style={{ padding: appIsMobile ? "0 0 32px" : "0 0 48px", maxWidth: 1100, margin: "0 auto", overflowX: "hidden" }}>
+      <div style={{ padding: appIsMobile ? "0 0 32px" : "0 0 48px", maxWidth: appIsFullscreen ? 1440 : 1100, margin: "0 auto", overflowX: "hidden" }}>
           {/* [SERVICE READOUT] strip — stats + Quick Access toggle */}
           <div style={{
             borderBottom: `1px solid ${tokens.ink[4]}`,
@@ -5703,13 +5794,23 @@ export default function App() {
                The old TerracePanel's whole terrace leg lives in here. */
             <FloorView
               mapKind={serviceView}
-              floorMaps={floorMapsState}
+              floorMaps={floorMapsForDay}
               floorStatus={floorStatus}
               reservations={serviceReservations}
               tables={displayTables}
               menuCourses={activeMenuCourses}
               profiles={profilesState.profiles}
               assignments={profilesState.assignments}
+              optionalExtras={dishes}
+              optionalPairings={pairings}
+              // the chair-tap quick-access panel is the SAME card board mode
+              // expands — same catalogs, same writes
+              aperitifOptions={serviceAperitifOptions}
+              wines={wines}
+              cocktails={cocktails}
+              spirits={spirits}
+              beers={beers}
+              updSeat={updSeat}
               onCycleStatus={(mapId, label) => updateFloorStatus(fs => cycleFloorStatus(fs, mapId, label))}
               onUpdateFloorMaps={updateFloorMaps}
               onAssign={assignTerraceTable}
@@ -5717,6 +5818,11 @@ export default function App() {
               onMove={moveTerracePartyIn}
               onSwapSeats={swapSeats}
               onSendSetToKitchen={sendSetToKitchen}
+              // the dock's DETAILS → raises the same table sheet the board uses
+              onOpenDetail={id => setSel(id)}
+              // the dock's UNSET mirrors the sheet's (App.jsx onUnsetKitchen)
+              onUnsetKitchen={id => upd(id, "courseReady", null)}
+              upd={upd}
               isMobile={appIsMobile}
             />
           ) : (
@@ -5771,7 +5877,7 @@ export default function App() {
           spirits={spirits}
           beers={beers}
           reservationOnTable={reservationOnTable}
-          seatCapOf={id => mapSeatCountForBoardTable(getActiveDiningMap(floorMapsState), id)}
+          seatCapOf={id => mapSeatCountForBoardTable(getActiveDiningMap(floorMapsForDay), id)}
           onClose={() => setSel(null)}
           upd={(f, v) => upd(sel, f, v)}
           updSeat={(sid, f, v) => updSeat(sel, sid, f, v)}

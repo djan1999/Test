@@ -1,5 +1,60 @@
 # Independent Review — Codex Production-Readiness Plan (Restaurant Service App)
 
+> # ⚠️ HISTORICAL DOCUMENT — DO NOT READ AS A CURRENT DEFECT LIST
+>
+> This is a **point-in-time review of commit `ea42936`, dated 2026-08-04**.
+> Most of what it reports has since been fixed. Everything below the status
+> table is preserved **verbatim as the original review** — including findings
+> that are no longer true — because it is the reasoning record behind the
+> pilot hardening, not a bug tracker.
+>
+> **Before acting on anything in this document, check its row in the status
+> table.** A finding marked FIXED describes code that no longer exists. Do not
+> "re-fix" it, and do not quote its claims (e.g. "roles are not enforced",
+> "no local SQLite indexes", "SYNC defaults to Milka's catalogue", "no export
+> or deletion path") as descriptions of the system today.
+>
+> Statuses were re-verified against the working tree on **2026-08-11**.
+>
+> ## Status of every finding
+>
+> | § | Finding (abbreviated) | Status 2026-08-11 | Evidence |
+> |---|---|---|---|
+> | Q1.1 | `services` policies member-only; two-step purge; FK cascade destroys board rows unaudited | **FIXED** | Role-scoped `services` policies + lifecycle audit triggers in `20260804103132_pilot_role_hardening.sql`; matrix in `PILOT_ROLLOUT.md` |
+> | Q1.1b | Kitchen can insert/update reservations and `service_tables` | **PARTIALLY FIXED** | Decided deliberately and documented (Kitchen writes course/fired state; reservation create/update kept for the walk-in flow). The re-confirmation on the pilot's real Kitchen profile is **still open** |
+> | Q1.2 | PowerSync loses the original workspace on update/delete (`trackPrevious` missing) | **FIXED** | `trackPrevious: true` on every synced table in `src/powersync/AppSchema.js`, plus write-time workspace stamping |
+> | Q1.3 | No cross-workspace constraint on `service_tables` | **FIXED** | Composite `foreign key (workspace_id, service_id)` in the hardening migration |
+> | Q1.4 | Onboarding is manual SQL; documented SQL uses an invalid `'owner'` role | **FIXED** | `scripts/onboard-restaurant.mjs` (dry-run unless `--apply`); the `'owner'` snippet is gone from `docs/DEMO_ACCOUNT_SETUP.md` |
+> | Q1.5 | Milka-specific behaviour blocks a second restaurant | **PARTIALLY FIXED** | Name/tables/hotel/branding/sync are per-workspace; timezone, sittings and languages are **still build-time** |
+> | Q1.6 | Recovery and field testing incomplete; README claims roles are unenforced | **PARTIALLY FIXED** | The false README claim is corrected. Physical drills, restore proof and leaked-password protection are **still open** |
+> | Q2 | `trackPrevious` alone insufficient; unresolvable ops must not wedge | **FIXED** | Stamping + skip-with-diagnostic (never a retried error), CAS errors carry codes, connector fixtures corrected |
+> | Q4.2 | No audit triggers on lifecycle tables | **FIXED** | `services_lifecycle_audit` / `service_archive_admin_audit` triggers |
+> | Q4.3 | SYNC imports Milka's catalogue into restaurant 2 (launch-critical) | **FIXED** | `DEFAULT_SYNC_CONFIG` has `provider: null` and both toggles off; legacy Milka/Demo rows recognised by their saved URLs |
+> | Q4.4 | Live DB ≠ repo; a fresh bootstrap does not reproduce production | **FIXED, THEN EXPIRED** | Reconciled and re-proved 2026-08-04/05 (64/64). **Two migrations have landed since** — re-prove before promotion, see `PILOT_ROLLOUT.md` |
+> | Q4.5 | `authenticated` retains bootstrap `GRANT ALL` incl. TRUNCATE | **FIXED** | `revoke` block in the hardening migration; backup table relocated to `private` |
+> | Q4.6 | API: no rate limiting, non-timing-safe cron secret compare | **FIXED** | `api/_security.js` uses `timingSafeEqual` and an in-instance limiter (platform/WAF limits still recommended) |
+> | Q4.7 | Conflict-model gaps (whole-row LWW on contended fields, blind LWW settings) | **STILL OPEN (measured, contained)** | The blank-over-worked case is closed by the worked-content shield + board history (`20260808230000`). Two devices editing the *same field* of the same seat still resolve last-writer-wins; this is measured and reported as a CONCURRENT-TIEBREAK, not silently lost (`docs/EVENT_LOG_PLAN.md`) |
+> | Q5 | Composite constraint under-specified | **FIXED** | `UNIQUE (workspace_id, id)` prerequisite and cascade preserved |
+> | Q6 | Build-time tenancy ceiling; `"MILKA"` fallbacks; two disagreeing manifests; hotel assumptions; inert custom allergy keys | **MOSTLY FIXED** | Neutral `src/config/product.js` fallbacks; one generated manifest (`public/manifest.webmanifest` removed); hotel behind a workspace flag; **custom dietary keys now participate in substitution** (`restrictionPriorityKeys()` builds from the live vocabulary). Timezone/sittings/languages **still open**; `milka*` storage keys deliberately unchanged |
+> | Q7 | RLS tests only string-match SQL files | **PARTIALLY FIXED** | Real pgTAP suites exist (`pilot_role_matrix.sql`, `board_history.sql`, `service_events.sql`) and passed on a disposable branch. **GitHub CI does not run them** — `ci.yml` is `npm run check` + `npm audit` only, so nothing repeats the proof |
+> | Q7 | No local SQLite indexes (`indexes: {}` everywhere) | **FIXED** | Every synced table declares indexes in `AppSchema.js`; measured cost of a board-change notification is well under a millisecond at current scale |
+> | Q8 | Rollout order unsafe | **FIXED** | Executed in the reverse-safe order (resilient client first, migration that night) — see `DEPLOYMENT_RUNBOOK.md` |
+> | Q9.1 | No export path; erasure needs hand-written SQL | **FIXED** | Admin → Data & Privacy: workspace export and exact-name guest erasure (covering board-row history versions and event payloads) |
+> | Q9.2 | No written retention decision | **STILL OPEN** | No controller-approved retention schedule exists |
+> | Q9.3 | Device posture undocumented | **STILL OPEN** | PIN/auto-lock/lost-device procedure unsigned |
+> | Q9.4 | Processor chain / DPAs | **STILL OPEN** | Supabase, Vercel and PowerSync DPAs unreviewed for the pilot's jurisdiction |
+>
+> **Not covered by this review at all** (the architecture moved on after it was
+> written): the service-entity lifecycle, in which services are permanent
+> entities and ending one is non-destructive; the database board history and
+> worked-content shield; and the append-only Logbook, which is dual-written
+> for diagnostics while `service_tables` remains the live board source. See
+> `docs/ARCHITECTURE.md` and `docs/EVENT_LOG_PLAN.md`.
+
+---
+
+*The original review, unaltered, follows.*
+
 Repo: djan1999/Test @ ea42936 · Live project: cvljktjmksfibuyphdln · Reviewed: 2026-08-04
 
 ## Context

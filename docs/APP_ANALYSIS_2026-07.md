@@ -1,5 +1,22 @@
 # Milka Service Board — App Breakdown & Improvement Analysis
 
+> ## ⚠️ HISTORICAL ANALYSIS — NOT A CURRENT DEFECT LIST
+>
+> A point-in-time analysis of the tree on **2026-07-19**, kept for its
+> reasoning and its citations. The architecture has changed twice since it was
+> written, so **large parts of it describe code that no longer exists**. Verify
+> every citation against the working tree before acting on it.
+>
+> Known-stale claims that a reader is most likely to trip over (spot-checked
+> 2026-08-11):
+>
+> - **"Restriction substitution walks a hardcoded `RESTRICTION_PRIORITY_KEYS`, so custom keys are silently inert" (§ around lines 661/673) — FIXED.** `restrictionPriorityKeys()` now builds the order from the LIVE workspace vocabulary, allergies outrank lifestyle choices, EVERY active restriction is applied (lowest priority first) instead of stopping at the first match, and `courseVariantFor` resolves runtime keys, DB column names and column-name slugs alike. Admin-added custom restrictions do reach menus and tickets.
+> - **"The atomic end-of-service RPC" — REPLACED.** Services are now permanent entities; ending one flips a single `services` row to `ended` and removes nothing. `archive_and_finish_service` is a neutered stub with no caller. See `docs/ARCHITECTURE.md`.
+> - **"5,000-line `App.jsx`" and the file/line citations throughout — DRIFTED.** Line numbers do not correspond to the current file.
+>
+> This banner is not an exhaustive audit of the document. Treat an unlabelled
+> finding as **unverified**, not as open.
+
 *July 19, 2026 · Focus areas requested by the owner: (1) Lunch/Dinner switch, (2) Archive, (3) Restrictions, (4) Floor Map — editor, switching people, connectivity.*
 
 **How this was produced:** seven parallel deep-analysis passes (one per subsystem, ~1.9M tokens of code reading) over the full source, tests, migrations and docs, producing 114 findings. The six unique **critical** findings and several highs were then independently re-verified line-by-line against the code — every one held up. Medium/low findings are single-pass analysis results with cited evidence but no second verification pass; treat their details as very likely but re-check the citation before building a fix on one.

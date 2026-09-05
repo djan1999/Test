@@ -260,6 +260,23 @@ export default function TableSheet({
   const removeRestriction = (index) => {
     write("restrictions", (table.restrictions || []).filter((_, i) => i !== index), "RESTRICTION REMOVED");
   };
+  // Mis-tapped position (per Djan, 22.08): each restriction chip carries a
+  // move button cycling P1 → P2 → … → P1, so a wrong guest is one tap to fix
+  // instead of remove-and-re-add. Booking-path write, like addRestriction, so
+  // the reservation blob stays in step.
+  const restrPositions = seats.length
+    ? seats.map(s => Number(s.id))
+    : Array.from({ length: covers }, (_, i) => i + 1);
+  const nextRestrPos = (pos) =>
+    restrPositions[(restrPositions.indexOf(Number(pos)) + 1) % restrPositions.length];
+  const moveRestriction = (index) => {
+    const list = table.restrictions || [];
+    const r = list[index];
+    if (!r || restrPositions.length === 0) return;
+    const pos = nextRestrPos(r.pos);
+    updBooking("restrictions", list.map((x, i) => (i === index ? { ...x, pos } : x)));
+    flash(`${restrCompact(r.note).toUpperCase()} → P${pos}`);
+  };
   const addRestriction = (key) => {
     const next = [...(table.restrictions || []), { pos: addRestrSeat, note: key }];
     updBooking("restrictions", next);
@@ -868,21 +885,38 @@ export default function TableSheet({
           ) : (
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {(table.restrictions || []).map((r, i) => (
-                <button
-                  key={`${r.note}-${r.pos ?? "x"}-${i}`}
-                  type="button"
-                  onClick={() => removeRestriction(i)}
-                  aria-label={`Remove ${restrCompact(r.note)}${r.pos ? ` from position ${r.pos}` : ""}`}
-                  style={{
-                    fontFamily: FONT, fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase",
-                    minHeight: TAP, padding: "6px 10px",
-                    border: `1px solid ${tokens.red.border}`, borderRadius: 0,
-                    background: tokens.red.bg, color: tokens.red.text, fontWeight: 600,
-                    cursor: "pointer", touchAction: "manipulation",
-                  }}
-                >
-                  [{restrCompact(r.note)}] {r.pos ? `P${r.pos}` : "TABLE"} ×
-                </button>
+                <div key={`${r.note}-${r.pos ?? "x"}-${i}`} style={{ display: "inline-flex", alignItems: "stretch" }}>
+                  <button
+                    type="button"
+                    onClick={() => removeRestriction(i)}
+                    aria-label={`Remove ${restrCompact(r.note)}${r.pos ? ` from position ${r.pos}` : ""}`}
+                    style={{
+                      fontFamily: FONT, fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase",
+                      minHeight: TAP, padding: "6px 10px",
+                      border: `1px solid ${tokens.red.border}`, borderRadius: 0,
+                      background: tokens.red.bg, color: tokens.red.text, fontWeight: 600,
+                      cursor: "pointer", touchAction: "manipulation",
+                    }}
+                  >
+                    [{restrCompact(r.note)}] {r.pos ? `P${r.pos}` : "TABLE"} ×
+                  </button>
+                  {restrPositions.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => moveRestriction(i)}
+                      aria-label={`Move ${restrCompact(r.note)} to position ${nextRestrPos(r.pos)}`}
+                      style={{
+                        fontFamily: FONT, fontSize: 9, letterSpacing: "0.06em", textTransform: "uppercase",
+                        minHeight: TAP, padding: "6px 8px", marginLeft: -1,
+                        border: `1px solid ${tokens.red.border}`, borderRadius: 0,
+                        background: tokens.neutral[0], color: tokens.red.text, fontWeight: 600,
+                        cursor: "pointer", touchAction: "manipulation",
+                      }}
+                    >
+                      →P{nextRestrPos(r.pos)}
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           )}

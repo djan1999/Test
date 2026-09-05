@@ -17,9 +17,29 @@ export/exact-name guest erasure.
 
 This does **not** make the product self-serve or automatically launch-ready.
 Billing, setup wizard, broader localization, legal terms/DPAs, approved
-retention periods, proven backup restoration, real-Postgres policy execution,
-and physical tablet drills remain open. `PILOT_ROLLOUT.md` is the authoritative
-gate; the phases below remain the longer-term product roadmap.
+retention periods, proven backup restoration, repeatable real-Postgres policy
+execution, and physical tablet drills remain open. `PILOT_ROLLOUT.md` is the
+authoritative gate; the phases below remain the longer-term product roadmap.
+
+## Where the board's truth lives (12.08.2026)
+
+`service_tables` is the live board source — **permanently**. The
+append-only Logbook (`service_events`) is **dual-written and read for
+diagnostics only**; its Phase-4 cutover was **cancelled by owner decision
+on 12.08.2026**, and the card-path defences are permanent. See
+`docs/EVENT_LOG_PLAN.md`, STATUS close-out.
+
+## Still open, stated plainly (verified 11.08.2026)
+
+Nothing below is partially shipped — each is absent:
+
+- **Per-workspace timezone.** Rollover runs on each device's clock against a build-time hour.
+- **Generalized sittings and languages.** Sitting times come from a build-time variable; EN/SI is structural in the schema (`*_si` columns) with locale formatting hardcoded at the render sites.
+- **Controller-approved retention periods** for reservations/allergies, service history, audit records, backups and device caches.
+- **Restore proof.** No production backup has been restored into an isolated project with recorded evidence.
+- **Physical role drills** on the real FOH/Kitchen hardware; live memberships are still admin-only.
+- **Centralized telemetry.** No Sentry/APM, no server-side error aggregation. Device diagnostics are local, bounded and redacted; Vercel logs cover the API routes only.
+- **The role matrix in CI.** `pilot_role_matrix.sql` passed 64/64 on a disposable branch, but `.github/workflows/ci.yml` runs only `npm run check` + `npm audit`, so no automated run repeats it.
 
 ## Where we already are (the good news)
 
@@ -53,8 +73,8 @@ a second customer gets Milka's data and branding.
 |---|------|-------|--------|
 | 0.1 | **Pilot baseline complete; product identity still needs approval.** Neutral shell fallbacks and one generated PWA manifest are in place; restaurant name/subtitle/logo are workspace data. Final product name/colors remain a commercial design decision. | `env.example`, `vite.config.js`, `index.html`, `src/config/product.js` | S remaining |
 | 0.2 | **Pilot safety complete; generic import remains later.** Manual catalogues are the default and automation is disabled unless an operator assigns a provider. The Milka scrape remains an explicit Milka-only integration; CSV import is still a product enhancement. | `api/sync-wines.js`, `src/components/admin/DrinksPanel.jsx` | M remaining |
-| 0.3 | **Neutral menu defaults.** "Rebuild from courses" now bakes in Milka's layout incl. Milka pairing flags (`crayfish`, `n_a_champagne`, `beer`) in `buildDefaultLong/ShortMenuTemplate`. Make the default a neutral N‑course skeleton (or a setup wizard that asks course count), with Milka's as a selectable template. | `src/utils/menuTemplateSchema.js` | M |
-| 0.4 | **Configurable floor plan.** DB hard‑caps tables: `service_tables.table_id CHECK (1..10)`. Make the table set per‑workspace (count + names/zones) stored in workspace settings; relax/replace the constraint. | `schema.sql`, board init in `src/App.jsx` | M |
+| 0.3 | **Neutral menu defaults — DONE.** `buildDefaultLong/ShortMenuTemplate` no longer carry Milka's pairing flags (`crayfish`, `n_a_champagne`, `beer`); a rebuilt default is a neutral skeleton. A setup wizard that asks for course count is still a Phase-1 item. | `src/utils/menuTemplateSchema.js` | — |
+| 0.4 | **Configurable floor plan — DONE for the pilot.** The table set (ids + labels) is per‑workspace in `restaurant_config_v1`; the DB check is now `table_id BETWEEN 1 AND 999` and the client caps a configured floor at 60 tables. Zones/sections are still not modelled. | `schema.sql`, `src/config/restaurantConfig.js` | S remaining |
 | 0.5 | **PowerSync instance config.** URL is baked in `config.js`. Confirm one shared instance is acceptable for early tenants (it is — sync rules isolate per workspace) and document capacity triggers for a second instance. | `src/powersync/config.js` | S |
 
 **Exit criteria:** spin up a brand‑new workspace and it shows *its* name, *its*
@@ -102,7 +122,7 @@ this is sharper than typical SaaS compliance. Supabase is already EU (`eu‑cent
 
 | # | Task | Notes | Effort |
 |---|------|-------|--------|
-| 3.1 | **Formal security review** | Run `/security-review`; audit RLS on every table for cross‑tenant leaks. | M |
+| 3.1 | **Formal security review** | Run `/security-review`; audit RLS on every table for cross‑tenant leaks. The executable matrix exists (`supabase/tests/pilot_role_matrix.sql`, 64/64 on a disposable branch 2026-08-05) but **GitHub CI does not run it**, and two migrations have landed since — so it is a manual, expiring proof, not a standing guarantee. | M |
 | 3.2 | **Remove client‑exposed secrets — COMPLETE** | Manual catalog sync now verifies the signed-in owner server-side; cron secrets never enter the browser bundle. | S |
 | 3.3 | **Legal docs** | Privacy Policy, Terms, and a **DPA** (you're a *processor*; the restaurant is *controller*). Needs a lawyer. | M (+legal) |
 | 3.4 | **Data lifecycle** | Admin workspace export and exact-name guest erasure are implemented for the pilot. Controller-approved retention periods, scheduled lifecycle, broader request workflow, and breach process remain. | M |
@@ -161,9 +181,13 @@ legal (3.3) is calendar‑bound on an external lawyer, so start it early.
 ## De‑Milka hardcoding checklist (quick reference)
 
 - [x] `api/sync-wines.js` — Milka source is opt-in and cron-only; new tenants are inert
+- [x] `src/config/syncConfig.js` — a new workspace has **no** catalogue sync provider and both sync toggles off; legacy Milka/Demo rows are recognised by their saved URLs so they keep working
 - [x] `src/utils/menuTemplateSchema.js` — new/rebuilt defaults contain no Milka pairing flags
 - [ ] `src/powersync/config.js` — baked instance URL (acceptable, document it)
 - [x] `env.example` — neutral app defaults; hotel fields off unless configured
 - [x] `vite.config.js`, `index.html` — single neutral generated manifest and shell title
-- [ ] `schema.sql` — `service_tables.table_id` 1..10 constraint
+- [x] `schema.sql` — the `service_tables.table_id` cap is now 1..999; the table set is workspace-owned in `restaurant_config_v1`
+- [x] `src/config/restaurantConfig.js` — restaurant name, subtitle, tables and hotel features (hotel-guest mode + room list) are workspace data; only the legacy `milka` slug keeps a hotel fallback
+- [x] `src/utils/menuUtils.js` — substitution order is built from the LIVE workspace vocabulary, so admin-added custom dietary restrictions actually reach menus and tickets (allergies outrank lifestyle choices)
 - [x] `README.md` — controlled onboarding command and pilot gate documented
+- [ ] `src/components/reservations/*`, `src/App.jsx` — sitting times still come from the build-time `VITE_DEFAULT_SITTING_TIMES`; no per-workspace sittings or timezone

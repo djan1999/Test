@@ -350,6 +350,19 @@ describe("TableSheet — restrictions by seat", () => {
     expect(upd).toHaveBeenCalledWith("restrictions", [{ pos: 2, note: "nut" }]);
   });
 
+  it("moves a mis-placed restriction to the next position with one tap (22.08)", () => {
+    const { updBooking } = setup({ restrictions: [{ pos: 1, note: "vegan" }, { pos: 2, note: "nut" }] });
+    // P1 → P2 (two seats, cycle wraps)
+    fireEvent.click(screen.getByLabelText("Move Vegan to position 2"));
+    expect(updBooking).toHaveBeenCalledWith("restrictions", [{ pos: 2, note: "vegan" }, { pos: 2, note: "nut" }]);
+  });
+
+  it("the move cycle wraps from the last position back to P1", () => {
+    const { updBooking } = setup({ restrictions: [{ pos: 2, note: "gluten" }] });
+    fireEvent.click(screen.getByLabelText("Move Gluten Free to position 1"));
+    expect(updBooking).toHaveBeenCalledWith("restrictions", [{ pos: 1, note: "gluten" }]);
+  });
+
   // Restrictions sit at the FOOT of the sheet, under the staff note: they are
   // reference the operator reads once on the way to the table, not a control
   // they reach for on every trip, and they used to push the courses and the

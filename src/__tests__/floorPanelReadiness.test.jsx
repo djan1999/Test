@@ -22,11 +22,23 @@ const renderPanel = (overrides = {}) => {
 };
 
 describe("FloorPanel layout activation readiness", () => {
-  it("blocks unresolved NEEDS TABLE plans", () => {
-    const props = renderPanel({ reservations: [reservation("r5", 5)] });
+  it("blocks unresolved NEEDS TABLE plans for the current service", () => {
+    // serviceDay matches the reservation's date → it is TODAY's, so it blocks.
+    const props = renderPanel({ reservations: [reservation("r5", 5)], serviceDay: "2026-07-15" });
     expect(screen.getByRole("button", { name: "CONFIRM SWITCH" })).toBeDisabled();
-    expect(screen.getByRole("alert")).toHaveTextContent("Resolve every conflict");
+    expect(screen.getByRole("alert")).toHaveTextContent("Resolve today's conflicts");
     expect(props.onApplyLayoutSwitch).not.toHaveBeenCalled();
+  });
+
+  it("a FUTURE-dated NEEDS TABLE warns but does NOT block tonight's switch", () => {
+    // Tonight (serviceDay) is clean; the stranded booking is next week.
+    const props = renderPanel({
+      serviceDay: "2026-07-15",
+      reservations: [{ ...reservation("r5", 5), date: "2026-07-22" }],
+    });
+    expect(screen.getByRole("button", { name: "CONFIRM SWITCH" })).not.toBeDisabled();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByText(/won.t have a table under this layout/i)).toBeInTheDocument();
   });
 
   it("retains the active layout and surfaces an accessible error when the batch fails", async () => {
