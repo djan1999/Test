@@ -10,6 +10,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import ResvForm from "../components/reservations/ResvForm.jsx";
+import CenteredModal from "../components/ui/CenteredModal.jsx";
 import { blankTable } from "../utils/tableHelpers.js";
 
 if (typeof window !== "undefined" && !window.ResizeObserver) {
@@ -50,6 +51,61 @@ const saveForm = async (initial) => {
   await waitFor(() => expect(onSave).toHaveBeenCalled());
   return onSave.mock.calls[0][0];
 };
+
+describe("reservation save and draft safety", () => {
+  const form = (props = {}) => render(<ResvForm initial={makeInitial()} tables={tables} reservations={[]} onSave={vi.fn()} onCancel={vi.fn()} {...props} />);
+
+  it("clears a dinner time when changing to lunch and accepts a custom sitting", async () => {
+    const onSave = vi.fn().mockResolvedValue({ ok: true });
+    form({ onSave });
+    fireEvent.click(screen.getByText("Lunch"));
+    expect(screen.getByLabelText("Custom sitting time")).toHaveValue("");
+    fireEvent.change(screen.getByLabelText("Custom sitting time"), { target: { value: "12:45" } });
+    fireEvent.click(screen.getByText("SAVE"));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(onSave.mock.calls[0][0].data).toMatchObject({ service_session: "lunch", resTime: "12:45" });
+  });
+
+  it.each(["throw", "result"])("preserves edits and allows retry after a %s failure", async (mode) => {
+    const onSave = vi.fn();
+    if (mode === "throw") onSave.mockRejectedValueOnce(new Error("Connection failed"));
+    else onSave.mockResolvedValueOnce({ ok: false, error: new Error("Connection failed") });
+    onSave.mockResolvedValueOnce({ ok: true });
+    form({ onSave });
+    fireEvent.change(screen.getByPlaceholderText("Guest name…"), { target: { value: "Updated guest" } });
+    fireEvent.click(screen.getByText("SAVE"));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Connection failed");
+    expect(screen.getByPlaceholderText("Guest name…")).toHaveValue("Updated guest");
+    fireEvent.click(screen.getByText("SAVE"));
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(2));
+  });
+
+  it("blocks repeated saves while one is pending", async () => {
+    let resolve;
+    const onSave = vi.fn(() => new Promise(r => { resolve = r; }));
+    form({ onSave });
+    const save = screen.getByText("SAVE");
+    fireEvent.click(save);
+    fireEvent.click(save);
+    expect(onSave).toHaveBeenCalledTimes(1);
+    resolve({ ok: true });
+    await waitFor(() => expect(screen.getByText("SAVE")).toBeEnabled());
+  });
+
+  it("asks before Escape discards a dirty modal and keeps the form on refusal", () => {
+    const close = vi.fn();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<CenteredModal label="Edit reservation" onClose={close}><ResvForm initial={makeInitial()} tables={tables} reservations={[]} onSave={vi.fn()} onCancel={close} /></CenteredModal>);
+    fireEvent.change(screen.getByPlaceholderText("Guest name…"), { target: { value: "Unsaved draft" } });
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(confirm).toHaveBeenCalledWith("Discard unsaved reservation changes?");
+    expect(close).not.toHaveBeenCalled();
+    confirm.mockReturnValue(true);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(close).toHaveBeenCalledTimes(1);
+    confirm.mockRestore();
+  });
+});
 
 describe("ResvForm — flow-key carry-through", () => {
   it("a live terrace party's flow state survives an edit", async () => {

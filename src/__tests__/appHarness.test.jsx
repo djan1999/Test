@@ -20,7 +20,7 @@
 //      queue drain on SQLite-primary).
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, waitFor, act, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, act, fireEvent, within } from "@testing-library/react";
 import {
   backend, resetBackend, seed, seedService, remoteRows, localRows,
   drainUploads, syncDown, WORKSPACE_ID,
@@ -160,6 +160,85 @@ const switchAnnaToT4 = async () => {
 
 const rowFor = (rows, tableId) => rows.find((r) => Number(r.table_id) === Number(tableId));
 const annaRowCount = (rows) => rows.filter((r) => r?.data?.resName === "Anna Harness").length;
+
+describe.each([false, true])("live party relocation (SQLite: %s)", (psMode) => {
+  beforeEach(() => resetBackend({ psMode }));
+
+  const seedParty = (id, name, arrival) => {
+    const data = {
+      ...blankTable(id), active: true, arrivedAt: arrival,
+      resName: name, resTime: "19:00", guests: 1,
+      kitchenLog: { starter: { firedAt: `${arrival}:00`, done: true } },
+      kitchenSent: true, notes: `${name} notes`,
+      seats: [{ id: 1, water: "XC", pairing: name, aperitifs: [name], extras: {} }],
+    };
+    seed("service_tables", [{ service_id: SVC, table_id: id, data, updated_at: new Date().toISOString() }]);
+    seed("reservations", [{ id: `res-${id}`, date: TODAY(), table_id: id,
+      data: { resName: name, resTime: "19:00", guests: 1, tableGroup: [id], service_session: "dinner" } }]);
+    return data;
+  };
+  const openParty = async () => {
+    render(<App />);
+    fireEvent.click(await screen.findByText("[Service]"));
+    fireEvent.click((await screen.findAllByText("Details"))[0]);
+  };
+  const pick = async (action, title, target) => {
+    fireEvent.click(await screen.findByText(action));
+    fireEvent.click(within(await screen.findByRole("dialog", { name: title })).getByText(target));
+  };
+  const assertParty = (id, original) => {
+    const data = rowFor(psMode ? localRows("service_tables") : remoteRows("service_tables"), id)?.data;
+    expect(data).toMatchObject({ active: true, arrivedAt: original.arrivedAt,
+      resName: original.resName, kitchenLog: original.kitchenLog, kitchenSent: true,
+      notes: original.notes });
+    expect(data.seats[0]).toMatchObject(original.seats[0]);
+  };
+
+  it.each([2, 6])("joining T4 to T%s preserves the party on the primary and after split", async (target) => {
+    seedService({ id: SVC, date: TODAY(), session: "dinner", startedAt: new Date().toISOString() });
+    const party = seedParty(4, "Party Four", "18:42");
+    await openParty();
+    await pick("JOIN TABLE +", "[JOIN TABLE]", `T0${target}`);
+    await waitFor(() => assertParty(Math.min(4, target), party), { timeout: 5000 });
+    fireEvent.click(await screen.findByText(`SPLIT T0${Math.min(4, target)}+T0${Math.max(4, target)}`));
+    await waitFor(() => {
+      const owner = (psMode ? localRows("reservations") : remoteRows("reservations")).find(r => r.id === "res-4");
+      expect(owner.data.tableGroup).toEqual([]);
+      assertParty(Number(owner.table_id), party);
+    }, { timeout: 5000 });
+  }, 20000);
+
+  it.each([1, 2])("T4/T6 swap preserves both complete parties through a store round trip (%s taps)", async (taps) => {
+    seedService({ id: SVC, date: TODAY(), session: "dinner", startedAt: new Date().toISOString() });
+    const four = seedParty(4, "Party Four", "18:42");
+    const six = seedParty(6, "Party Six", "19:12");
+    await openParty();
+    fireEvent.click(await screen.findByText("SWAP TABLES"));
+    const target = within(await screen.findByRole("dialog", { name: "[SWAP TABLES]" })).getByText("T06");
+    for (let i = 0; i < taps; i++) fireEvent.click(target);
+    await waitFor(() => { assertParty(4, six); assertParty(6, four); }, { timeout: 5000 });
+    await act(async () => { if (psMode) await syncDown(); else emitRealtime("service_tables", {}); });
+    await waitFor(() => { assertParty(4, six); assertParty(6, four); }, { timeout: 5000 });
+  }, 20000);
+
+  it.each([2, 6])("moving T4 to T%s carries arrival, KDS and orders through reconnect", async (target) => {
+    seedService({ id: SVC, date: TODAY(), session: "dinner", startedAt: new Date().toISOString() });
+    const party = seedParty(4, "Party Four", "18:42");
+    await openParty();
+    backend.connectorDown = psMode;
+    await pick("MOVE TABLE", "[MOVE TABLE]", `T0${target}`);
+    await waitFor(() => {
+      assertParty(target, party);
+      expect(rowFor(psMode ? localRows("service_tables") : remoteRows("service_tables"), 4)?.data.resName).toBe("");
+    }, { timeout: 5000 });
+    await act(async () => {
+      if (psMode) { backend.connectorDown = false; await drainUploads(); await syncDown(); }
+      else emitRealtime("service_tables", {});
+    });
+    await waitFor(() => assertParty(target, party));
+    expect(rowFor(remoteRows("service_tables"), target)?.data.kitchenLog).toEqual(party.kitchenLog);
+  }, 20000);
+});
 
 describe.each([
   ["fallback", false],

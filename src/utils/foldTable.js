@@ -15,7 +15,7 @@
  * Pure and dependency-free. Callers are expected to sanitize the result.
  */
 
-import { tableHasServiceContent } from "./tableHelpers.js";
+import { tableHasServiceContent, sanitizeTable } from "./tableHelpers.js";
 
 const eq = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const asObject = (value) => value && typeof value === "object" && !Array.isArray(value) ? value : {};
@@ -146,6 +146,9 @@ const partyKey = (table) => {
 // claimed by another party before our MOVE/START arrived.
 export function unsafeTableTransitionConflict(ancestor, mine, theirs) {
   if (!ancestor || eq(mine, theirs) || eq(theirs, ancestor)) return null;
+  // UI ancestors include default fields that older persisted rows may omit.
+  // Those defaults are not a concurrent edit and must not veto a move/clear.
+  if (theirs && eq(sanitizeTable(theirs), sanitizeTable(ancestor))) return null;
   const baseHadService = tableHasServiceContent(ancestor);
   const mineHasService = tableHasServiceContent(mine);
   const theirsHasService = tableHasServiceContent(theirs);

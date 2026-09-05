@@ -33,7 +33,7 @@ import {
   makeSeats, blankTable, sanitizeTable, initTables, fmt, parseHHMM,
   reservationDescriptiveFields, resolveReservationSession, tableHasServiceContent,
   reservationTableIds, mergeRestrictionPositions, startedTablePatchFromReservation,
-  repointReservation, moveTableRows, swapTableRows, massBlankedIndices,
+  repointReservation, moveTableRows, swapTableRows, regroupTableRows, massBlankedIndices,
   tableIsGroupMember,
   applyLayoutSwitchToTables, renameFloorPositionsKey, floorPositionKey,
   swapSeatData, moveSeatOnFloor, materializeFloorPositions,
@@ -3185,7 +3185,7 @@ export default function App() {
       .sort((a, b) => a - b);
     const nextData = { ...(owner.data || {}), tableGroup: group };
     const persisted = await persistReservationRow({
-      id: owner.id, date: owner.date, table_id: owner.table_id, data: nextData,
+      id: owner.id, date: owner.date, table_id: group[0], data: nextData,
     });
     if (!persisted.ok) {
       const error = persisted.error || new Error("The tables could not be joined.");
@@ -3194,8 +3194,10 @@ export default function App() {
       recordClientDiagnostic("join tables", error);
       return { ok: false, reason: "persist-failed", error };
     }
-    setReservations(prev => prev.map(r => r.id === owner.id ? { ...r, data: nextData } : r));
-    setTables(prev => prev.map(t => (group.includes(Number(t.id)) ? { ...t, tableGroup: group } : t)));
+    const oldGroup = reservationTableIds(owner.data, owner.table_id);
+    oldGroup.filter(id => Number(id) !== group[0]).forEach(id => intentionalBoardBlankRef.current.add(Number(id)));
+    setReservations(prev => prev.map(r => r.id === owner.id ? { ...r, table_id: group[0], data: nextData } : r));
+    setTables(prev => regroupTableRows(prev, oldGroup, group));
     setSel(Math.min(...group));
     return { ok: true, group };
   };
@@ -3233,11 +3235,7 @@ export default function App() {
     }
     // Flag the blanks as intentional or the mass-blank guard restores them.
     release.forEach(id => intentionalBoardBlankRef.current.add(id));
-    setTables(prev => prev.map(t => {
-      if (Number(t.id) === keep) return { ...t, tableGroup: [] };
-      if (release.includes(Number(t.id))) return blankTable(t.id);
-      return t;
-    }));
+    setTables(prev => regroupTableRows(prev, group, [keep]));
     setSel(keep);
     return { ok: true, keep, released: release };
   };
@@ -5996,7 +5994,7 @@ export default function App() {
             excludeId={null}
             hotelGuestsEnabled={hotelGuestsEnabled}
             roomOptions={roomOptions}
-            onSave={async (row) => { const r = await upsertReservation(row); if (r?.ok) setAddResOpen(false); }}
+            onSave={async (row) => { const r = await upsertReservation(row); if (r?.ok) setAddResOpen(false); return r; }}
             onCancel={() => setAddResOpen(false)}
           />
         </CenteredModal>

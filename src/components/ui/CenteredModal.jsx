@@ -1,4 +1,8 @@
 import { tokens } from "../../styles/tokens.js";
+import { useRef } from "react";
+import { useModalEscape } from "../../hooks/useModalEscape.js";
+import { useDialog } from "../../hooks/useDialog.js";
+import { ModalDismissContext } from "./ModalDismissContext.js";
 
 const FONT = tokens.font;
 
@@ -8,9 +12,13 @@ const FONT = tokens.font;
  * Clicking the backdrop calls onClose; clicks inside the panel are ignored.
  */
 export default function CenteredModal({ children, onClose, label, maxWidth = 560 }) {
+  const beforeClose = useRef(null);
+  const dialogRef = useDialog();
+  const close = () => { if (!beforeClose.current || beforeClose.current()) onClose(); };
+  useModalEscape(close);
   return (
     <div
-      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}
       style={{
         position: "fixed", inset: 0, zIndex: 600,
         background: "rgba(0,0,0,0.45)",
@@ -23,14 +31,14 @@ export default function CenteredModal({ children, onClose, label, maxWidth = 560
         overflowY: "auto",
       }}
     >
-      <div onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth, margin: "auto 0" }}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={label || "Dialog"} tabIndex={-1} onClick={e => e.stopPropagation()} style={{ width: "100%", maxWidth, margin: "auto 0" }}>
         {label && (
           <div style={{
             fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em",
             color: tokens.neutral[0], marginBottom: 6, textTransform: "uppercase",
           }}>{label}</div>
         )}
-        {children}
+        <ModalDismissContext.Provider value={beforeClose}>{children}</ModalDismissContext.Provider>
       </div>
     </div>
   );
