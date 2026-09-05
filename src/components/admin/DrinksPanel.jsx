@@ -48,6 +48,8 @@ export default function DrinksPanel({
 }) {
   const isMobile = useIsMobile(BP.md);
   const [drinkTab, setDrinkTab] = useState("wines");
+  const [wineSearch, setWineSearch] = useState("");
+  const [glassOnly, setGlassOnly] = useState(false);
 
   // Local state for editing
   const [localWines, setLocalWines] = useState(wines.map(w => ({ ...w })));
@@ -75,20 +77,33 @@ export default function DrinksPanel({
 
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
   const handleSaveDrinks = useCallback(async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setSaved(false);
     setSaveError("");
+    try {
     const wRes = await onUpdateWines(localWines);
     if (wRes && wRes.ok === false) {
-      setSaveError(wRes.error || "Wine save failed");
+      setSaveError(wRes.error?.message || String(wRes.error || "Wine save failed"));
       return;
     }
     const bRes = await onSaveBeverages({ cocktails: localCocktails, spirits: localSpirits, beers: localBeers });
     if (bRes && bRes.ok === false) {
-      setSaveError(bRes.error || "Beverage save failed");
+      setSaveError(bRes.error?.message || String(bRes.error || "Beverage save failed"));
       return;
     }
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+    } catch (error) {
+      setSaveError(error?.message || String(error));
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   }, [localWines, localCocktails, localSpirits, localBeers, onUpdateWines, onSaveBeverages]);
 
   const tabBtn = t => ({
@@ -106,21 +121,26 @@ export default function DrinksPanel({
         {["wines", "cocktails", "spirits", "beers"].map(t => (
           <button key={t} style={tabBtn(t)} onClick={() => setDrinkTab(t)}>{t.toUpperCase()}</button>
         ))}
-        <button type="button" onClick={handleSaveDrinks} style={{
+        <button type="button" disabled={saving} onClick={handleSaveDrinks} style={{
           fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
           border: `1px solid ${saved ? tokens.ink[3] : saveError ? tokens.red.border : tokens.green.border}`, borderRadius: 0, cursor: "pointer",
           background: tokens.neutral[0], color: saved ? tokens.ink[3] : saveError ? tokens.red.text : tokens.green.text, marginLeft: "auto",
           transition: "background 0.2s, border-color 0.2s",
-        }}>{saved ? "SAVED" : "SAVE DRINKS"}</button>
+        }}>{saving ? "SAVING…" : saved ? "SAVED" : "SAVE DRINKS"}</button>
       </div>
       {saveError && (
-        <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.red.text, marginBottom: 10, maxWidth: 560 }}>
+        <div role="alert" style={{ fontFamily: FONT, fontSize: 10, color: tokens.red.text, marginBottom: 10, maxWidth: 560 }}>
           {saveError}
         </div>
       )}
 
       {drinkTab === "wines" && (
         <>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
+            <input type="search" aria-label="Search wines" placeholder="Wine name or producer…" value={wineSearch} onChange={e => setWineSearch(e.target.value)} style={{ ...baseInp, flex: 1 }} />
+            <label><input type="checkbox" checked={glassOnly} onChange={e => setGlassOnly(e.target.checked)} /> By glass</label>
+          </div>
+          {!localWines.some(w => (!glassOnly || w.byGlass) && `${w.name} ${w.producer}`.toLowerCase().includes(wineSearch.trim().toLowerCase())) && <p role="status">No matching wines.</p>}
           {!isMobile && (
             <>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 70px 1fr 52px 28px", gap: 8, marginBottom: 8 }}>
@@ -132,7 +152,7 @@ export default function DrinksPanel({
             </>
           )}
           <div style={{ display: "flex", flexDirection: "column", gap: isMobile ? 12 : 7, marginBottom: 20 }}>
-            {localWines.map(w => (
+            {localWines.filter(w => (!glassOnly || w.byGlass) && `${w.name} ${w.producer}`.toLowerCase().includes(wineSearch.trim().toLowerCase())).map(w => (
               isMobile ? (
                 <div key={w.id} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "10px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, background: tokens.neutral[0] }}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 28px", gap: 8, alignItems: "center" }}>

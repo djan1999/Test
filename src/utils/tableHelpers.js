@@ -650,6 +650,31 @@ export const swapTableRows = (tables, aId, bId) => {
   });
 };
 
+// A combined party is operated through its lowest numbered table. Move the
+// whole party there when the group changes; leaving service state on a hidden
+// secondary makes arrival/KDS state disappear and a later split deletes it.
+export const regroupTableRows = (tables, oldIds, newIds) => {
+  const before = [...new Set(oldIds.map(Number))].sort((a, b) => a - b);
+  const after = [...new Set(newIds.map(Number))].sort((a, b) => a - b);
+  if (!before.length || !after.length || after.some(id => !tables.some(t => t.id === id))) return tables;
+  const members = tables.filter(t => before.includes(t.id));
+  const donor = members.find(t => t.id === before[0] && tableHasServiceContent(t))
+    || members.find(t => tableHasServiceContent(t)) || members[0];
+  if (!donor) return tables;
+  const merged = mergeTableGroups(members.map(t => ({ ...t, tableGroup: before })))[0];
+  const party = { ...merged, ...donor,
+    seats: merged.seats, kitchenLog: merged.kitchenLog,
+    bottleWines: merged.bottleWines, restrictions: merged.restrictions,
+  };
+  delete party._groupGuests;
+  return tables.map(t => {
+    if (t.id === after[0]) return { ...party, id: t.id, tableGroup: after.length > 1 ? after : [] };
+    if (after.includes(t.id)) return { ...blankTable(t.id), tableGroup: after };
+    if (before.includes(t.id)) return blankTable(t.id);
+    return t;
+  });
+};
+
 // Rename follow-through for the seats: per-map chair assignments key on
 // "mapId:label" (floorPositionKey) — a table rename orphaned every guest's
 // chair on that table (assignments silently reverted to seat-id defaults,

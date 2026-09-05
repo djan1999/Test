@@ -248,6 +248,14 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
   const tableLabel = (tableId) => (tables || []).find((table) => Number(table.id) === Number(tableId))?.displayLabel
     || `T${String(tableId).padStart(2, "0")}`;
   const [weekOffset,  setWeekOffset]  = useState(0);
+  const [search, setSearch] = useState("");
+  const searchResults = useMemo(() => {
+    const normalize = value => String(value || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const query = normalize(search.trim());
+    if (!query) return [];
+    return reservations.filter(r => normalize(r.data?.resName).includes(query))
+      .sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.data?.resTime || "").localeCompare(String(b.data?.resTime || "")));
+  }, [search, reservations]);
   const [selectedDay, setSelectedDay] = useState(null);   // "YYYY-MM-DD" or null (week view)
   const [editingId,   setEditingId]   = useState(null);   // reservation id being edited, or "new"
   const [ticketId,    setTicketId]    = useState(null);    // reservation id showing kitchen preview
@@ -449,7 +457,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 excludeId={null}
                 hotelGuestsEnabled={hotelGuestsEnabled}
                 roomOptions={roomOptions}
-                onSave={async (row) => { const r = await onUpsert(row); if (r?.ok) { setEditingId(null); setDraftFromReservation(null); } }}
+                onSave={async (row) => { const r = await onUpsert(row); if (r?.ok) { setEditingId(null); setDraftFromReservation(null); } return r; }}
                 onCancel={() => { setEditingId(null); setDraftFromReservation(null); }}
                 onResolveConflict={async (resvId, newTableId) => {
                   const target = reservations.find(r => r.id === resvId);
@@ -568,7 +576,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                       excludeId={r.id}
                       hotelGuestsEnabled={hotelGuestsEnabled}
                       roomOptions={roomOptions}
-                      onSave={async (row) => { await onUpsert(row); setEditingId(null); setDraftFromReservation(null); }}
+                      onSave={async (row) => { const r = await onUpsert(row); if (r?.ok) { setEditingId(null); setDraftFromReservation(null); } return r; }}
                       onCancel={() => { setEditingId(null); setDraftFromReservation(null); }}
                       onResolveConflict={async (resvId, newTableId) => {
                         const target = reservations.find(rr => rr.id === resvId);
@@ -974,6 +982,17 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
 
       {/* Week grid — big tappable day tiles */}
       <div style={{ padding: "16px 16px 60px", maxWidth: 600, margin: "0 auto" }}>
+        <label style={{ display: "block", fontSize: 12, marginBottom: 6 }} htmlFor="reservation-search">Find a reservation</label>
+        <input id="reservation-search" type="search" value={search} onChange={e => setSearch(e.target.value)} placeholder="Guest name across loaded dates…" style={{ ...baseInput, width: "100%", marginBottom: 8 }} />
+        {search.trim() && <div style={{ marginBottom: 16 }}>
+          <div role="status" style={{ fontSize: 11, color: tokens.ink[3], marginBottom: 8 }}>
+            {searchResults.length ? `${searchResults.length} matching reservations` : "No matching reservations in loaded dates"}
+          </div>
+          {searchResults.map(r => <button key={r.id} onClick={() => { setSelectedDay(r.date); setEditingId(r.id); }} style={{ display: "block", width: "100%", textAlign: "left", padding: 12, background: tokens.neutral[0], border: `1px solid ${tokens.ink[4]}`, cursor: "pointer" }}>
+            <strong>{r.data?.resName}</strong>
+            <span style={{ display: "block", marginTop: 4 }}>{r.date} · {r.data?.resTime || "Time not set"} · {tableLabel(r.table_id)}</span>
+          </button>)}
+        </div>}
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {weekDays.map(day => {
             const dateStr    = toDateStr(day);

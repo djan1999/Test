@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useModalEscape } from "../../hooks/useModalEscape.js";
 import { tokens } from "../../styles/tokens.js";
 
@@ -80,7 +80,20 @@ export default function TablePickerModal({
   onPick,
   onCancel,
 }) {
-  useModalEscape(onCancel, true);
+  const pendingRef = useRef(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState("");
+  const cancel = () => { if (!pendingRef.current) onCancel(); };
+  useModalEscape(cancel, true);
+  const pick = async (id) => {
+    if (pendingRef.current) return;
+    pendingRef.current = true;
+    setPending(true);
+    setError("");
+    try { await onPick(id); }
+    catch (err) { setError(err?.message || "The table change failed. Please try again."); }
+    finally { pendingRef.current = false; setPending(false); }
+  };
   const copy = MODE_COPY[mode] || MODE_COPY.move;
   const partySize = Number(currentTable?._groupGuests || currentTable?.guests) || null;
 
@@ -115,7 +128,7 @@ export default function TablePickerModal({
   return (
     <div
       role="presentation"
-      onClick={onCancel}
+      onClick={cancel}
       style={{
         position: "fixed", inset: 0, background: tokens.surface.overlay,
         display: "flex", alignItems: "center", justifyContent: "center",
@@ -152,8 +165,8 @@ export default function TablePickerModal({
               <button
                 key={table.id}
                 type="button"
-                disabled={!enabled}
-                onClick={() => enabled && onPick(Number(table.id))}
+                disabled={!enabled || pending}
+                onClick={() => enabled && pick(Number(table.id))}
                 style={{
                   width: "100%", minHeight: 56, textAlign: "left",
                   display: "flex", alignItems: "center", gap: 12,
@@ -177,10 +190,13 @@ export default function TablePickerModal({
           })}
         </div>
 
+        {error && <div role="alert" style={{ padding: 12, color: tokens.red.text }}>{error}</div>}
+        {pending && <div role="status" style={{ padding: 12 }}>Saving table change…</div>}
         <div style={{ padding: 12, borderTop: `1px solid ${tokens.ink[4]}`, display: "flex", justifyContent: "flex-end" }}>
           <button
             type="button"
-            onClick={onCancel}
+            disabled={pending}
+            onClick={cancel}
             style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: "0.12em", textTransform: "uppercase",
               minHeight: 44, padding: "8px 20px", border: `1px solid ${tokens.ink[4]}`,

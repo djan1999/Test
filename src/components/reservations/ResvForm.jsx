@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, useContext } from "react";
+import { ModalDismissContext } from "../ui/ModalDismissContext.js";
 import { RESTRICTIONS, RESTRICTION_GROUPS } from "../../constants/dietary.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput, fieldLabel as mixinFieldLabel, circleButton } from "../../styles/mixins.js";
@@ -83,6 +84,27 @@ export default function ResvForm({
   const [customDetail, setCustomDetail] = useState("");
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const savingRef = useRef(false);
+  const dismissGuard = useContext(ModalDismissContext);
+  const draft = JSON.stringify({ tableIds, name, time, serviceSession, menuType, lang, guests,
+    guestType, rooms, birthday, cakeNote, restrictions, notes, customLabel, customDetail });
+  const initialDraft = useRef(draft);
+  const dirty = draft !== initialDraft.current;
+  const canDismiss = () => !savingRef.current && (!dirty || window.confirm("Discard unsaved reservation changes?"));
+  useEffect(() => {
+    if (dismissGuard) dismissGuard.current = canDismiss;
+    const onBeforeUnload = (event) => {
+      if (!dirty) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      if (dismissGuard) dismissGuard.current = null;
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, [dirty, saving, dismissGuard]);
 
   const sortedGroup = [...tableIds].sort((a, b) => a - b);
   const primaryId = sortedGroup[0] ?? null;
@@ -135,15 +157,23 @@ export default function ResvForm({
   const isConflict = (tid) => !!findConflict(tid);
 
   const handleSessionChange = (s) => {
+    if (s === serviceSession) return;
     setServiceSession(s);
+    setTime("");
     // Lunch always defaults to short menu; dinner clears the auto-selection only
     // if the current value was auto-set from a previous lunch selection.
     if (s === "lunch" && !menuType) setMenuType("short");
   };
 
   const handleSave = async () => {
-    if (!primaryId) return;
+    if (!primaryId || savingRef.current) return;
+    if (time && !/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) {
+      setSaveError("Enter a valid sitting time.");
+      return;
+    }
+    savingRef.current = true;
     setSaving(true);
+    setSaveError("");
     const sortedRooms = guestType === "hotel" ? [...rooms].sort((a, b) => String(a).localeCompare(String(b))) : [];
     const data = {
       service_session: serviceSession, resName: name, resTime: time, menuType, lang, guests, guestType,
@@ -167,8 +197,15 @@ export default function ResvForm({
       // intentionally drop there.
       ...(initial?.data?.clearedFromBoard ? {} : pickFlowKeys(initial?.data)),
     };
-    await onSave({ id: initial?.id, date: initial?.date, table_id: primaryId, data });
-    setSaving(false);
+    try {
+      const result = await onSave({ id: initial?.id, date: initial?.date, table_id: primaryId, data });
+      if (result?.ok === false) throw result.error || new Error("Reservation could not be saved. Please try again.");
+    } catch (error) {
+      setSaveError(error?.message || String(error));
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   };
 
   return (
@@ -311,7 +348,8 @@ export default function ResvForm({
                     {canSwap && (
                       <button
                         onClick={async () => {
-                          await onSwapReservations(excludeId, conflictResv.id);
+                          const result = await onSwapReservations(excludeId, conflictResv.id);
+                          if (result?.ok === false) { setSaveError(result.error?.message || "Table swap was refused. Your changes have been kept."); return; }
                           setTableIds([tid]);
                           setConflictPrompt(null);
                         }}
@@ -435,6 +473,10 @@ export default function ResvForm({
           </div>
             );
           })()}
+          <label style={{ ...fieldLabel, display: "block", marginTop: 8 }}>
+            Custom sitting time
+            <input aria-label="Custom sitting time" type="time" value={time} onChange={e => setTime(e.target.value)} style={{ ...baseInp, marginTop: 4 }} />
+          </label>
         </div>
       </div>
 
@@ -708,8 +750,9 @@ export default function ResvForm({
         <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="VIP, pace, special requests…" style={{ ...baseInp, minHeight: 56, resize: "vertical", lineHeight: 1.5 }} />
       </div>
 
+      {saveError && <div role="alert" style={{ color: tokens.red.text, fontSize: 12, marginBottom: 10 }}>{saveError}</div>}
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-        <button onClick={onCancel} style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", padding: "8px 16px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3] }}>CANCEL</button>
+        <button disabled={saving} onClick={() => { if (canDismiss()) onCancel(); }} style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", padding: "8px 16px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[3] }}>CANCEL</button>
         <button onClick={handleSave} disabled={!primaryId || saving} style={{ fontFamily: FONT, fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase", padding: "8px 20px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.charcoal.default, color: tokens.neutral[0], fontWeight: 600, opacity: (!primaryId || saving) ? 0.5 : 1 }}>
           {saving ? "SAVING…" : "SAVE"}
         </button>

@@ -2,9 +2,11 @@ import { useEffect } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { useModalEscape } from "../../hooks/useModalEscape.js";
 import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
+import { useDialog } from "../../hooks/useDialog.js";
 
 export default function FullModal({ title, onClose, actions, children }) {
   const isMobile = useIsMobile(BP.sm);
+  const dialogRef = useDialog();
   useEffect(() => {
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
@@ -14,7 +16,7 @@ export default function FullModal({ title, onClose, actions, children }) {
   }, []);
   useModalEscape(onClose);
   return (
-    <div style={{
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-label={title || "Dialog"} tabIndex={-1} style={{
       position: "fixed", inset: 0, zIndex: 500,
       background: tokens.ink.bg,
       display: "flex", flexDirection: "column",
@@ -50,6 +52,7 @@ export default function FullModal({ title, onClose, actions, children }) {
         <div style={{ display: "flex", gap: isMobile ? 6 : 8, alignItems: "center", flexShrink: 0 }}>
           {actions}
           <button
+            aria-label="Close dialog"
             onClick={onClose}
             style={{
               fontFamily: tokens.font,
