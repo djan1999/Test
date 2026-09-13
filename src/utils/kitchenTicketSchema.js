@@ -51,26 +51,29 @@ export const KT_BLOCK_META = {
   kt_seats: {
     label: "Seat Assignments",    group: "structure",
     icon: "◇",  color: "#4b4b88", bg: "#f0f0f8",
-    desc: "Per-seat pairing type and dietary restrictions",
+    desc: "Per-seat pairing type, BTG/BTV and dietary restrictions",
     fields: [
       { key: "showPairing",      label: "Show pairing type",           type: "checkbox" },
+      { key: "showPourMode",     label: "Show BTG / BTV",              type: "checkbox" },
       { key: "showRestrictions", label: "Show per-seat restrictions",   type: "checkbox" },
     ],
-    defaults: { showPairing: true, showRestrictions: true },
+    defaults: { showPairing: true, showPourMode: true, showRestrictions: true },
   },
   kt_courses: {
     label: "Course List",         group: "structure",
     icon: "≡",  color: "#3a6a3a", bg: "#eaf4ea",
-    desc: "All courses — order set by Course Order tab",
+    desc: "All courses, plus the digestivo line above its anchored course — order set by Course Order tab",
     fields: [
       { key: "showRestrictions", label: "Show restriction modifications", type: "checkbox" },
       { key: "showPairingAlert", label: "Show pairing alerts",            type: "checkbox" },
       { key: "showSeatNotes",    label: "Show seat / extra notes",        type: "checkbox" },
       { key: "showCourseNotes",  label: "Show kitchen course notes",      type: "checkbox" },
+      { key: "showDigestivo",    label: "Show digestivo service line",    type: "checkbox" },
     ],
     defaults: {
       showRestrictions: true, showPairingAlert: true,
       showSeatNotes: true,    showCourseNotes: true,
+      showDigestivo: true,
     },
   },
   kt_unassigned: {

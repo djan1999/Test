@@ -2,6 +2,7 @@
  * Pure table-data helpers: seat factories, sanitization, time formatting.
  * No React or browser dependencies — safe to import in tests and serverless code.
  */
+import { normalizePourMode } from "./pourMode.js";
 
 const normSeat = (id, e) => ({
   id,
@@ -9,11 +10,16 @@ const normSeat = (id, e) => ({
   pairingSharedWith: e?.pairingSharedWith ?? null,
   water:             e?.water             ?? "—",
   aperitifs: e?.aperitifs ?? [],
+  // Ordered like an aperitif, served inside the menu — see utils/digestivo.js.
+  digestivos: e?.digestivos ?? [],
   glasses:   e?.glasses   ?? [],
   cocktails: e?.cocktails ?? [],
   spirits:   e?.spirits   ?? [],
   beers:     e?.beers     ?? [],
   pairing:   e?.pairing   ?? "",
+  // BTG / BTV — how an UNPAIRED guest is drinking. Exclusive with `pairing`
+  // (constants/pairings.js seatPourMode enforces it on the read side too).
+  pourMode:  normalizePourMode(e?.pourMode),
   extras:    e?.extras    ?? {},
   // A guest's P-number is their stable service identity. Physical chair
   // placement is map/table-specific, so moving P2 to chair 6 on the terrace
@@ -213,8 +219,9 @@ const seatHasContent = (s, ignoreExtraKeys = null) => {
   // and (1).includes crashed the whole app ("n.includes is not a function").
   const ignore = Array.isArray(ignoreExtraKeys) ? ignoreExtraKeys : null;
   if (s.gender || (s.water && s.water !== "—") || (s.pairing && s.pairing !== "—" && s.pairing !== "")) return true;
-  if ((s.aperitifs || []).length || (s.glasses || []).length || (s.cocktails || []).length
-      || (s.spirits || []).length || (s.beers || []).length) return true;
+  if ((s.aperitifs || []).length || (s.digestivos || []).length || (s.glasses || []).length
+      || (s.cocktails || []).length || (s.spirits || []).length || (s.beers || []).length) return true;
+  if (normalizePourMode(s.pourMode)) return true;
   if (Object.entries(s.extras || {}).some(([k, e]) => e?.ordered
       && !(ignore && ignore.includes(k)))) return true;
   if (Object.values(s.optionalPairings || {}).some(p => p?.ordered)) return true;

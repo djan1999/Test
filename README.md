@@ -82,5 +82,14 @@ and deployment-order gates.
   external source remains an optional configured integration; new workspaces
   start with automated catalogue sync disabled.
 - Drinks (cocktails, spirits, beers) can also be edited manually in Admin > Drinks.
+- Quick-access buttons come in two lists, both in Admin > Quick Access. APERITIF
+  is the drink before the menu; DIGESTIVO is the one served inside it. A
+  digestivo only reaches the kitchen ticket once a course is marked "Digestivo
+  served before this course" in Admin > Menu Layout > Courses — the ticket then
+  prints a DIGESTIVO service line directly above that course.
+- A guest who is not on a pairing can be marked BTG (by the glass) or BTV (by
+  the bottle) beside the pairing control in service quick access. The two are
+  mutually exclusive with a pairing, and the next Send carries the choice to the
+  kitchen.
 - The old shared-password gate (`VITE_ACCESS_PASSWORD`) is now only used in
   local-only mode (when Supabase isn't configured).

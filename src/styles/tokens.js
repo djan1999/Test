@@ -115,6 +115,7 @@ const bevGlyph = {
   spirit:   "■",
   beer:     "▲",
   aperitif: "◐",
+  digestivo: "◑",
   bottle:   "◉",
 };
 

@@ -79,14 +79,18 @@ export function firedCoursesForTable(table, menuCourses) {
   return extras.length > 0 ? [...visible, ...extras] : visible;
 }
 
+// Every per-seat drink list. Named once so a new category (digestivos, 13.09)
+// joins the covers test and the drink counts together — the two used to carry
+// the same literal list and drifted the moment one of them was edited.
+const DRINK_FIELDS = ["aperitifs", "digestivos", "glasses", "cocktails", "spirits", "beers"];
+
 // A party that actually SAT: arrival/kitchen markers, or seats carrying real
 // service content (pairings/drinks — staff served them even if nobody tapped
 // "seat"). The archive also files never-arrived reservations (a templated
 // resName/resTime row with blank seats) — a no-show must not count as covers
 // or dilute the pairing percentage.
 const seatHasContent = (s) => seatHasPairing(s)
-  || ["aperitifs", "glasses", "cocktails", "spirits", "beers"]
-    .some((k) => (s?.[k] || []).filter(Boolean).length > 0);
+  || DRINK_FIELDS.some((k) => (s?.[k] || []).filter(Boolean).length > 0);
 const tableWasSeated = (t) => Boolean(
   t && (t.active || t.arrivedAt
     || (t.kitchenLog && Object.keys(t.kitchenLog).length > 0)
@@ -276,7 +280,7 @@ export function findGuestHistory(name, entries, { limit = 5, menuCourses = null 
       const restrictions = [...new Set((t.restrictions || []).map(r => String(r?.note || "").trim())
         .filter(Boolean))];
       const drinks = (t.seats || []).reduce((a, s) =>
-        a + ["aperitifs", "glasses", "cocktails", "spirits", "beers"]
+        a + DRINK_FIELDS
           .reduce((b, k) => b + ((s?.[k] || []).filter(Boolean).length), 0), 0)
         + (t.bottleWines || []).length;
       matches.push({

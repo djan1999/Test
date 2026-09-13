@@ -347,6 +347,9 @@ create table if not exists public.menu_courses (
   short_order integer,
   kitchen_note text not null default '',
   aperitif_btn text,
+  -- The DIGESTIVO service line is printed on the kitchen ticket directly
+  -- ABOVE the course flagged here (see src/utils/digestivo.js).
+  digestivo_before boolean not null default false,
   is_active boolean not null default true,
   updated_at timestamptz not null default now(),
   primary key (workspace_id, position)
@@ -386,6 +389,7 @@ alter table public.menu_courses
   add column if not exists halal jsonb,
   add column if not exists low_fodmap jsonb,
   add column if not exists aperitif_btn text,
+  add column if not exists digestivo_before boolean not null default false,
   add column if not exists is_active boolean not null default true,
   add column if not exists is_last_bite boolean not null default false;
 

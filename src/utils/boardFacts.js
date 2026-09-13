@@ -10,6 +10,7 @@
 // gesture seams carry true intent (Phase 3 proper).
 
 import { kitchenFactsFromDiff } from "./kitchenFacts.js";
+import { seatPourMode } from "./pourMode.js";
 
 const seatsOf = (table) => (Array.isArray(table?.seats) ? table.seats : []);
 const namesOf = (list) => (Array.isArray(list) ? list : [])
@@ -35,7 +36,7 @@ const multisetDelta = (beforeList, afterList) => {
   return { added, removed };
 };
 
-const DRINK_CATEGORIES = ["aperitifs", "glasses", "cocktails", "spirits", "beers"];
+const DRINK_CATEGORIES = ["aperitifs", "digestivos", "glasses", "cocktails", "spirits", "beers"];
 
 // A table's dietary restrictions, normalised. This is ALLERGY data: the whole
 // reason the taxonomy had to grow before the fold could ever be the board —
@@ -164,6 +165,14 @@ export function boardFactsFromDiff(prevTable, nextTable) {
     const aGender = a.gender ?? null;
     if (bGender !== aGender) {
       facts.push({ type: "seat_gender_set", tableId, payload: { seatId, to: aGender } });
+    }
+    // BTG / BTV — how an unpaired guest is drinking. Read through
+    // seatPourMode so a row still carrying both a pairing and a stale mode
+    // records the same single story every other surface shows.
+    const bPour = seatPourMode(b);
+    const aPour = seatPourMode(a);
+    if (bPour !== aPour) {
+      facts.push({ type: "seat_pour_mode_set", tableId, payload: { seatId, from: bPour, to: aPour } });
     }
     for (const category of DRINK_CATEGORIES) {
       const { added, removed } = multisetDelta(b[category], a[category]);

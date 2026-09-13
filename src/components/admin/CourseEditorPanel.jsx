@@ -109,6 +109,7 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
         {!isActive && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.ink[1], background: tokens.ink[4], border: `1px solid ${tokens.ink[3]}`, borderRadius: 0, padding: "2px 6px" }}>ARCHIVED</span>}
         {isOptional && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.ink[1], background: tokens.tint.parchment, border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "2px 6px" }}>OPTIONAL · {course.optional_flag}</span>}
 
+        {course.digestivo_before === true && <span title="Digestivo served before this course" style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.ink[1], background: tokens.tint.parchment, border: `1px solid ${tokens.ink[3]}`, borderRadius: 0, padding: "2px 6px" }}>DIGESTIVO ↑</span>}
         {activeRestrictions.length > 0 && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.red.text, border: `1px solid ${tokens.red.border}`, borderRadius: 0, padding: "2px 6px" }}>{activeRestrictions.length}R</span>}
         {activePairings.length > 0 && <span style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.charcoal.default, border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, padding: "2px 6px" }}>{activePairings.length}P</span>}
         <button
@@ -168,6 +169,23 @@ function CourseCard({ course, onUpdate, onDelete, onMoveUp, onMoveDown, isFirst,
             {course.is_last_bite === true && !String(course.course_key || "").trim() && (
               <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, marginTop: 4 }}>
                 ⚠ needs a Course Key to match the kitchen fire — set one above
+              </div>
+            )}
+          </div>
+          <div style={{ marginBottom: 12 }}>
+            <div style={labelSm}>Digestivo Service</div>
+            <label style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[2], display: "flex", alignItems: "center", gap: 6 }}>
+              <input
+                type="checkbox"
+                checked={course.digestivo_before === true}
+                onChange={e => upd("digestivo_before", e.target.checked)}
+              />
+              Digestivo served before this course — a table whose guests ordered one
+              gets a DIGESTIVO line printed directly above this course on the kitchen ticket
+            </label>
+            {course.digestivo_before === true && !String(course.course_key || "").trim() && (
+              <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, marginTop: 4 }}>
+                ⚠ needs a Course Key to match the ticket row — set one above
               </div>
             )}
           </div>
@@ -405,7 +423,7 @@ export default function CourseEditorPanel({ menuCourses = [], onUpdateCourses, o
       show_on_short: false, short_order: null,
       force_pairing_title: "", force_pairing_sub: "",
       force_pairing_title_si: "", force_pairing_sub_si: "",
-      kitchen_note: "", aperitif_btn: null, is_active: true, restrictions: {},
+      kitchen_note: "", aperitif_btn: null, digestivo_before: false, is_active: true, restrictions: {},
     };
     onUpdateCourses([...menuCourses, newCourse]);
   };

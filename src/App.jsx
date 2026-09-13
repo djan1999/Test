@@ -611,6 +611,18 @@ export default function App() {
     } catch {}
         return DEFAULT_QUICK_ACCESS_ITEMS.map(item => ({ ...item }));
   });
+  // Digestivo buttons — the same configured-button shape as Quick Access, for
+  // the drinks served INSIDE the menu (coffee, tea, a spirit). Its own list
+  // and its own storage key: an aperitif button and a digestivo button are
+  // different products at different moments, and sharing one list would put
+  // the grappa in front of the guest before they sat down.
+  const [digestivoItems, setDigestivoItems] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(workspaceKey("milka_digestivo_access")) || "null");
+      if (stored) return stored;
+    } catch {}
+    return [];
+  });
   // Access gate: checked once at init against 12h TTL
   const [authed,       setAuthed]       = useState(() => readAccess());
   // Reservations & service date — hydrate the planner instantly from cache.
@@ -2022,12 +2034,13 @@ export default function App() {
     let isActiveSkipped = false;
     if (changedRows.length > 0) {
       ({ error } = await scopedFrom(TABLES.MENU_COURSES).upsert(changedRows));
-      // Pre-migration fallback: if the is_active / is_last_bite columns haven't
-      // been added yet, retry without them so the rest of the save still goes
-      // through. The toggles won't persist until the schema migration is
-      // applied, but new courses, edits, and reorders won't be lost.
-      if (error && (error.code === "PGRST204" || /is_active|is_last_bite/i.test(String(error.message || "")))) {
-        const fallbackRows = changedRows.map(({ is_active, is_last_bite, ...rest }) => rest);
+      // Pre-migration fallback: if the is_active / is_last_bite /
+      // digestivo_before columns haven't been added yet, retry without them so
+      // the rest of the save still goes through. The toggles won't persist
+      // until the schema migration is applied, but new courses, edits, and
+      // reorders won't be lost.
+      if (error && (error.code === "PGRST204" || /is_active|is_last_bite|digestivo_before/i.test(String(error.message || "")))) {
+        const fallbackRows = changedRows.map(({ is_active, is_last_bite, digestivo_before, ...rest }) => rest);
         const retry = await scopedFrom(TABLES.MENU_COURSES).upsert(fallbackRows);
         error = retry.error;
         if (!error) {
@@ -4295,6 +4308,35 @@ export default function App() {
     saveStateKey("quick_access", { items });
   };
 
+  // ── Digestivo Access persistence — same contract as Quick Access ──────────
+  useEffect(() => {
+    try { localStorage.setItem(workspaceKey("milka_digestivo_access"), JSON.stringify(digestivoItems)); } catch {}
+  }, [digestivoItems]);
+
+  useEffect(() => {
+    if (!supabase || !psResolved) return;
+    withRetry(() => readStateKey("digestivo_access"))
+      .then(state => { if (Array.isArray(state?.items)) setDigestivoItems(state.items); })
+      .catch(() => {}); // localStorage-hydrated digestivo list stays in place
+  }, [psResolved]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const updateDigestivoAccess = (items) => {
+    setDigestivoItems(items);
+    saveStateKey("digestivo_access", { items });
+  };
+
+  // Digestivo quick-buttons for service. No fallback chain: an unconfigured
+  // digestivo list means the restaurant does not run one, and inventing
+  // buttons from the aperitif config would put the wrong drink on the seat.
+  const digestivoOptions = useMemo(() => digestivoItems
+    .filter(i => i.enabled)
+    .map(i => ({
+      label: i.label,
+      searchKey: i.searchKey || i.label,
+      linkedKey: i.linkedKey,
+      type: i.type || "wine",
+    })), [digestivoItems]);
+
   // ── Aperitif quick-button options (data-driven from Quick Access config) ──
   // aperitifOptions: all enabled items (used in the menu workspace — full list incl. menuOnly).
   // serviceAperitifOptions: excludes items marked menuOnly (used in service DisplayBoard).
@@ -5624,6 +5666,8 @@ export default function App() {
         onSaveWineSyncConfig={saveWineSyncConfig}
         quickAccessItems={quickAccessItems}
         onUpdateQuickAccess={updateQuickAccess}
+        digestivoItems={digestivoItems}
+        onUpdateDigestivoAccess={updateDigestivoAccess}
         aperitifOptions={aperitifOptions}
         floorMaps={floorMapsState}
         // Layout-switch planning must see MORE than the live session's
@@ -5806,6 +5850,7 @@ export default function App() {
               // the chair-tap quick-access panel is the SAME card board mode
               // expands — same catalogs, same writes
               aperitifOptions={serviceAperitifOptions}
+              digestivoOptions={digestivoOptions}
               wines={wines}
               cocktails={cocktails}
               spirits={spirits}
@@ -5851,6 +5896,7 @@ export default function App() {
                   onSeat={seatTable}
                   onUnseat={unseatTable}
                   aperitifOptions={serviceAperitifOptions}
+                  digestivoOptions={digestivoOptions}
                   wines={wines}
                   cocktails={cocktails}
                   spirits={spirits}

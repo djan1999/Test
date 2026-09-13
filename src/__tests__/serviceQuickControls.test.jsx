@@ -36,12 +36,17 @@ describe("service quick controls", () => {
   });
 
   it("cycles back to a truly empty pairing instead of storing a dash", () => {
-    const updSeat = vi.fn();
+    // The pairing cycle writes through the seats updater because it also has
+    // to clear BTG/BTV — the two answer the same question about one chair.
+    const upd = vi.fn();
     const { getByText } = render(
-      <DisplayBoardCard t={table({ pairing: "Our Story" })} quickMode updSeat={updSeat} aperitifOptions={[]} />,
+      <DisplayBoardCard t={table({ pairing: "Our Story" })} quickMode upd={upd} updSeat={vi.fn()} aperitifOptions={[]} />,
     );
     fireEvent.click(getByText("Our Story"));
-    expect(updSeat).toHaveBeenCalledWith(1, 1, "pairing", "");
+    const seatsCall = upd.mock.calls.find((c) => c[1] === "seats");
+    expect(seatsCall).toBeTruthy();
+    const next = seatsCall[2](table().seats);
+    expect(next[0].pairing).toBe("");
   });
 
   it("Send carries the restricted seat's dish modification into the kitchen alert", () => {

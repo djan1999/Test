@@ -100,6 +100,8 @@ export default function AdminLayout({
   // Quick Access
   quickAccessItems,
   onUpdateQuickAccess,
+  digestivoItems = [],
+  onUpdateDigestivoAccess,
   aperitifOptions = [],
   // Floor maps + terrace flow
   floorMaps = null,
@@ -529,14 +531,44 @@ export default function AdminLayout({
           )}
 
           {activeSection === "quickaccess" && (
-            <QuickAccessPanel
-              quickAccessItems={quickAccessItems}
-              onUpdateQuickAccess={onUpdateQuickAccess}
-              wines={wines}
-              cocktails={cocktails}
-              spirits={spirits}
-              beers={beers}
-            />
+            <div style={{ display: "flex", flexDirection: "column", gap: 34 }}>
+              <QuickAccessPanel
+                quickAccessItems={quickAccessItems}
+                onUpdateQuickAccess={onUpdateQuickAccess}
+                wines={wines}
+                cocktails={cocktails}
+                spirits={spirits}
+                beers={beers}
+              />
+              {/* The second list on the same tab, because it is the same
+                  gesture at a later moment: these buttons appear on the seat
+                  under [DIGESTIVO], and a Send puts them on the kitchen
+                  ticket above the course flagged "Digestivo served before
+                  this course" in Menu Layout. */}
+              <div style={{ borderTop: `1px solid ${tokens.ink[4]}`, paddingTop: 26 }}>
+                <QuickAccessPanel
+                  quickAccessItems={digestivoItems}
+                  onUpdateQuickAccess={onUpdateDigestivoAccess}
+                  wines={wines}
+                  cocktails={cocktails}
+                  spirits={spirits}
+                  beers={beers}
+                  heading="DIGESTIVO — buttons shown on the seat, sent to the kitchen ticket above the flagged course"
+                  addPlaceholder="e.g. Espresso"
+                  emptyLabel="No digestivo items configured"
+                  showMenuOnly={false}
+                />
+                <div style={{
+                  fontFamily: FONT, fontSize: 10, color: tokens.ink[3], lineHeight: 1.5,
+                  border: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[0],
+                  padding: "12px 14px", marginTop: 16,
+                }}>
+                  Set WHERE the digestivo lands on the ticket in <strong style={{ color: tokens.ink[2] }}>Menu Layout → Courses</strong>:
+                  open the course it is served before and tick “Digestivo served before this course”.
+                  Without an anchored course the buttons still record the order, but the ticket has nowhere to print it.
+                </div>
+              </div>
+            </div>
           )}
 
           {activeSection === "floor" && floorMaps && (

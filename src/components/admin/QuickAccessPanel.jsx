@@ -49,7 +49,7 @@ function WinePickerInput({ searchKey, linkedKey, onPick, type, wines, cocktails,
         value={q}
         onChange={e => { setQ(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
-        placeholder={(searchKey || linkedKey) ? "search to replace…" : "search wines…"}
+        placeholder={(searchKey || linkedKey) ? "search to replace…" : `search ${type === "wine" ? "wines" : `${type}s`}…`}
         style={style}
       />
       {open && results.length > 0 && (
@@ -94,10 +94,23 @@ function linkedPreviewText(item, wines, cocktails, spirits, beers) {
 }
 
 // ── QuickAccessPanel — configure which drinks appear in Quick Access buttons ──
+//
+// Two lists share this editor, because they are the same thing served at two
+// moments: the APERITIF buttons (before the menu) and the DIGESTIVO buttons
+// (inside it, above the anchored course). Only the copy and one toggle
+// differ, so the panel takes them as props rather than being forked:
+//   heading        — the strip above the list
+//   addPlaceholder — the example label in the add form
+//   showMenuOnly   — the MENU ONLY toggle, which is an aperitif-only idea
+//                    (the printed menu has no digestivo section to hide in)
 export default function QuickAccessPanel({
   quickAccessItems = [],
   onUpdateQuickAccess,
   wines = [], cocktails = [], spirits = [], beers = [],
+  heading = "QUICK ACCESS — configure aperitif/drink buttons shown during service",
+  addPlaceholder = "e.g. Slapšak",
+  emptyLabel = "No quick access items configured",
+  showMenuOnly = true,
 }) {
   const [newLabel,     setNewLabel]     = useState("");
   const [newSearchKey, setNewSearchKey] = useState("");
@@ -183,7 +196,7 @@ export default function QuickAccessPanel({
   return (
     <div>
       <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, color: tokens.ink[3], marginBottom: 16 }}>
-        QUICK ACCESS — configure aperitif/drink buttons shown during service
+        {heading}
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
@@ -210,7 +223,7 @@ export default function QuickAccessPanel({
                     search: <span style={{ color: tokens.ink[2] }}>{item.searchKey}</span>
                     {item.linkedKey && <span style={{ color: tokens.ink[2] }}> · id: {String(item.linkedKey).slice(0, 36)}{String(item.linkedKey).length > 36 ? "…" : ""}</span>}
                     {" · "}{item.type || "wine"}
-                    {item.menuOnly && <span style={{ marginLeft: 6, color: tokens.ink[1], fontWeight: 600 }}>menu only</span>}
+                    {showMenuOnly && item.menuOnly && <span style={{ marginLeft: 6, color: tokens.ink[1], fontWeight: 600 }}>menu only</span>}
                   </div>
                   {preview && (
                     <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.green.text, marginTop: 4 }}>
@@ -224,13 +237,13 @@ export default function QuickAccessPanel({
                   )}
                 </div>
 
-                <button type="button" onClick={() => onUpdateQuickAccess(quickAccessItems.map(i => i.id === item.id ? { ...i, menuOnly: !i.menuOnly } : i))} style={{
+                {showMenuOnly && <button type="button" onClick={() => onUpdateQuickAccess(quickAccessItems.map(i => i.id === item.id ? { ...i, menuOnly: !i.menuOnly } : i))} style={{
                   fontFamily: FONT, fontSize: 8, letterSpacing: 0.5, padding: "4px 8px", border: "1px solid",
                   borderColor: item.menuOnly ? tokens.ink[3] : tokens.ink[4], borderRadius: 0, cursor: "pointer",
                   background: item.menuOnly ? tokens.ink[5] : tokens.neutral[0],
                   color: item.menuOnly ? tokens.ink[1] : tokens.ink[4], flexShrink: 0,
                   whiteSpace: "nowrap",
-                }}>MENU ONLY</button>
+                }}>MENU ONLY</button>}
 
                 <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
                   <button type="button" onClick={() => moveItem(item.id, -1)} disabled={idx === 0}
@@ -287,7 +300,7 @@ export default function QuickAccessPanel({
 
         {quickAccessItems.length === 0 && (
           <div style={{ fontFamily: FONT, fontSize: 11, color: tokens.ink[4], textAlign: "center", padding: "30px 0" }}>
-            No quick access items configured
+            {emptyLabel}
           </div>
         )}
       </div>
@@ -299,7 +312,7 @@ export default function QuickAccessPanel({
             <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.ink[3], marginBottom: 2 }}>BUTTON LABEL</div>
             <input value={newLabel} onChange={e => setNewLabel(e.target.value)}
               onKeyDown={e => e.key === "Enter" && addItem()}
-              placeholder="e.g. Slapšak" style={inpSm} />
+              placeholder={addPlaceholder} style={inpSm} />
           </div>
           <div>
             <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.ink[3], marginBottom: 2 }}>LINKED PRODUCT</div>
