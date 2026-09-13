@@ -17,7 +17,7 @@ const normSeat = (id, e) => ({
   spirits:   e?.spirits   ?? [],
   beers:     e?.beers     ?? [],
   pairing:   e?.pairing   ?? "",
-  // BTG / BTV — how an UNPAIRED guest is drinking. Exclusive with `pairing`
+  // BTG / BTB — how an UNPAIRED guest is drinking. Exclusive with `pairing`
   // (constants/pairings.js seatPourMode enforces it on the read side too).
   pourMode:  normalizePourMode(e?.pourMode),
   extras:    e?.extras    ?? {},

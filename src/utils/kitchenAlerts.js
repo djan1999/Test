@@ -80,7 +80,7 @@ export function kitchenDelta(current = {}, baseline = {}) {
     });
     const pairingChanged = (cur.pairing ?? null) !== (base.pairing ?? null)
       || (cur.pairingSharedWith ?? null) !== (base.pairingSharedWith ?? null)
-      // BTG/BTV rides with the pairing: it answers the same question about
+      // BTG/BTB rides with the pairing: it answers the same question about
       // the same chair, so the kitchen hears a switch between them as one
       // change and the popup prints whichever now holds.
       || (cur.pourMode ?? null) !== (base.pourMode ?? null);

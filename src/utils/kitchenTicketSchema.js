@@ -51,10 +51,10 @@ export const KT_BLOCK_META = {
   kt_seats: {
     label: "Seat Assignments",    group: "structure",
     icon: "◇",  color: "#4b4b88", bg: "#f0f0f8",
-    desc: "Per-seat pairing type, BTG/BTV and dietary restrictions",
+    desc: "Per-seat pairing type, BTG/BTB and dietary restrictions",
     fields: [
       { key: "showPairing",      label: "Show pairing type",           type: "checkbox" },
-      { key: "showPourMode",     label: "Show BTG / BTV",              type: "checkbox" },
+      { key: "showPourMode",     label: "Show BTG / BTB",              type: "checkbox" },
       { key: "showRestrictions", label: "Show per-seat restrictions",   type: "checkbox" },
     ],
     defaults: { showPairing: true, showPourMode: true, showRestrictions: true },

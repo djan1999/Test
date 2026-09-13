@@ -1,7 +1,7 @@
-// ── The digestivo and BTG/BTV, end to end through the real surfaces ──────────
+// ── The digestivo and BTG/BTB, end to end through the real surfaces ──────────
 // The pure helpers are covered in digestivo.test.js and pourMode.test.js. This
 // file checks the three places a server or a chef actually touches them: the
-// seat's quick-access buttons, the exclusivity between a pairing and BTG/BTV,
+// seat's quick-access buttons, the exclusivity between a pairing and BTG/BTB,
 // and the DIGESTIVO line landing above the anchored course on the ticket.
 
 import { describe, it, expect, vi } from "vitest";
@@ -31,8 +31,14 @@ const table = (seats) => ({
 });
 
 const DIGESTIVO_OPTIONS = [
-  { label: "Coffee", searchKey: "Coffee", type: "cocktail" },
-  { label: "Grappa", searchKey: "Grappa", type: "spirit" },
+  { id: 7, label: "Coffee", searchKey: "Coffee", type: "cocktail" },
+  { id: 8, label: "Grappa", searchKey: "Grappa", type: "spirit" },
+];
+
+// The same two buttons, with Coffee carrying subcategories to scroll.
+const DIGESTIVO_WITH_SUBS = [
+  { ...DIGESTIVO_OPTIONS[0], variants: ["Espresso", "Cappuccino"] },
+  DIGESTIVO_OPTIONS[1],
 ];
 
 // The section label renders as several text nodes ("[", "Digestivo", "]") and
@@ -87,6 +93,85 @@ describe("the digestivo buttons on the seat", () => {
     expect(updSeat.mock.calls.at(-1)[3]).toEqual([]);
   });
 
+  it("scrolls a configured button through its subcategories, then back off", () => {
+    const updSeat = vi.fn();
+    let seat = {};
+    const renderAt = () => render(
+      <DisplayBoardCard t={table([seat])} quickMode updSeat={updSeat} upd={vi.fn()}
+        aperitifOptions={[]} digestivoOptions={DIGESTIVO_WITH_SUBS} />,
+    );
+
+    // off → Espresso
+    let view = renderAt();
+    fireEvent.click(view.getByTitle(/^Coffee — off; tap for Espresso$/));
+    expect(updSeat.mock.calls.at(-1)[3].map(d => d.name)).toEqual(["Coffee (Espresso)"]);
+
+    // Espresso → Cappuccino, replacing rather than stacking
+    seat = { digestivos: updSeat.mock.calls.at(-1)[3] };
+    view.unmount();
+    view = renderAt();
+    fireEvent.click(view.getByTitle(/^Coffee — Espresso; tap for Cappuccino$/));
+    expect(updSeat.mock.calls.at(-1)[3].map(d => d.name)).toEqual(["Coffee (Cappuccino)"]);
+
+    // Cappuccino → off
+    seat = { digestivos: updSeat.mock.calls.at(-1)[3] };
+    view.unmount();
+    view = renderAt();
+    fireEvent.click(view.getByTitle(/^Coffee — Cappuccino; tap for off$/));
+    expect(updSeat.mock.calls.at(-1)[3]).toEqual([]);
+  });
+
+  it("shows the current subcategory on the button, with the scroll affordance", () => {
+    render(
+      <DisplayBoardCard
+        t={table([{ digestivos: [{ name: "Coffee (Cappuccino)", baseName: "Coffee", variant: "Cappuccino", digestivoId: 7 }] }])}
+        quickMode updSeat={vi.fn()} upd={vi.fn()}
+        aperitifOptions={[]} digestivoOptions={DIGESTIVO_WITH_SUBS} />,
+    );
+    const btn = screen.getByTitle(/^Coffee — Cappuccino/);
+    expect(btn.textContent).toContain("Cappuccino");
+    expect(btn.textContent).toContain("→");
+  });
+
+  it("advertises the first subcategory while the button is still off", () => {
+    render(
+      <DisplayBoardCard t={table([{}])} quickMode updSeat={vi.fn()} upd={vi.fn()}
+        aperitifOptions={[]} digestivoOptions={DIGESTIVO_WITH_SUBS} />,
+    );
+    expect(screen.getByTitle(/^Coffee — off; tap for Espresso$/).textContent).toContain("Espresso");
+  });
+
+  it("leaves a button with no subcategories as a plain toggle, with no arrow", () => {
+    render(
+      <DisplayBoardCard t={table([{}])} quickMode updSeat={vi.fn()} upd={vi.fn()}
+        aperitifOptions={[]} digestivoOptions={DIGESTIVO_WITH_SUBS} />,
+    );
+    const grappa = screen.getByTitle("Grappa");
+    expect(grappa.textContent).toBe("Grappa");
+  });
+
+  it("scrolling one button leaves the other button's pick alone", () => {
+    const updSeat = vi.fn();
+    render(
+      <DisplayBoardCard
+        t={table([{ digestivos: [{ name: "Grappa", baseName: "Grappa", digestivoId: 8 }] }])}
+        quickMode updSeat={updSeat} upd={vi.fn()}
+        aperitifOptions={[]} digestivoOptions={DIGESTIVO_WITH_SUBS} />,
+    );
+    fireEvent.click(screen.getByTitle(/^Coffee — off/));
+    expect(updSeat.mock.calls.at(-1)[3].map(d => d.name).sort())
+      .toEqual(["Coffee (Espresso)", "Grappa"]);
+  });
+
+  it("shows the chosen subcategory on the read-only seat chip", () => {
+    render(
+      <DisplayBoardCard
+        t={table([{ digestivos: [{ name: "Coffee (Espresso)", baseName: "Coffee", variant: "Espresso", digestivoId: 7 }] }])}
+        quickMode={false} aperitifOptions={[]} digestivoOptions={DIGESTIVO_WITH_SUBS} />,
+    );
+    expect(screen.getByText("D · Coffee (Espresso)")).toBeTruthy();
+  });
+
   it("does not touch the aperitif list, which is a different moment of the night", () => {
     const updSeat = vi.fn();
     render(
@@ -99,7 +184,7 @@ describe("the digestivo buttons on the seat", () => {
   });
 });
 
-describe("BTG / BTV beside the pairing", () => {
+describe("BTG / BTB beside the pairing", () => {
   const renderSeat = (seat, upd = vi.fn()) => {
     const utils = render(
       <DisplayBoardCard t={table([seat])} quickMode updSeat={vi.fn()} upd={upd}
@@ -123,9 +208,9 @@ describe("BTG / BTV beside the pairing", () => {
   it("disables both once the seat takes a pairing — the pairing IS the answer", () => {
     renderSeat({ pairing: "Wine" });
     const btg = screen.getByTitle(/By the glass — unavailable/);
-    const btv = screen.getByTitle(/By the bottle — unavailable/);
+    const btb = screen.getByTitle(/By the bottle — unavailable/);
     expect(btg.disabled).toBe(true);
-    expect(btv.disabled).toBe(true);
+    expect(btb.disabled).toBe(true);
   });
 
   it("a disabled button records nothing when tapped", () => {
@@ -156,10 +241,10 @@ describe("BTG / BTV beside the pairing", () => {
 
   it("shows the mode as a chip in the read-only seat row", () => {
     render(
-      <DisplayBoardCard t={table([{ pourMode: "btv" }])} quickMode={false}
+      <DisplayBoardCard t={table([{ pourMode: "btb" }])} quickMode={false}
         aperitifOptions={[]} digestivoOptions={[]} />,
     );
-    expect(screen.getByText("BTV")).toBeTruthy();
+    expect(screen.getByText("BTB")).toBeTruthy();
   });
 });
 
@@ -187,6 +272,11 @@ describe("the DIGESTIVO line on the kitchen ticket", () => {
     <KitchenBoard tables={[table(seats)]} menuCourses={menuCourses} upd={vi.fn()} updMany={vi.fn()} />,
   );
 
+  it("prints the chosen subcategory, not just the button name", () => {
+    renderTicket([{ digestivos: [{ name: "Coffee (Espresso)", baseName: "Coffee", variant: "Espresso" }] }]);
+    expect(screen.getByText("P1 Coffee (Espresso)")).toBeTruthy();
+  });
+
   it("prints the ordering chairs and the total when a guest ordered one", () => {
     renderTicket([{ digestivos: [{ name: "Coffee" }, { name: "Coffee" }] }, { digestivos: [{ name: "Grappa" }] }]);
     expect(screen.getByText("DIGESTIVO")).toBeTruthy();
@@ -212,12 +302,12 @@ describe("the DIGESTIVO line on the kitchen ticket", () => {
   });
 
   it("shows BTG on the seat chip of an unpaired guest, and never beside a pairing", () => {
-    const { container } = renderTicket([{ pourMode: "btg" }, { pairing: "Wine", pourMode: "btv" }]);
+    const { container } = renderTicket([{ pourMode: "btg" }, { pairing: "Wine", pourMode: "btb" }]);
     // P1 has no pairing, so its chip says BTG; P2 took the Wine pairing, so
-    // its stale BTV must not print beside it.
+    // its stale BTB must not print beside it.
     expect(within(container).getByTitle("By the glass")).toBeTruthy();
     expect(within(container).queryByTitle("By the bottle")).toBeNull();
     expect(container.textContent).toContain("BTG");
-    expect(container.textContent).not.toContain("BTV");
+    expect(container.textContent).not.toContain("BTB");
   });
 });

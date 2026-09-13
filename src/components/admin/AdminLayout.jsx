@@ -557,6 +557,7 @@ export default function AdminLayout({
                   addPlaceholder="e.g. Espresso"
                   emptyLabel="No digestivo items configured"
                   showMenuOnly={false}
+                  showVariants
                 />
                 <div style={{
                   fontFamily: FONT, fontSize: 10, color: tokens.ink[3], lineHeight: 1.5,
@@ -566,6 +567,10 @@ export default function AdminLayout({
                   Set WHERE the digestivo lands on the ticket in <strong style={{ color: tokens.ink[2] }}>Menu Layout → Courses</strong>:
                   open the course it is served before and tick “Digestivo served before this course”.
                   Without an anchored course the buttons still record the order, but the ticket has nowhere to print it.
+                  <br />
+                  Give a button subcategories and it scrolls through them on the seat, the way the pairing
+                  button scrolls its types — “Coffee” → espresso → cappuccino → off. The kitchen ticket
+                  prints the chosen one.
                 </div>
               </div>
             </div>

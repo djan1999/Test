@@ -1,11 +1,11 @@
 /**
- * pourMode.js — BTG / BTV, the drink story for a guest who is NOT on a pairing.
+ * pourMode.js — BTG / BTB, the drink story for a guest who is NOT on a pairing.
  *
  * Until now a seat with no pairing reached the kitchen as silence, and the
  * pass had no way of knowing whether that chair was drinking by the glass,
  * from a bottle the table opened, or not at all. `seat.pourMode` says which:
  *
- *   "btg" — by the glass     "btv" — by the bottle     null — neither
+ *   "btg" — by the glass     "btb" — by the bottle     null — neither
  *
  * It is EXCLUSIVE with `seat.pairing` by construction. A paired guest's wine
  * comes from the pairing, so "Wine · BTG" is not extra detail, it is two
@@ -18,16 +18,24 @@
  * snapshot and the service UI alike.
  */
 
-export const POUR_MODES = ["btg", "btv"];
+export const POUR_MODES = ["btg", "btb"];
 
-export const POUR_MODE_LABEL = { btg: "BTG", btv: "BTV" };
+export const POUR_MODE_LABEL = { btg: "BTG", btb: "BTB" };
 
-export const POUR_MODE_TITLE = { btg: "By the glass", btv: "By the bottle" };
+export const POUR_MODE_TITLE = { btg: "By the glass", btb: "By the bottle" };
 
-/** Anything that isn't one of the two known modes is no mode at all. */
+/**
+ * Anything that isn't one of the two known modes is no mode at all.
+ *
+ * "btv" was the by-the-bottle spelling during development, before the floor
+ * corrected it to BTB. It is accepted and translated rather than dropped, so a
+ * seat set on a preview build keeps its choice instead of silently reading as
+ * "no drink" — the exact silence this field exists to end.
+ */
 export const normalizePourMode = (value) => {
   const v = String(value || "").trim().toLowerCase();
-  return v === "btg" || v === "btv" ? v : null;
+  if (v === "btv") return "btb";
+  return v === "btg" || v === "btb" ? v : null;
 };
 
 /** True when this seat carries a real pairing (anything but empty or "—"). */
@@ -40,11 +48,11 @@ export const seatHasPairing = (seat) => {
 export const seatPourMode = (seat) =>
   seatHasPairing(seat) ? null : normalizePourMode(seat?.pourMode);
 
-/** "BTG" / "BTV" for a chip or a ticket, or "" when the seat has neither. */
+/** "BTG" / "BTB" for a chip or a ticket, or "" when the seat has neither. */
 export const pourModeLabel = (seat) => POUR_MODE_LABEL[seatPourMode(seat)] || "";
 
 /**
- * Tap BTG (or BTV) on a seat: turn it on, turn it off when it was already on,
+ * Tap BTG (or BTB) on a seat: turn it on, turn it off when it was already on,
  * and drop any pairing it replaces. Returns the seat unchanged when `mode` is
  * not a real pour mode, so a bad caller can never blank a pairing by accident.
  */

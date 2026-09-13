@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
 import {
   courseAnchorsDigestivo,
+  digestivoVariants,
+  digestivoCycleStates,
+  digestivoDisplayName,
+  digestivoCurrentState,
+  digestivoNextState,
+  cycleSeatDigestivo,
+  digestivoEntryMatchesOption,
   digestivoAnchorKeys,
   isDigestivoAnchor,
   seatDigestivoNames,
@@ -180,5 +187,153 @@ describe("the admin ticket preview", () => {
 
   it("prints BTG for the sample's unpaired guest", () => {
     expect(generateKitchenTicketHTML(courses, null)).toContain("BTG");
+  });
+});
+
+// ── Subcategories ────────────────────────────────────────────────────────────
+
+const COFFEE = { id: 7, label: "Coffee", searchKey: "Coffee", type: "cocktail", variants: ["Espresso", "Cappuccino"] };
+const GRAPPA = { id: 8, label: "Grappa", searchKey: "Grappa", type: "spirit" };
+const product = (name) => ({ name, notes: "" });
+
+describe("which subcategories a button offers", () => {
+  it("trims, drops blanks and de-duplicates case-insensitively", () => {
+    expect(digestivoVariants({ variants: [" Espresso ", "", "espresso", "Cappuccino", null] }))
+      .toEqual(["Espresso", "Cappuccino"]);
+  });
+
+  it("treats a button with none, or a malformed list, as having none", () => {
+    expect(digestivoVariants(GRAPPA)).toEqual([]);
+    expect(digestivoVariants({ variants: "Espresso" })).toEqual([]);
+    expect(digestivoVariants(null)).toEqual([]);
+  });
+
+  it("scrolls off → each subcategory → off, like the pairing button", () => {
+    expect(digestivoCycleStates(COFFEE)).toEqual(["off", "Espresso", "Cappuccino"]);
+  });
+
+  it("keeps the plain on/off cycle for a button with no subcategories", () => {
+    expect(digestivoCycleStates(GRAPPA)).toEqual(["off", "on"]);
+  });
+});
+
+describe("what a pick is called", () => {
+  it("carries the subcategory in the name, so the kitchen reads the choice", () => {
+    expect(digestivoDisplayName("Coffee", "Espresso")).toBe("Coffee (Espresso)");
+  });
+
+  it("is just the product when there is no subcategory", () => {
+    expect(digestivoDisplayName("Grappa", null)).toBe("Grappa");
+    expect(digestivoDisplayName("Grappa", "  ")).toBe("Grappa");
+  });
+});
+
+describe("scrolling a button on one seat", () => {
+  const tap = (seat, opt, name) => ({ ...seat, digestivos: cycleSeatDigestivo(seat, opt, product(name), {}) });
+
+  it("goes off → first subcategory → second → off", () => {
+    let seat = { id: 1, digestivos: [] };
+    expect(digestivoCurrentState(seat, COFFEE)).toBe("off");
+
+    seat = tap(seat, COFFEE, "Coffee");
+    expect(digestivoCurrentState(seat, COFFEE)).toBe("Espresso");
+    expect(seat.digestivos.map(d => d.name)).toEqual(["Coffee (Espresso)"]);
+
+    seat = tap(seat, COFFEE, "Coffee");
+    expect(digestivoCurrentState(seat, COFFEE)).toBe("Cappuccino");
+    expect(seat.digestivos.map(d => d.name)).toEqual(["Coffee (Cappuccino)"]);
+
+    seat = tap(seat, COFFEE, "Coffee");
+    expect(digestivoCurrentState(seat, COFFEE)).toBe("off");
+    expect(seat.digestivos).toEqual([]);
+  });
+
+  it("replaces rather than stacks — changing your mind is not a second coffee", () => {
+    let seat = { id: 1, digestivos: [] };
+    seat = tap(seat, COFFEE, "Coffee");
+    seat = tap(seat, COFFEE, "Coffee");
+    expect(seat.digestivos).toHaveLength(1);
+  });
+
+  it("still toggles off → on → off for a button with no subcategories", () => {
+    let seat = { id: 1, digestivos: [] };
+    seat = tap(seat, GRAPPA, "Grappa");
+    expect(digestivoCurrentState(seat, GRAPPA)).toBe("on");
+    expect(seat.digestivos.map(d => d.name)).toEqual(["Grappa"]);
+    seat = tap(seat, GRAPPA, "Grappa");
+    expect(seat.digestivos).toEqual([]);
+  });
+
+  it("leaves the other buttons' picks alone", () => {
+    let seat = { id: 1, digestivos: [] };
+    seat = tap(seat, COFFEE, "Coffee");
+    seat = tap(seat, GRAPPA, "Grappa");
+    expect(seat.digestivos.map(d => d.name).sort()).toEqual(["Coffee (Espresso)", "Grappa"]);
+    seat = tap(seat, COFFEE, "Coffee");   // Espresso → Cappuccino
+    expect(seat.digestivos.map(d => d.name).sort()).toEqual(["Coffee (Cappuccino)", "Grappa"]);
+  });
+
+  it("names the next state so the button can advertise the tap", () => {
+    const seat = { id: 1, digestivos: [] };
+    expect(digestivoNextState(seat, COFFEE)).toBe("Espresso");
+    expect(digestivoNextState(seat, GRAPPA)).toBe("on");
+  });
+
+  it("falls back to the button label when no catalogue product resolves", () => {
+    const next = cycleSeatDigestivo({ id: 1, digestivos: [] }, COFFEE, null, {});
+    expect(next[0].name).toBe("Coffee (Espresso)");
+  });
+});
+
+describe("finding a seat's picks again", () => {
+  it("matches on the button id, which survives a renamed product", () => {
+    const entry = { name: "Anything", baseName: "Anything", digestivoId: 7 };
+    expect(digestivoEntryMatchesOption(entry, COFFEE)).toBe(true);
+    expect(digestivoEntryMatchesOption(entry, GRAPPA)).toBe(false);
+  });
+
+  it("falls back to the catalogue name for a pick stored before ids existed", () => {
+    const legacy = { name: "Grappa" };
+    expect(digestivoEntryMatchesOption(legacy, GRAPPA)).toBe(true);
+  });
+
+  it("reads a subcategory admin has since deleted as plain on, not a dead end", () => {
+    // Otherwise the button would sit on a state its own cycle no longer
+    // contains, and no number of taps would reach "off".
+    const seat = { id: 1, digestivos: [{ name: "Coffee (Ristretto)", baseName: "Coffee", variant: "Ristretto", digestivoId: 7 }] };
+    expect(digestivoCurrentState(seat, COFFEE)).toBe("on");
+    expect(digestivoNextState(seat, COFFEE)).toBe("off");
+    expect(cycleSeatDigestivo(seat, COFFEE, product("Coffee"), {})).toEqual([]);
+  });
+});
+
+describe("subcategories reach the kitchen as distinct drinks", () => {
+  it("does not collapse two subcategories of one button into a round", () => {
+    const seat = {
+      id: 1,
+      digestivos: [
+        { name: "Coffee (Espresso)", baseName: "Coffee", variant: "Espresso" },
+        { name: "Coffee (Cappuccino)", baseName: "Coffee", variant: "Cappuccino" },
+      ],
+    };
+    expect(seatDigestivoNames(seat)).toEqual(["Coffee (Espresso)", "Coffee (Cappuccino)"]);
+  });
+
+  it("still collapses two of the SAME subcategory into one ×2", () => {
+    const seat = {
+      id: 1,
+      digestivos: [
+        { name: "Coffee (Espresso)", baseName: "Coffee", variant: "Espresso" },
+        { name: "Coffee (Espresso)", baseName: "Coffee", variant: "Espresso" },
+      ],
+    };
+    expect(seatDigestivoNames(seat)).toEqual(["Coffee (Espresso) ×2"]);
+  });
+
+  it("puts the chosen subcategory on the ticket line", () => {
+    expect(digestivoTicketLine([
+      { id: 1, digestivos: [{ name: "Coffee (Espresso)" }] },
+      { id: 2, digestivos: [{ name: "Grappa" }] },
+    ])).toBe("P1 Coffee (Espresso) · P2 Grappa");
   });
 });

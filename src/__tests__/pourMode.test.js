@@ -15,8 +15,22 @@ import { kitchenSnapshot, kitchenDelta, mergeKitchenAlert } from "../utils/kitch
 describe("normalizePourMode", () => {
   it("accepts the two real modes, in any casing or padding", () => {
     expect(normalizePourMode("btg")).toBe("btg");
-    expect(normalizePourMode("BTV")).toBe("btv");
+    expect(normalizePourMode("BTB")).toBe("btb");
     expect(normalizePourMode("  Btg ")).toBe("btg");
+  });
+
+  it("translates the development spelling rather than dropping the choice", () => {
+    // "btv" was by-the-bottle before the floor corrected it to BTB. A seat set
+    // on a preview build must not silently read as "no drink".
+    expect(normalizePourMode("btv")).toBe("btb");
+    expect(normalizePourMode("BTV")).toBe("btb");
+    expect(seatPourMode({ pairing: "", pourMode: "btv" })).toBe("btb");
+    expect(pourModeLabel({ pairing: "", pourMode: "btv" })).toBe("BTB");
+  });
+
+  it("treats the old and new bottle spellings as the same mode, so a tap turns it off", () => {
+    const off = withPourMode({ id: 1, pairing: "", pourMode: "btv" }, "btb");
+    expect(off.pourMode).toBeNull();
   });
 
   it("rejects everything else rather than inventing a mode", () => {
@@ -26,7 +40,7 @@ describe("normalizePourMode", () => {
   });
 
   it("exposes exactly the two modes the UI renders", () => {
-    expect(POUR_MODES).toEqual(["btg", "btv"]);
+    expect(POUR_MODES).toEqual(["btg", "btb"]);
     expect(POUR_MODES.every((m) => POUR_MODE_LABEL[m])).toBe(true);
   });
 });
@@ -47,7 +61,7 @@ describe("pairing and pour mode are exclusive", () => {
   });
 
   it("shows the pour mode for an unpaired seat", () => {
-    expect(seatPourMode({ pairing: "", pourMode: "btv" })).toBe("btv");
+    expect(seatPourMode({ pairing: "", pourMode: "btb" })).toBe("btb");
     expect(pourModeLabel({ pairing: "—", pourMode: "btg" })).toBe("BTG");
   });
 
@@ -58,15 +72,15 @@ describe("pairing and pour mode are exclusive", () => {
   });
 
   it("tapping the same mode twice turns it off and leaves the pairing empty", () => {
-    const on = withPourMode({ id: 1, pairing: "", pourMode: null }, "btv");
-    const off = withPourMode(on, "btv");
+    const on = withPourMode({ id: 1, pairing: "", pourMode: null }, "btb");
+    const off = withPourMode(on, "btb");
     expect(off.pourMode).toBeNull();
     expect(off.pairing).toBe("");
   });
 
-  it("switching BTG to BTV replaces rather than stacks", () => {
-    const next = withPourMode(withPourMode({ id: 1 }, "btg"), "btv");
-    expect(next.pourMode).toBe("btv");
+  it("switching BTG to BTB replaces rather than stacks", () => {
+    const next = withPourMode(withPourMode({ id: 1 }, "btg"), "btb");
+    expect(next.pourMode).toBe("btb");
   });
 
   it("refuses to act on a mode it does not know, so a pairing cannot be blanked by accident", () => {
@@ -83,10 +97,10 @@ describe("pairing and pour mode are exclusive", () => {
 
   it("clearing a pairing back to none leaves the pour mode alone", () => {
     // "No pairing" is not a statement about how the guest drinks instead, so
-    // cycling past the end of the pairing list must not wipe a BTV someone set.
-    const next = withPairing({ id: 1, pairing: "Wine", pourMode: "btv" }, "—");
+    // cycling past the end of the pairing list must not wipe a BTB someone set.
+    const next = withPairing({ id: 1, pairing: "Wine", pourMode: "btb" }, "—");
     expect(next.pairing).toBe("");
-    expect(next.pourMode).toBe("btv");
+    expect(next.pourMode).toBe("btb");
   });
 });
 
@@ -96,12 +110,12 @@ describe("the seat factory carries the pour mode", () => {
   });
 
   it("keeps a stored mode and drops a junk one", () => {
-    expect(makeSeats(2, [{ pourMode: "btv" }, { pourMode: "nonsense" }])
-      .map((s) => s.pourMode)).toEqual(["btv", null]);
+    expect(makeSeats(2, [{ pourMode: "btb" }, { pourMode: "nonsense" }])
+      .map((s) => s.pourMode)).toEqual(["btb", null]);
   });
 });
 
-describe("the kitchen hears about BTG / BTV", () => {
+describe("the kitchen hears about BTG / BTB", () => {
   const snap = (seat) => kitchenSnapshot([{ id: 1, extras: {}, ...seat }]);
 
   it("carries the mode on the snapshot", () => {
@@ -118,8 +132,8 @@ describe("the kitchen hears about BTG / BTV", () => {
   });
 
   it("sends a delta when the guest switches from the glass to the bottle", () => {
-    const delta = kitchenDelta(snap({ pourMode: "btv" }), snap({ pourMode: "btg" }));
-    expect(delta.map((s) => s.pourMode)).toEqual(["btv"]);
+    const delta = kitchenDelta(snap({ pourMode: "btb" }), snap({ pourMode: "btg" }));
+    expect(delta.map((s) => s.pourMode)).toEqual(["btb"]);
   });
 
   it("sends nothing when the pour mode has not moved", () => {

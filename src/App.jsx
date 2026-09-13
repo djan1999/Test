@@ -4331,10 +4331,17 @@ export default function App() {
   const digestivoOptions = useMemo(() => digestivoItems
     .filter(i => i.enabled)
     .map(i => ({
+      // The configured id travels with the button so a seat's pick can be
+      // matched back to it exactly — surer than the catalogue name match,
+      // which a re-linked product or a renamed subcategory would break.
+      id: i.id,
       label: i.label,
       searchKey: i.searchKey || i.label,
       linkedKey: i.linkedKey,
       type: i.type || "wine",
+      variants: Array.isArray(i.variants)
+        ? i.variants.map(v => String(v ?? "").trim()).filter(Boolean)
+        : [],
     })), [digestivoItems]);
 
   // ── Aperitif quick-button options (data-driven from Quick Access config) ──

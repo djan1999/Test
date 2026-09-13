@@ -53,7 +53,7 @@ const SAMPLE_TABLE = {
   seats: [
     { id: 1, pairing: "Wine",    gender: "Mr",  digestivos: [{ name: "Espresso" }] },
     { id: 2, pairing: "Non-Alc", gender: "Mrs", digestivos: [] },
-    // The unpaired guest the BTG/BTV row exists for — the sample has to show
+    // The unpaired guest the BTG/BTB row exists for — the sample has to show
     // the case, or the preview never demonstrates what the toggle does.
     { id: 3, pairing: "",        gender: null,  pourMode: "btg", digestivos: [{ name: "Grappa" }] },
   ],

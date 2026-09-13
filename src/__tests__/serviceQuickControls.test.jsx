@@ -37,7 +37,7 @@ describe("service quick controls", () => {
 
   it("cycles back to a truly empty pairing instead of storing a dash", () => {
     // The pairing cycle writes through the seats updater because it also has
-    // to clear BTG/BTV — the two answer the same question about one chair.
+    // to clear BTG/BTB — the two answer the same question about one chair.
     const upd = vi.fn();
     const { getByText } = render(
       <DisplayBoardCard t={table({ pairing: "Our Story" })} quickMode upd={upd} updSeat={vi.fn()} aperitifOptions={[]} />,

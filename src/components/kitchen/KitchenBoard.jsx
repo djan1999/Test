@@ -10,7 +10,7 @@ import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/c
 import { estimateNextFire, fireGapsForTable } from "../../utils/fireCadence.js";
 import { gapsForMenuType } from "../../utils/archiveInsights.js";
 import { extraPairingLabel, extraPairingForSeat } from "../../constants/pairings.js";
-import { POUR_MODE_LABEL, POUR_MODE_TITLE, seatPourMode } from "../../utils/pourMode.js";
+import { POUR_MODE_LABEL, POUR_MODE_TITLE, normalizePourMode, seatPourMode } from "../../utils/pourMode.js";
 import { digestivoAnchorKeys, isDigestivoAnchor, digestivoSeatOrders, digestivoCount } from "../../utils/digestivo.js";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
 
@@ -888,7 +888,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                 P{s.id}
                 {gs && <span style={{ fontSize: "7px", fontWeight: 700, padding: "0 3px", background: gs.bg, color: gs.text, letterSpacing: 0 }}>{compact ? (s.gender === "Mr" ? "M" : "F") : s.gender}</span>}
                 {p ? ` · ${pLabel(p)}` : ""}
-                {/* No pairing, but not silent either: BTG/BTV is how this
+                {/* No pairing, but not silent either: BTG/BTB is how this
                     chair is drinking, and the pass paces the wine service on
                     it. seatPourMode guarantees it never prints beside a
                     pairing. */}
@@ -1579,11 +1579,11 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
           }
         });
         const extrasGroups = Object.values(extrasMap);
-        // BTG / BTV and the digestivo picks travel on the same delta seats as
+        // BTG / BTB and the digestivo picks travel on the same delta seats as
         // the pairings — a Send that changed only how an unpaired guest is
         // drinking has to raise a popup that SAYS so, or the kitchen sees an
         // empty alert and confirms nothing.
-        const pourSeats = seats.filter(s => s.pourMode === "btg" || s.pourMode === "btv");
+        const pourSeats = seats.filter(s => !!normalizePourMode(s.pourMode));
         const digestivoSeats = seats.filter(s => Array.isArray(s.digestivos) && s.digestivos.length > 0);
         const ts = new Date(alert.timestamp);
         const timeStr = `${String(ts.getHours()).padStart(2,"0")}:${String(ts.getMinutes()).padStart(2,"0")}`;
@@ -1648,11 +1648,11 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                 <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
                   <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>POUR</span>
                   {pourSeats.map(s => (
-                    <span key={s.id} title={POUR_MODE_TITLE[s.pourMode]} style={{
+                    <span key={s.id} title={POUR_MODE_TITLE[normalizePourMode(s.pourMode)]} style={{
                       fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0,
                       background: tokens.tint.parchment, border: `1px solid ${tokens.neutral[500]}`,
                       color: tokens.neutral[700], fontWeight: 700,
-                    }}>P{s.id} {POUR_MODE_LABEL[s.pourMode]}</span>
+                    }}>P{s.id} {POUR_MODE_LABEL[normalizePourMode(s.pourMode)]}</span>
                   ))}
                 </div>
               )}

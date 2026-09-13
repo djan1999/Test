@@ -166,7 +166,7 @@ export function boardFactsFromDiff(prevTable, nextTable) {
     if (bGender !== aGender) {
       facts.push({ type: "seat_gender_set", tableId, payload: { seatId, to: aGender } });
     }
-    // BTG / BTV — how an unpaired guest is drinking. Read through
+    // BTG / BTB — how an unpaired guest is drinking. Read through
     // seatPourMode so a row still carrying both a pairing and a stale mode
     // records the same single story every other surface shows.
     const bPour = seatPourMode(b);
