@@ -8,6 +8,9 @@
  * preview panel when editing a kitchen_flow profile.
  */
 
+import { POUR_MODE_LABEL, seatPourMode } from "./pourMode.js";
+import { digestivoAnchorKeys, isDigestivoAnchor, digestivoSeatOrders, digestivoCount } from "./digestivo.js";
+
 // ── Design tokens (raw hex — no import of tokens.js needed in a generator) ───
 const C = {
   ink0:        "#0a0a0a",
@@ -48,9 +51,11 @@ const SAMPLE_TABLE = {
   notes: "Window seat preferred",
   pace: null,
   seats: [
-    { id: 1, pairing: "Wine",    gender: "Mr"  },
-    { id: 2, pairing: "Non-Alc", gender: "Mrs" },
-    { id: 3, pairing: "Wine",    gender: null  },
+    { id: 1, pairing: "Wine",    gender: "Mr",  digestivos: [{ name: "Espresso" }] },
+    { id: 2, pairing: "Non-Alc", gender: "Mrs", digestivos: [] },
+    // The unpaired guest the BTG/BTB row exists for — the sample has to show
+    // the case, or the preview never demonstrates what the toggle does.
+    { id: 3, pairing: "",        gender: null,  pourMode: "btg", digestivos: [{ name: "Grappa" }] },
   ],
   restrictions: [
     { note: "gluten", pos: 2 },
@@ -150,6 +155,7 @@ function renderPaceStrip(block, table) {
 function renderSeats(block, table) {
   const b   = block || {};
   const showPairing      = b.showPairing      !== false;
+  const showPourMode     = b.showPourMode     !== false;
   const showRestrictions = b.showRestrictions !== false;
   const seats = table.seats || [];
   const restrictions = table.restrictions || [];
@@ -157,6 +163,9 @@ function renderSeats(block, table) {
 
   const chips = seats.map(s => {
     const p     = showPairing && s.pairing && s.pairing !== "—" ? s.pairing : null;
+    // seatPourMode, not the raw field: a seat carrying a pairing never prints
+    // a pour mode beside it, on the preview exactly as on the real ticket.
+    const pour  = showPourMode ? POUR_MODE_LABEL[seatPourMode(s)] || null : null;
     const sRestr = showRestrictions ? restrictions.filter(r => r.pos === s.id).map(r => r.note) : [];
     const gsMale   = s.gender === "Mr";
     const gsFemale = s.gender === "Mrs";
@@ -167,7 +176,7 @@ function renderSeats(block, table) {
       : "";
     return `<div style="display:flex;align-items:center;gap:3px">
   <span style="font-size:7px;font-weight:700;padding:2px 5px;background:${C.ink5};color:${C.ink2};border:1px solid ${C.ink4};display:inline-flex;align-items:center;gap:4px">
-    P${s.id}${gsHtml}${p ? ` · ${pLabel(p)}` : ""}
+    P${s.id}${gsHtml}${p ? ` · ${pLabel(p)}` : ""}${pour ? ` · ${pour}` : ""}
   </span>
   ${sRestr.length ? `<span style="font-size:7px;color:${C.redText};font-weight:600">${sRestr.join(" · ")}</span>` : ""}
 </div>`;
@@ -193,6 +202,11 @@ function renderCourses(block, table, menuCourses) {
   const b   = block || {};
   const showRestrictions = b.showRestrictions !== false;
   const showCourseNotes  = b.showCourseNotes  !== false;
+  const showDigestivo    = b.showDigestivo    !== false;
+  // Same rule the live ticket applies: anchored course AND a real order.
+  const anchors      = digestivoAnchorKeys(menuCourses);
+  const digestivos   = digestivoSeatOrders(table.seats || []);
+  const digestivoQty = digestivoCount(table.seats || []);
   const restrictions = table.restrictions || [];
   const log          = table.kitchenLog || {};
   const courseNotes  = table.kitchenCourseNotes || {};
@@ -207,6 +221,15 @@ function renderCourses(block, table, menuCourses) {
     const name  = course.menu?.name || course.kitchenDisplayName || key;
     const kcNote = courseNotes[key] || {};
 
+    const digestivoHtml = (showDigestivo && digestivos.length > 0 && isDigestivoAnchor(course, anchors))
+      ? `
+<div style="border-bottom:1px solid ${C.ink4};background:${C.parchment};border-left:4px solid ${C.charcoal};padding:6px 10px;display:flex;align-items:baseline;gap:6px">
+  <span style="font-size:7px;letter-spacing:0.14em;text-transform:uppercase;color:${C.ink1};font-weight:700;flex-shrink:0">DIGESTIVO</span>
+  <span style="font-size:8px;font-weight:700;color:${C.ink2};flex-shrink:0">${digestivoQty}×</span>
+  <span style="font-size:8px;color:${C.ink2};line-height:1.3">${esc(digestivos.map(d => `P${d.seatId} ${d.names.join(", ")}`).join(" · "))}</span>
+</div>`
+      : "";
+
     let subLine = "";
     if (!fired) {
       if (showRestrictions && restrictions.some(r => r.pos !== null)) {
@@ -217,7 +240,7 @@ function renderCourses(block, table, menuCourses) {
       }
     }
 
-    return `
+    return `${digestivoHtml}
 <div style="border-bottom:1px solid ${C.ink4};background:${fired ? C.greenBg : C.white};border-left:4px solid ${fired ? C.greenBorder : "transparent"}">
   <div style="display:flex;align-items:center;padding:7px 10px 7px 8px;gap:7px">
     <span style="font-size:12px;color:${fired ? C.greenBorder : C.ink4};flex-shrink:0;line-height:1">${fired ? "✓" : "○"}</span>

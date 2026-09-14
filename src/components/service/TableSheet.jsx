@@ -351,6 +351,7 @@ export default function TableSheet({
     });
     const FIELDS = [
       ["aperitifs", "APERITIF"],
+      ["digestivos", "DIGESTIVO"],
       ["glasses", "GLASS"],
       ["cocktails", "COCKTAIL"],
       ["spirits", "SPIRIT"],

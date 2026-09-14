@@ -121,6 +121,7 @@ const menu_courses = new Table(
     premium_si: column.text,
     restrictions_si: column.text,
     aperitif_btn: column.text,
+    digestivo_before: column.integer,
     optional_pairing_enabled: column.integer,
     optional_pairing_default_on: column.integer,
     optional_pairing_alco: column.text,

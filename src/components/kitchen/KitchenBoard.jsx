@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { DndContext, DragOverlay, MouseSensor, TouchSensor, MeasuringStrategy, closestCenter, pointerWithin, useSensor, useSensors } from "@dnd-kit/core";
 import { SortableContext, arrayMove, rectSortingStrategy, useSortable } from "@dnd-kit/sortable";
 import { RESTRICTIONS, restrLabel } from "../../constants/dietary.js";
@@ -10,6 +10,8 @@ import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/c
 import { estimateNextFire, fireGapsForTable } from "../../utils/fireCadence.js";
 import { gapsForMenuType } from "../../utils/archiveInsights.js";
 import { extraPairingLabel, extraPairingForSeat } from "../../constants/pairings.js";
+import { POUR_MODE_LABEL, POUR_MODE_TITLE, normalizePourMode, seatPourMode } from "../../utils/pourMode.js";
+import { digestivoAnchorKeys, isDigestivoAnchor, digestivoSeatOrders, digestivoCount } from "../../utils/digestivo.js";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
 
 // Lazy so the minimap's floor geometry only loads on the large kitchen panel
@@ -469,6 +471,16 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
   const isShort = String(table.menuType || "").trim().toLowerCase() === "short";
 
+  // ── The digestivo service line ─────────────────────────────────────────────
+  // Admin flags the course the digestivo goes out AHEAD of; service records
+  // the picks on the seats. Both have to hold for the row to exist, and the
+  // row is printed in the course list at the anchor's position so the pass
+  // reads it in the order the room will run it — not as a footnote after the
+  // plate has gone.
+  const digestivoAnchors = digestivoAnchorKeys(menuCourses || []);
+  const digestivoOrders = digestivoSeatOrders(seats);
+  const digestivoTotal = digestivoCount(seats);
+
   // Courses to show — delegated to shared helper. When a kitchen profile is
   // assigned for this table.menuType, the profile's row-based menuTemplate
   // drives course visibility/order via deriveCourseKeysFromTemplate; otherwise
@@ -855,6 +867,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         <div style={{ display: "flex", flexWrap: "wrap", gap: "3px 6px" }}>
         {seats.map(s => {
             const p = s.pairing && s.pairing !== "—" ? s.pairing : null;
+            const pour = seatPourMode(s);
             const restrList = restrictions.filter(r => r.pos === s.id).map(r => r.note).filter(Boolean);
             const restrShort = k => { const d = RESTRICTIONS.find(r => r.key === k); return d ? d.label : k; };
             const gs = s.gender === "Mr" ? tokens.gender.male : s.gender === "Mrs" ? tokens.gender.female : null;
@@ -875,6 +888,15 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                 P{s.id}
                 {gs && <span style={{ fontSize: "7px", fontWeight: 700, padding: "0 3px", background: gs.bg, color: gs.text, letterSpacing: 0 }}>{compact ? (s.gender === "Mr" ? "M" : "F") : s.gender}</span>}
                 {p ? ` · ${pLabel(p)}` : ""}
+                {/* No pairing, but not silent either: BTG/BTB is how this
+                    chair is drinking, and the pass paces the wine service on
+                    it. seatPourMode guarantees it never prints beside a
+                    pairing. */}
+                {pour && (
+                  <span title={POUR_MODE_TITLE[pour]} style={{ color: tokens.ink[2], letterSpacing: "0.06em" }}>
+                    {" · "}{POUR_MODE_LABEL[pour]}
+                  </span>
+                )}
                 {restrList.length > 0 && (
                   <span style={{ color: tokens.red.text, letterSpacing: "0.06em" }}>
                     {" · "}{restrList.map(restrShort).join(" · ")}
@@ -1085,8 +1107,40 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
 
           const isNextFire = !fired && !pending && nextFire?.key === key;
 
+          // The digestivo line belongs ABOVE this course when admin anchored
+          // it here AND somebody at the table actually ordered one. Both
+          // conditions, every time: an anchor with no order is a line about
+          // nothing, and an order with no anchor has nowhere to go (the
+          // admin panel says so where the buttons are configured).
+          const showDigestivo = digestivoOrders.length > 0 && isDigestivoAnchor(course, digestivoAnchors);
+
           return (
-            <div key={key} ref={isNextFire ? nextCourseRef : undefined} style={{
+            <Fragment key={key}>
+            {showDigestivo && (
+              <div style={{
+                background: tokens.tint.parchment,
+                borderLeft: `4px solid ${tokens.charcoal.default}`,
+                borderBottom: `1px solid ${tokens.ink[4]}`,
+                flexShrink: 0,
+                display: "flex", alignItems: "baseline", gap: dz.courseGap,
+                padding: dz.coursePad,
+              }}>
+                <span style={{
+                  fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em",
+                  textTransform: "uppercase", color: tokens.ink[1], fontWeight: 700, flexShrink: 0,
+                }}>DIGESTIVO</span>
+                <span style={{
+                  fontFamily: FONT, fontSize: "9px", fontWeight: 700, color: tokens.ink[2], flexShrink: 0,
+                }}>{digestivoTotal}×</span>
+                <span style={{
+                  fontFamily: FONT, fontSize: "9px", color: tokens.ink[2], lineHeight: 1.3,
+                  minWidth: 0, overflow: "hidden", textOverflow: "ellipsis",
+                }}>
+                  {digestivoOrders.map(({ seatId, names }) => `P${seatId} ${names.join(", ")}`).join(" · ")}
+                </span>
+              </div>
+            )}
+            <div ref={isNextFire ? nextCourseRef : undefined} style={{
               background: fired ? tokens.green.bg : pending ? tokens.neutral[50] : isNextFire ? tokens.tint.parchment : tokens.neutral[0],
               borderLeft: fired ? `4px solid ${tokens.green.border}` : kcNote.name || kcNote.note ? `4px solid ${tokens.red.text}` : isNextFire ? `4px solid ${tokens.charcoal.default}` : "4px solid transparent",
               flexShrink: 0,
@@ -1227,6 +1281,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
                 </div>
               )}
             </div>
+            </Fragment>
           );
         })}
       </div>
@@ -1524,6 +1579,12 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
           }
         });
         const extrasGroups = Object.values(extrasMap);
+        // BTG / BTB and the digestivo picks travel on the same delta seats as
+        // the pairings — a Send that changed only how an unpaired guest is
+        // drinking has to raise a popup that SAYS so, or the kitchen sees an
+        // empty alert and confirms nothing.
+        const pourSeats = seats.filter(s => !!normalizePourMode(s.pourMode));
+        const digestivoSeats = seats.filter(s => Array.isArray(s.digestivos) && s.digestivos.length > 0);
         const ts = new Date(alert.timestamp);
         const timeStr = `${String(ts.getHours()).padStart(2,"0")}:${String(ts.getMinutes()).padStart(2,"0")}`;
         return (
@@ -1583,6 +1644,30 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                   );
                 });
               })()}
+              {pourSeats.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>POUR</span>
+                  {pourSeats.map(s => (
+                    <span key={s.id} title={POUR_MODE_TITLE[normalizePourMode(s.pourMode)]} style={{
+                      fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0,
+                      background: tokens.tint.parchment, border: `1px solid ${tokens.neutral[500]}`,
+                      color: tokens.neutral[700], fontWeight: 700,
+                    }}>P{s.id} {POUR_MODE_LABEL[normalizePourMode(s.pourMode)]}</span>
+                  ))}
+                </div>
+              )}
+              {digestivoSeats.length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>DIGESTIVO</span>
+                  {digestivoSeats.map(s => (
+                    <span key={s.id} style={{
+                      fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0,
+                      background: tokens.neutral[50], border: `1px solid ${tokens.neutral[500]}`,
+                      color: tokens.neutral[700],
+                    }}>P{s.id} · {s.digestivos.join(", ")}</span>
+                  ))}
+                </div>
+              )}
               {extrasGroups.map(group => (
                 <div key={group.name} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
                   <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>
@@ -1606,7 +1691,8 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                   {group.anyShared && <span style={{ fontFamily: FONT, fontSize: "9px", fontWeight: 700, letterSpacing: "0.10em", color: tokens.ink[2], padding: "2px 6px", border: `1px solid ${tokens.ink[4]}`, background: tokens.ink[5] }}>SHARE</span>}
                 </div>
               ))}
-              {pairSeats.length === 0 && extrasGroups.length === 0 && !alert.course && (
+              {pairSeats.length === 0 && extrasGroups.length === 0 && pourSeats.length === 0
+                && digestivoSeats.length === 0 && !alert.course && (
                 <span style={{ fontFamily: FONT, fontSize: "10px", color: tokens.ink[4] }}>No extras noted</span>
               )}
             </div>

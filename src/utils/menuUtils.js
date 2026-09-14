@@ -586,6 +586,9 @@ export function parseMenuRow(row) {
     force_pairing_sub_si: fpSi?.sub || "",
     kitchen_note: String(firstFilled(row.kitchen_note, kitchenNoteFallback)).trim(),
     aperitif_btn: String(firstFilled(row.aperitif_btn, row.aperitif) || "").trim() || null,
+    // Opt-in, matching the column default: a sheet silent about digestivos is
+    // not asking a course to anchor the service line.
+    digestivo_before: truthyCell(row.digestivo_before),
     restrictions,
   };
 }

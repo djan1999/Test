@@ -73,6 +73,9 @@ export function supabaseRowToCourse(row) {
     force_pairing_sub_si: row.force_pairing_sub_si || "",
     kitchen_note: row.kitchen_note || "",
     aperitif_btn: row.aperitif_btn || null,
+    // Opt-in, matching the column default — a course that has never said
+    // anything about digestivos is not asking to anchor the service line.
+    digestivo_before: row.digestivo_before === true,
     is_active: row.is_active !== false,
     restrictions,
   };
@@ -129,6 +132,7 @@ export function courseToSupabaseRow(course) {
     force_pairing_sub_si: course.force_pairing_sub_si,
     kitchen_note: course.kitchen_note,
     aperitif_btn: course.aperitif_btn,
+    digestivo_before: course.digestivo_before === true,
     is_active: course.is_active !== false,
     restrictions_si: restrictionsSi,
   };

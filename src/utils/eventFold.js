@@ -2,13 +2,15 @@
 // back into board state. Pure and dependency-free — the same reducer runs in
 // tests (replay parity), in the SYSTEM panel's parity checker, and eventually
 // as the board's source of truth when Phase 4 flips.
+
+import { seatPourMode } from "./pourMode.js";
 //
 // The fold consumes events in SERVER ORDER (the log's `id` sequence — never
 // client clocks) and is deliberately forgiving: removing a drink that isn't
 // there, or touching a seat that never appeared, is a no-op. An append-only
 // log replayed through a total, no-throw reducer cannot crash a device.
 
-const DRINK_CATEGORIES = ["aperitifs", "glasses", "cocktails", "spirits", "beers"];
+const DRINK_CATEGORIES = ["aperitifs", "digestivos", "glasses", "cocktails", "spirits", "beers"];
 
 const blankProjection = (tableId) => ({
   id: tableId,
@@ -64,7 +66,7 @@ const seatOf = (table, seatId) => {
     table.seats[key] = {
       water: "—", pairing: "",
       drinks: Object.fromEntries(DRINK_CATEGORIES.map((category) => [category, {}])),
-      extras: [], options: [], gender: null,
+      extras: [], options: [], gender: null, pourMode: null,
     };
   }
   return table.seats[key];
@@ -200,6 +202,9 @@ export function foldServiceEvents(events) {
       case "seat_gender_set":
         seatOf(table, payload.seatId).gender = payload.to ?? null;
         break;
+      case "seat_pour_mode_set":
+        seatOf(table, payload.seatId).pourMode = payload.to ?? null;
+        break;
       // Legacy delta facts (recorded before snapshots, 09.08) still fold:
       case "drink_added":
         if (DRINK_CATEGORIES.includes(payload.category)) {
@@ -253,7 +258,8 @@ const seatHasContent = (seat) =>
   || DRINK_CATEGORIES.some((category) => Object.keys(seat.drinks[category]).length > 0)
   || seat.extras.length > 0
   || seat.options.length > 0
-  || seat.gender != null;
+  || seat.gender != null
+  || seat.pourMode != null;
 
 const namesOf = (list) => (Array.isArray(list) ? list : [])
   .map((entry) => (typeof entry === "string" ? entry : entry?.name ?? JSON.stringify(entry)));
@@ -275,6 +281,7 @@ export function boardProjection(table) {
     folded.water = seat.water ?? "—";
     folded.pairing = seat.pairing ?? "";
     folded.gender = seat.gender ?? null;
+    folded.pourMode = seatPourMode(seat);
     for (const category of DRINK_CATEGORIES) {
       for (const name of namesOf(seat[category])) bump(folded.drinks[category], name, +1);
     }
@@ -311,6 +318,7 @@ const canonical = (projection) => ({
       .sort(([a], [b]) => Number(a) - Number(b))
       .map(([seatId, seat]) => [seatId, {
         water: seat.water, pairing: seat.pairing, gender: seat.gender ?? null,
+        pourMode: seat.pourMode ?? null,
         drinks: Object.fromEntries(
           DRINK_CATEGORIES.filter((category) => Object.keys(seat.drinks[category]).length > 0)
             .map((category) => [category, Object.fromEntries(Object.entries(seat.drinks[category]).sort())]),

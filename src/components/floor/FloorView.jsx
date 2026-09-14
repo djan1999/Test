@@ -82,6 +82,7 @@ export default function FloorView({
   menuCourses = [], profiles = [], assignments = {},
   optionalExtras = [], optionalPairings = [],
   aperitifOptions = [],     // quick-access panel: the same catalogs the board card gets
+  digestivoOptions = [],    // the digestivo buttons, same list the board card shows
   wines = [], cocktails = [], spirits = [], beers = [],
   onCycleStatus,
   onAssign, onClear, onMove,
@@ -613,6 +614,7 @@ export default function FloorView({
                 optionalExtras={optionalExtras}
                 optionalPairings={optionalPairings}
                 aperitifOptions={aperitifOptions}
+                digestivoOptions={digestivoOptions}
                 wines={wines}
                 cocktails={cocktails}
                 spirits={spirits}

@@ -204,7 +204,7 @@ export async function readBeverages() {
 const MENU_COURSE_BOOL_COLUMNS = [
   "is_snack", "is_last_bite", "optional_pairing_enabled",
   "optional_pairing_default_on", "section_gap_before", "show_on_short",
-  "is_active",
+  "digestivo_before", "is_active",
 ];
 
 // Menu course rows with jsonb columns revived to objects and booleans

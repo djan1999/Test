@@ -18,4 +18,7 @@ export const BEV_TYPES = {
   spirit:   { ...base, label: "Spirit",   glyph: tokens.bevGlyph.spirit },
   beer:     { ...base, label: "Beer",     glyph: tokens.bevGlyph.beer },
   aperitif: { ...base, label: "Aperitif", glyph: tokens.bevGlyph.aperitif },
+  // Same neutral treatment as the rest — the moment it is served, not a
+  // different kind of drink, is what makes a digestivo a digestivo.
+  digestivo: { ...base, label: "Digestivo", glyph: tokens.bevGlyph.digestivo },
 };

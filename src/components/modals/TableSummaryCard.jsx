@@ -3,6 +3,7 @@ import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { COUNTRY_NAMES, stripCountryFromRegion, inferCountryFromRegion } from "../../constants/countries.js";
 import { restrLabel } from "../../constants/dietary.js";
 import { groupDrinks, qtySuffix } from "../../utils/drinkQuantities.js";
+import { POUR_MODE_LABEL, POUR_MODE_TITLE, seatPourMode } from "../../utils/pourMode.js";
 import { tokens } from "../../styles/tokens.js";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
 
@@ -35,6 +36,10 @@ export default function TableSummaryCard({ table: t, groupLabel, optionalExtras 
           const bevChips = (list, ts) => groupDrinks(list).map((g) => ({ label: `${g.item.name}${qtySuffix(g.qty)}`, ts }));
           const allBevs = [
             ...bevChips(s.aperitifs, BEV_TYPES.aperitif),
+            // Ordered like an aperitif, served inside the menu — the summary
+            // and the archive have to count it like every other pour, or the
+            // night's drinks read short by however many digestivos went out.
+            ...bevChips(s.digestivos, BEV_TYPES.digestivo),
             ...bevChips(s.glasses, BEV_TYPES.wine),
             ...bevChips(s.cocktails, BEV_TYPES.cocktail),
             ...bevChips(s.spirits, BEV_TYPES.spirit),
@@ -49,6 +54,10 @@ export default function TableSummaryCard({ table: t, groupLabel, optionalExtras 
               })()}
               {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 0, background: ws.bg || tokens.neutral[100], color: tokens.neutral[700], border: `1px solid ${tokens.neutral[200]}` }}>{s.water}</span>}
               {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 0, border: `1px solid ${tokens.neutral[200]}`, color: PAIRING_COLOR[s.pairing] || tokens.neutral[600], background: PAIRING_BG[s.pairing] || tokens.neutral[50] }}>{s.pairing}{s.pairingSharedWith ? ` ½P${s.pairingSharedWith}` : ""}</span>}
+              {/* An unpaired guest drinking by the glass or the bottle — the
+                  summary shows it where the pairing would be, so the chair
+                  never reads as "ordered nothing". */}
+              {seatPourMode(s) && <span title={POUR_MODE_TITLE[seatPourMode(s)]} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 0, border: `1px solid ${tokens.neutral[500]}`, color: tokens.neutral[700], background: tokens.tint.parchment, fontWeight: 700 }}>{POUR_MODE_LABEL[seatPourMode(s)]}</span>}
               {extras.map((d) => {
                 const p = extraPairingForSeat(s, d, optionalPairings);
                 const exSharedWith = (s.extras?.[d.key] || s.extras?.[d.id])?.sharedWith ?? null;

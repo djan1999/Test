@@ -10,6 +10,11 @@ import {
   aperitifMatchesQuickAccessOption,
 } from "../../utils/quickAccessResolve.js";
 import QuickAperitifSearch from "./QuickAperitifSearch.jsx";
+import { POUR_MODES, POUR_MODE_LABEL, POUR_MODE_TITLE, seatPourMode, withPourMode, withPairing } from "../../utils/pourMode.js";
+import {
+  digestivoVariants, digestivoCurrentState, digestivoNextState,
+  cycleSeatDigestivo, digestivoEntryMatchesOption,
+} from "../../utils/digestivo.js";
 
 const FONT = tokens.font;
 
@@ -33,7 +38,7 @@ const WATER_QUICK = ["XC", "XW", "OC", "OW"];
 // onlySeatId: render just that seat's row (the floor's chair-tap quick
 // access) — the seat LOGIC still sees the whole party, so share cycles and
 // the Send delta stay correct.
-export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onAssignTerrace, optionalExtras = [], optionalPairings = [], aperitifOptions, wines = [], cocktails = [], spirits = [], beers = [], onlySeatId = null }) {
+export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onAssignTerrace, optionalExtras = [], optionalPairings = [], aperitifOptions, digestivoOptions = [], wines = [], cocktails = [], spirits = [], beers = [], onlySeatId = null }) {
     const isSeated = t.active;
     // Terrace-flow decoration (derived in App, never persisted on the row):
     // 'terrace' = party outside on t._visit.terraceLabel.
@@ -248,16 +253,41 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
               const restr   = allRestr.filter(r => r.pos === s.id);
               const extras  = optionalExtras.filter(d => (s.extras?.[d.key] || s.extras?.[d.id])?.ordered);
               const hasPairing = !!(s.pairing && s.pairing !== "—");
-              const hasContent = (s.water && s.water !== "—") || hasPairing || restr.length > 0 || extras.length > 0 || (s.aperitifs || []).length > 0;
+              const pourMode = seatPourMode(s);
+              const hasContent = (s.water && s.water !== "—") || hasPairing || !!pourMode || restr.length > 0
+                || extras.length > 0 || (s.aperitifs || []).length > 0 || (s.digestivos || []).length > 0;
 
               if (quickMode) {
-                const cyclePairing = () => {
+                // Pairing and BTG/BTB move together, so both gestures write
+                // through one helper. The seats updater is the right shape for
+                // a two-field write; a caller that only ever passed updSeat
+                // (one field at a time) still works, because the two fields
+                // land as two writes against the same functional update.
+                const writeSeat = (transform) => {
+                  if (upd) {
+                    upd(t.id, "seats", prev => (prev || []).map(seat =>
+                      seat.id === s.id ? transform(seat) : seat));
+                    return;
+                  }
                   if (!updSeat) return;
+                  const next = transform(s);
+                  if ((next.pairing ?? "") !== (s.pairing ?? "")) updSeat(t.id, s.id, "pairing", next.pairing);
+                  if ((next.pourMode ?? null) !== (s.pourMode ?? null)) updSeat(t.id, s.id, "pourMode", next.pourMode);
+                };
+                // Choosing a real pairing clears BTG/BTB on the same chair —
+                // a paired guest's wine comes from the pairing, so keeping a
+                // pour mode beside it would tell the kitchen two different
+                // stories about one seat. withPairing owns that rule.
+                const cyclePairing = () => {
                   const cur = s.pairing || "—";
                   const idx = PAIRINGS.indexOf(cur);
                   const nx = PAIRINGS[(idx + 1) % PAIRINGS.length];
-                  updSeat(t.id, s.id, "pairing", nx === "—" ? "" : nx);
+                  writeSeat(seat => withPairing(seat, nx));
                 };
+                // …and the mirror gesture: tapping BTG or BTB drops the
+                // pairing. Same button twice turns it back off.
+                const togglePour = (mode) => writeSeat(seat => withPourMode(seat, mode));
+                const curPour = seatPourMode(s);
                 const curPairing = s.pairing || "—";
                 const pcStyle = PC[curPairing] || PC["—"];
 
@@ -410,6 +440,37 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                               </button>
                             );
                           })()}
+                          {/* BTG / BTB — the drink story for a guest who is
+                              NOT on a pairing, and the only way the kitchen
+                              ever hears "by the glass" or "by the bottle".
+                              Disabled while a pairing holds: the pairing IS
+                              the answer to this question, so offering both
+                              would invite a contradiction rather than a
+                              choice. Clearing the pairing re-enables them. */}
+                          {POUR_MODES.map(mode => {
+                            const active = curPour === mode;
+                            const blocked = curPairing !== "—";
+                            return (
+                              <button
+                                key={mode}
+                                onClick={() => !blocked && togglePour(mode)}
+                                disabled={blocked}
+                                title={blocked
+                                  ? `${POUR_MODE_TITLE[mode]} — unavailable, this seat is on the ${curPairing} pairing`
+                                  : POUR_MODE_TITLE[mode]}
+                                aria-pressed={active}
+                                style={{
+                                  fontFamily: FONT, fontSize: "10px", fontWeight: 700, letterSpacing: "0.06em",
+                                  padding: "6px 8px",
+                                  border: `1px solid ${active ? tokens.charcoal.default : blocked ? tokens.ink[5] : tokens.ink[4]}`,
+                                  borderRadius: 0, cursor: blocked ? "not-allowed" : "pointer", lineHeight: 1,
+                                  background: active ? tokens.tint.parchment : tokens.neutral[0],
+                                  color: active ? tokens.ink[0] : blocked ? tokens.ink[5] : tokens.ink[3],
+                                  opacity: blocked ? 0.5 : 1,
+                                  touchAction: "manipulation", whiteSpace: "nowrap",
+                                }}>{POUR_MODE_LABEL[mode]}</button>
+                            );
+                          })}
                         </div>
                       </div>
                     </div>
@@ -584,6 +645,62 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                       />,
                     ])}
 
+                    {/* DIGESTIVO — the same gesture as the aperitif above, at
+                        the other end of the menu. A pick here is what puts the
+                        DIGESTIVO service line on the kitchen ticket, above the
+                        course admin flagged, on the next Send. Configured in
+                        Admin → Quick Access → DIGESTIVO; a restaurant that
+                        runs none sees no section at all. */}
+                    {(digestivoOptions || []).length > 0 && sectionBlock("Digestivo",
+                      (digestivoOptions || []).map(opt => {
+                        const label = opt.label ?? opt;
+                        const catalogs = { wines, cocktails, spirits, beers };
+                        // A configured button SCROLLS its subcategories, the
+                        // same gesture as the pairing button one block up:
+                        // off → Espresso → Cappuccino → off. With none
+                        // configured the cycle is the plain off → on → off it
+                        // has always been.
+                        const variants = digestivoVariants(opt);
+                        const cur = digestivoCurrentState(s, opt, catalogs);
+                        const next = digestivoNextState(s, opt, catalogs);
+                        const active = cur !== "off";
+                        const subLabel = cur === "off"
+                          ? (variants.length ? variants[0] : "off")
+                          : cur === "on" ? "on" : cur;
+                        return (
+                          <button
+                            key={opt.id ?? label}
+                            title={variants.length
+                              ? `${label} — ${cur === "off" ? "off" : cur === "on" ? "on" : cur}; tap for ${next === "off" ? "off" : next}`
+                              : label}
+                            onClick={() => {
+                              if (!updSeat) return;
+                              const found = resolveAperitifFromQuickAccessOption(opt, catalogs);
+                              const item = found || { name: label, notes: "", __cocktail: true };
+                              updSeat(t.id, s.id, "digestivos", cycleSeatDigestivo(s, opt, item, catalogs));
+                            }} style={{
+                              fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "7px 12px",
+                              border: `1px solid ${active ? tokens.charcoal.default : tokens.neutral[200]}`,
+                              borderRadius: 0, cursor: "pointer", lineHeight: 1,
+                              background: active ? tokens.tint.parchment : tokens.neutral[0],
+                              color: active ? tokens.neutral[700] : tokens.text.disabled,
+                              display: "inline-flex", alignItems: "center", gap: 6,
+                              touchAction: "manipulation",
+                            }}>
+                            <span style={{ fontWeight: active ? 700 : 500 }}>{label}</span>
+                            {/* The subcategory reads under the name the way an
+                                extra's mode does, with the pairing button's →
+                                to say there is more behind the tap. */}
+                            {variants.length > 0 && (
+                              <>
+                                <span style={{ fontSize: 9, opacity: active ? 0.75 : 0.55 }}>{subLabel}</span>
+                                <span style={{ fontSize: 8, opacity: 0.55 }}>→</span>
+                              </>
+                            )}
+                          </button>
+                        );
+                      }))}
+
                     <div style={{ height: 6 }} />
                   </div>
                 );
@@ -626,6 +743,16 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                       color: pc.color, fontWeight: 500,
                     }}>{s.pairing}{s.pairingSharedWith ? ` ½P${s.pairingSharedWith}` : ""}</span>
                   )}
+                  {/* Where the pairing chip would be, for a seat that has
+                      none — the chair reads as "drinking by the glass",
+                      never as silence. */}
+                  {pourMode && (
+                    <span title={POUR_MODE_TITLE[pourMode]} style={{
+                      fontFamily: FONT, fontSize: "9px", padding: "2px 6px", borderRadius: 0,
+                      background: tokens.tint.parchment, border: `1px solid ${tokens.neutral[500]}`,
+                      color: tokens.neutral[700], fontWeight: 700, letterSpacing: "0.06em",
+                    }}>{POUR_MODE_LABEL[pourMode]}</span>
+                  )}
                   {extras.map(d => {
                     const p = extraPairingForSeat(s, d, optionalPairings);
                     const exSharedWith = (s.extras?.[d.key] || s.extras?.[d.id])?.sharedWith ?? null;
@@ -648,6 +775,23 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                         fontFamily: FONT, fontSize: "9px", padding: "2px 6px", borderRadius: 0,
                         border: `1px solid ${tokens.ink[4]}`, color: tokens.ink[2], background: tokens.tint.parchment,
                       }}>{label}</span>
+                    );
+                  })}
+                  {/* Digestivos read like the aperitif chips but carry the
+                      marker, because the pass and the floor both need to see
+                      at a glance which chairs the service is still owed. */}
+                  {groupDrinks(s.digestivos).map(({ key, item: dg, qty }) => {
+                    // The stored name already carries the subcategory
+                    // ("Coffee (Espresso)"), so it is what the chip shows —
+                    // falling back to the button label would throw the
+                    // guest's actual choice away.
+                    const matchOpt = digestivoOptions?.find(opt => digestivoEntryMatchesOption(dg, opt, { wines, cocktails, spirits, beers }));
+                    const label = `${dg.name || matchOpt?.label || ""}${qtySuffix(qty)}`;
+                    return (
+                      <span key={key} title="Digestivo" style={{
+                        fontFamily: FONT, fontSize: "9px", padding: "2px 6px", borderRadius: 0,
+                        border: `1px solid ${tokens.neutral[500]}`, color: tokens.neutral[700], background: tokens.neutral[50],
+                      }}>D · {label}</span>
                     );
                   })}
                   {restr.map((r, i) => (
@@ -758,7 +902,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
     );
 }
 
-export function DisplayBoard({ tables, sittingTimes = [], optionalExtras = [], optionalPairings = [], upd, quickTableId = null, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onAssignTerrace, aperitifOptions = [], wines = [], cocktails = [], spirits = [], beers = [] }) {
+export function DisplayBoard({ tables, sittingTimes = [], optionalExtras = [], optionalPairings = [], upd, quickTableId = null, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onAssignTerrace, aperitifOptions = [], digestivoOptions = [], wines = [], cocktails = [], spirits = [], beers = [] }) {
   const isMobile = useIsMobile(BP.md);
 
   // Tables that belong to a combined booking are grouped solely by their
@@ -833,6 +977,7 @@ export function DisplayBoard({ tables, sittingTimes = [], optionalExtras = [], o
                   optionalExtras={optionalExtras}
                   optionalPairings={optionalPairings}
                   aperitifOptions={aperitifOptions}
+                  digestivoOptions={digestivoOptions}
                   wines={wines}
                   cocktails={cocktails}
                   spirits={spirits}
