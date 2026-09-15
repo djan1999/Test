@@ -223,10 +223,14 @@ function renderCourses(block, table, menuCourses) {
 
     const digestivoHtml = (showDigestivo && digestivos.length > 0 && isDigestivoAnchor(course, anchors))
       ? `
-<div style="border-bottom:1px solid ${C.ink4};background:${C.parchment};border-left:4px solid ${C.charcoal};padding:6px 10px;display:flex;align-items:baseline;gap:6px">
-  <span style="font-size:7px;letter-spacing:0.14em;text-transform:uppercase;color:${C.ink1};font-weight:700;flex-shrink:0">DIGESTIVO</span>
-  <span style="font-size:8px;font-weight:700;color:${C.ink2};flex-shrink:0">${digestivoQty}×</span>
-  <span style="font-size:8px;color:${C.ink2};line-height:1.3">${esc(digestivos.map(d => `P${d.seatId} ${d.names.join(", ")}`).join(" · "))}</span>
+<div style="border-bottom:1px solid ${C.ink4};background:${C.ink5};border-left:4px solid transparent">
+  <div style="display:flex;align-items:center;padding:7px 10px 7px 8px;gap:7px">
+    <span style="font-size:12px;color:${C.ink3};flex-shrink:0;line-height:1">◑</span>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:11px;font-weight:700;line-height:1.25;color:${C.ink2};letter-spacing:0.02em">DIGESTIVO<span style="font-size:8px;font-weight:400;color:${C.ink3};margin-left:6px">${digestivoQty}×</span></div>
+      <div style="margin-top:2px;display:flex;flex-wrap:wrap;gap:2px 8px">${digestivos.map(d => `<span style="font-size:8px;font-weight:600;color:${C.ink2}">${esc(`P${d.seatId} ${d.names.join(", ")}`)}</span>`).join("")}</div>
+    </div>
+  </div>
 </div>`
       : "";
 

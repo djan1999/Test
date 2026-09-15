@@ -1117,27 +1117,48 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
           return (
             <Fragment key={key}>
             {showDigestivo && (
-              <div style={{
-                background: tokens.tint.parchment,
-                borderLeft: `4px solid ${tokens.charcoal.default}`,
-                borderBottom: `1px solid ${tokens.ink[4]}`,
+              // Built to the course row's own anatomy — glyph column, name
+              // line, detail wrapping underneath — because the pass reads it
+              // in the same scan as the courses around it. What sets it apart
+              // is what it IS: the ◑ in place of the fire circle and the inset
+              // fill say "service line", not a plate this row can fire. The
+              // parchment band with the charcoal edge it used to wear is the
+              // ticket's NEXT-DUE highlight, so every digestivo looked like
+              // the course about to go out, and the row it sat above did not.
+              <div data-digestivo-line="" style={{
+                background: tokens.ink[5],
+                borderLeft: "4px solid transparent",
                 flexShrink: 0,
-                display: "flex", alignItems: "baseline", gap: dz.courseGap,
+                display: "flex", alignItems: "center", gap: dz.courseGap,
                 padding: dz.coursePad,
               }}>
                 <span style={{
-                  fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em",
-                  textTransform: "uppercase", color: tokens.ink[1], fontWeight: 700, flexShrink: 0,
-                }}>DIGESTIVO</span>
-                <span style={{
-                  fontFamily: FONT, fontSize: "9px", fontWeight: 700, color: tokens.ink[2], flexShrink: 0,
-                }}>{digestivoTotal}×</span>
-                <span style={{
-                  fontFamily: FONT, fontSize: "9px", color: tokens.ink[2], lineHeight: 1.3,
-                  minWidth: 0, overflow: "hidden", textOverflow: "ellipsis",
-                }}>
-                  {digestivoOrders.map(({ seatId, names }) => `P${seatId} ${names.join(", ")}`).join(" · ")}
-                </span>
+                  fontFamily: FONT, fontSize: dz.courseGlyph, color: tokens.ink[3],
+                  flexShrink: 0, lineHeight: 1,
+                }}>◑</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontFamily: FONT, fontSize: dz.courseFont, fontWeight: 700,
+                    lineHeight: dz.courseLH, color: tokens.ink[2], letterSpacing: "0.02em",
+                  }}>
+                    <span>DIGESTIVO</span>
+                    <span style={{
+                      fontFamily: FONT, fontSize: "8px", fontWeight: 400,
+                      color: tokens.ink[3], marginLeft: 6,
+                    }}>{digestivoTotal}×</span>
+                  </div>
+                  {/* One segment per seat, wrapping the way a course's mods
+                      do. The single line this replaces ellipsized, and a pass
+                      reading "P1 Amaro (Pelinkovec), Coffee (Espr…" is missing
+                      exactly the drink it has to pour. */}
+                  <div style={{ marginTop: 2, display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
+                    {digestivoOrders.map(({ seatId, names }) => (
+                      <span key={seatId} style={{
+                        fontFamily: FONT, fontSize: dz.modsFont, fontWeight: 600, color: tokens.ink[2],
+                      }}>P{seatId} {names.join(", ")}</span>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
             <div ref={isNextFire ? nextCourseRef : undefined} style={{
@@ -1579,12 +1600,13 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
           }
         });
         const extrasGroups = Object.values(extrasMap);
-        // BTG / BTB and the digestivo picks travel on the same delta seats as
-        // the pairings — a Send that changed only how an unpaired guest is
-        // drinking has to raise a popup that SAYS so, or the kitchen sees an
-        // empty alert and confirms nothing.
+        // BTG / BTB travels on the same delta seats as the pairings — a Send
+        // that changed only how an unpaired guest is drinking has to raise a
+        // popup that SAYS so, or the kitchen sees an empty alert and confirms
+        // nothing. Digestivos do NOT: they are a service line on the ticket,
+        // read when the pass reaches the course they sit above, and a popup
+        // for one would interrupt the line over a coffee.
         const pourSeats = seats.filter(s => !!normalizePourMode(s.pourMode));
-        const digestivoSeats = seats.filter(s => Array.isArray(s.digestivos) && s.digestivos.length > 0);
         const ts = new Date(alert.timestamp);
         const timeStr = `${String(ts.getHours()).padStart(2,"0")}:${String(ts.getMinutes()).padStart(2,"0")}`;
         return (
@@ -1656,18 +1678,6 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                   ))}
                 </div>
               )}
-              {digestivoSeats.length > 0 && (
-                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>DIGESTIVO</span>
-                  {digestivoSeats.map(s => (
-                    <span key={s.id} style={{
-                      fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0,
-                      background: tokens.neutral[50], border: `1px solid ${tokens.neutral[500]}`,
-                      color: tokens.neutral[700],
-                    }}>P{s.id} · {s.digestivos.join(", ")}</span>
-                  ))}
-                </div>
-              )}
               {extrasGroups.map(group => (
                 <div key={group.name} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
                   <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>
@@ -1692,7 +1702,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                 </div>
               ))}
               {pairSeats.length === 0 && extrasGroups.length === 0 && pourSeats.length === 0
-                && digestivoSeats.length === 0 && !alert.course && (
+                && !alert.course && (
                 <span style={{ fontFamily: FONT, fontSize: "10px", color: tokens.ink[4] }}>No extras noted</span>
               )}
             </div>

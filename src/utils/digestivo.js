@@ -181,3 +181,21 @@ export const cycleSeatDigestivo = (seat, opt, resolvedItem, catalogs = {}) => {
     ...(opt?.id != null ? { digestivoId: opt.id } : {}),
   }];
 };
+
+/**
+ * The seat's digestivo list after a drink picked from the beverage SEARCH
+ * rather than from a configured button.
+ *
+ * Appended, never replaced. The search is how the floor reaches a bottle
+ * nobody put on a button, and two searched drinks are two digestivos — not one
+ * guest scrolling a cycle, which is the only thing `cycleSeatDigestivo`
+ * replaces. It carries no `digestivoId` because it belongs to no button, and
+ * its own name as `baseName`, so a button linked to the same product still
+ * recognises it as its own.
+ */
+export const addSeatDigestivo = (seat, item) => {
+  const current = Array.isArray(seat?.digestivos) ? seat.digestivos : [];
+  const name = String(item?.name || "").trim();
+  if (!name) return current;
+  return [...current, { ...item, name, baseName: name }];
+};

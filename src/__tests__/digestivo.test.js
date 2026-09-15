@@ -16,7 +16,7 @@ import {
   digestivoCount,
 } from "../utils/digestivo.js";
 import { makeSeats } from "../utils/tableHelpers.js";
-import { kitchenSnapshot, kitchenDelta, mergeKitchenAlert } from "../utils/kitchenAlerts.js";
+import { kitchenSnapshot, kitchenDelta } from "../utils/kitchenAlerts.js";
 import { supabaseRowToCourse, courseToSupabaseRow } from "../utils/menuCourseMapper.js";
 import { generateKitchenTicketHTML } from "../utils/kitchenTicketGenerator.js";
 
@@ -102,54 +102,34 @@ describe("the seat factory carries digestivos", () => {
   });
 });
 
-describe("the kitchen hears about the digestivo on Send", () => {
+describe("the digestivo stays off the kitchen popup", () => {
+  // It is a service line on the TICKET, read at the course it is served
+  // before. The popup is for work the pass has to start — a plate, a pairing,
+  // a dietary — and a coffee is not that. Anything that put the digestivo back
+  // on the Send delta would put a popup in front of the line for every
+  // espresso, and a popup that fires for noise stops being read for signal.
   const snap = (digestivos) => kitchenSnapshot([{ id: 1, extras: {}, pairing: "Wine", digestivos }]);
 
-  it("carries the picks as display names on the snapshot", () => {
-    expect(snap([{ name: "Espresso" }, { name: "Espresso" }])[1].digestivos).toEqual(["Espresso ×2"]);
+  it("keeps the picks out of the snapshot entirely", () => {
+    expect(snap([{ name: "Espresso" }, { name: "Espresso" }])[1].digestivos).toBeUndefined();
   });
 
-  it("sends a delta the first time a guest orders one", () => {
-    const delta = kitchenDelta(snap([{ name: "Espresso" }]), snap([]));
+  it("raises no delta the first time a guest orders one", () => {
+    expect(kitchenDelta(snap([{ name: "Espresso" }]), snap([]))).toEqual([]);
+  });
+
+  it("raises no delta when the round grows, or when it is cancelled", () => {
+    expect(kitchenDelta(snap([{ name: "Espresso" }, { name: "Espresso" }]), snap([{ name: "Espresso" }]))).toEqual([]);
+    expect(kitchenDelta(snap([]), snap([{ name: "Espresso" }]))).toEqual([]);
+  });
+
+  it("puts no digestivo on a delta seat that is sending something else", () => {
+    const before = kitchenSnapshot([{ id: 1, extras: {}, pairing: "Wine", digestivos: [] }]);
+    const after = kitchenSnapshot([{ id: 1, extras: {}, pairing: "Non-Alc", digestivos: [{ name: "Espresso" }] }]);
+    const delta = kitchenDelta(after, before);
     expect(delta).toHaveLength(1);
-    expect(delta[0].digestivos).toEqual(["Espresso"]);
-    expect(delta[0].digestivosChanged).toBe(true);
-  });
-
-  it("sends a delta when the round grows", () => {
-    const delta = kitchenDelta(snap([{ name: "Espresso" }, { name: "Espresso" }]), snap([{ name: "Espresso" }]));
-    expect(delta[0].digestivos).toEqual(["Espresso ×2"]);
-  });
-
-  it("sends a delta when the order is cancelled, flagged so the popup can tell", () => {
-    const delta = kitchenDelta(snap([]), snap([{ name: "Espresso" }]));
-    expect(delta[0].digestivos).toEqual([]);
-    expect(delta[0].digestivosChanged).toBe(true);
-  });
-
-  it("sends nothing when the digestivo has not moved", () => {
-    const same = snap([{ name: "Grappa" }]);
-    expect(kitchenDelta(same, same)).toEqual([]);
-  });
-
-  it("keeps a pending popup's digestivo when a later SET alert says nothing about it", () => {
-    const pending = {
-      seats: [{ id: 1, digestivos: ["Espresso"], digestivosChanged: true, extras: [] }],
-      confirmed: false,
-    };
-    const merged = mergeKitchenAlert(pending, { course: { index: 4, name: "Buchtel" }, seats: [] });
-    expect(merged.seats[0].digestivos).toEqual(["Espresso"]);
-  });
-
-  it("lets a cancellation overwrite the pending popup rather than resurrecting the drink", () => {
-    const pending = {
-      seats: [{ id: 1, digestivos: ["Espresso"], digestivosChanged: true, extras: [] }],
-      confirmed: false,
-    };
-    const merged = mergeKitchenAlert(pending, {
-      seats: [{ id: 1, digestivos: [], digestivosChanged: true, extras: [] }],
-    });
-    expect(merged.seats[0].digestivos).toEqual([]);
+    expect(delta[0].pairing).toBe("Non-Alc");
+    expect(delta[0]).not.toHaveProperty("digestivos");
   });
 });
 
