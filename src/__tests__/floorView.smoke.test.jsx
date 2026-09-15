@@ -89,6 +89,40 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(container.textContent).toContain("WP");
   });
 
+  it("the chair pill says BTG / BTB under the water when the guest is off the pairing", () => {
+    // A seat with no pairing used to reach the map as a bare water code —
+    // the same silence the BTG/BTB buttons exist to end, repeated on the one
+    // surface a runner reads while crossing the room.
+    const drinkers = [
+      boardTable(1, { active: true, resName: "NOVAK", guests: 3, seats: [
+        { id: 1, water: "XC", pairing: "", pourMode: "btg", floorPositions: {} },
+        { id: 2, water: "OW", pairing: "", pourMode: "btb", floorPositions: {} },
+        // A pairing answers the same question, so it wins and the stale mode
+        // beside it must not print a second line.
+        { id: 3, water: "XW", pairing: "Wine", pourMode: "btg", floorPositions: {} },
+      ] }),
+      ...tables.filter((t) => t.id !== 1),
+    ];
+    const { container } = setup({ tables: drinkers });
+    expect(container.textContent).toContain("BTG");
+    expect(container.textContent).toContain("BTB");
+    // P3 reads "XW · WP", never "XW · BTG"
+    expect(container.textContent).toContain("WP");
+    expect(container.textContent.match(/BTG/g)).toHaveLength(1);
+  });
+
+  it("a chair with neither a pairing nor a pour mode still says only its water", () => {
+    const plain = [
+      boardTable(1, { active: true, resName: "NOVAK", guests: 1, seats: [
+        { id: 1, water: "XC", pairing: "", floorPositions: {} },
+      ] }),
+      ...tables.filter((t) => t.id !== 1),
+    ];
+    const { container } = setup({ tables: plain });
+    expect(container.textContent).toContain("XC");
+    expect(container.textContent).not.toContain("BT");
+  });
+
   it("a dining tap SELECTS only — no SET toggle, no sheet; the dock follows (per Djan, 21.08)", () => {
     const { container, handlers, getByText } = setup();
     fireEvent.click(findTable(container, "T1")); // occupied dining body

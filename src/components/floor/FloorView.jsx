@@ -8,6 +8,7 @@ import {
   resolveReservationTable, floorStatusOf, mapTicker, mirrorFloorMap,
 } from "../../utils/floorMaps.js";
 import { visitStateOf } from "../../utils/terraceFlow.js";
+import { pourModeLabel } from "../../utils/pourMode.js";
 import { useFullscreenBoost } from "../../hooks/useIsFullscreen.js";
 import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
 import {
@@ -200,7 +201,11 @@ export default function FloorView({
   };
   const bevNote = (s) => {
     const water = s.water && s.water !== "—" ? String(s.water).toUpperCase() : "";
-    return [water, pairingCode(s.pairing)].filter(Boolean).join("·");
+    // A guest off the pairing is still drinking, and BTG / BTB is what that
+    // chair has to say instead — a blank second line read as "nothing", which
+    // is the silence those buttons exist to end. seatPourMode hides the mode
+    // whenever a real pairing holds, so the pill can never stack both.
+    return [water, pairingCode(s.pairing) || pourModeLabel(s)].filter(Boolean).join("·");
   };
   const seatNotesOf = (bt, positionKey) => {
     const notes = {};

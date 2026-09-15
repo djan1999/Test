@@ -114,6 +114,8 @@ and deployment-order gates.
 - A guest who is not on a pairing can be marked BTG (by the glass) or BTB (by
   the bottle) beside the pairing control in service quick access. The two are
   mutually exclusive with a pairing, and the next Send carries the choice to the
-  kitchen.
+  kitchen. The floor map's chair pill prints it under the water code, in the
+  slot the pairing code takes for a paired guest — so every chair says how it
+  is drinking, and never both at once.
 - The old shared-password gate (`VITE_ACCESS_PASSWORD`) is now only used in
   local-only mode (when Supabase isn't configured).
