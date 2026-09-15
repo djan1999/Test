@@ -47,6 +47,32 @@ const chip = (on, { danger = false } = {}) => ({
   touchAction: "manipulation",
 });
 
+/**
+ * The Mr / Mrs marker beside a position.
+ *
+ * Gender is the only identity this app records per chair, so a position
+ * picker without it asks "which position?" about people the server can see
+ * and the screen cannot name. The chip is the one the board card and the
+ * kitchen ticket already use, so P2 looks the same wherever it is read.
+ *
+ * It is a READOUT. Setting a guest's gender stays on the board card, where
+ * the rest of the per-seat work lives.
+ */
+const GenderMark = ({ gender, dim = false }) => {
+  const gs = gender === "Mr" ? tokens.gender.male
+    : gender === "Mrs" ? tokens.gender.female : null;
+  if (!gs) return null;
+  // Inside a red restriction tag the gender palette would be a second colour
+  // language in one chip, so there it just rides the tag's own ink.
+  return (
+    <span style={{
+      fontFamily: FONT, fontSize: 8, fontWeight: 700, letterSpacing: 0,
+      padding: dim ? 0 : "1px 5px", marginLeft: 5, flexShrink: 0,
+      ...(dim ? { opacity: 0.7 } : { border: `1px solid ${gs.border}`, background: gs.bg, color: gs.text }),
+    }}>{dim ? `· ${gender}` : gender}</span>
+  );
+};
+
 const darkButton = (inert = false) => ({
   fontFamily: FONT, fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase",
   width: "100%", minHeight: TAP, padding: "12px 14px",
@@ -780,10 +806,11 @@ export default function TableSheet({
                 aria-label="Drinks for the whole party"
                 onClick={() => setDrinkSeat(null)}>PARTY</button>
               {seats.map(s => (
-                <button key={s.id} type="button" style={{ ...chip(drinkSeat === s.id), minHeight: 36 }}
-                  aria-label={`Drinks for position ${s.id}`}
+                <button key={s.id} type="button"
+                  style={{ ...chip(drinkSeat === s.id), minHeight: 36, display: "inline-flex", alignItems: "center" }}
+                  aria-label={`Drinks for position ${s.id}${s.gender ? ` (${s.gender})` : ""}`}
                   onClick={() => setDrinkSeat(drinkSeat === s.id ? null : s.id)}
-                >P{s.id}</button>
+                >P{s.id}<GenderMark gender={s.gender} /></button>
               ))}
             </div>
           )}
@@ -996,7 +1023,9 @@ export default function TableSheet({
                       cursor: "pointer", touchAction: "manipulation",
                     }}
                   >
-                    [{restrCompact(r.note)}] {r.pos ? `P${r.pos}` : "TABLE"} ×
+                    [{restrCompact(r.note)}] {r.pos ? `P${r.pos}` : "TABLE"}
+                    {r.pos ? <GenderMark gender={seats.find(x => Number(x.id) === Number(r.pos))?.gender} dim /> : null}
+                    {" ×"}
                   </button>
                   {restrPositions.length > 1 && (
                     <button
@@ -1025,12 +1054,19 @@ export default function TableSheet({
                 <div style={{ ...micro, marginBottom: 6 }}>POSITION</div>
                 <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                   {(seats.length ? seats.map(s => Number(s.id)) : Array.from({ length: covers }, (_, i) => i + 1))
-                    .map(id => (
-                      <button key={id} type="button" style={chip(addRestrSeat === id)}
-                        aria-label={`Restriction for position ${id}`}
-                        onClick={() => setAddRestrSeat(id)}
-                      >P{id}</button>
-                    ))}
+                    .map(id => {
+                      // A table whose seats have not been built yet falls back
+                      // to bare covers, which name nobody — hence the lookup
+                      // rather than reading the row we mapped from.
+                      const g = seats.find(x => Number(x.id) === id)?.gender;
+                      return (
+                        <button key={id} type="button"
+                          style={{ ...chip(addRestrSeat === id), display: "inline-flex", alignItems: "center" }}
+                          aria-label={`Restriction for position ${id}${g ? ` (${g})` : ""}`}
+                          onClick={() => setAddRestrSeat(id)}
+                        >P{id}<GenderMark gender={g} /></button>
+                      );
+                    })}
                 </div>
               </div>
               <div style={{ padding: 10, opacity: addRestrSeat == null ? 0.4 : 1, pointerEvents: addRestrSeat == null ? "none" : "auto" }}>

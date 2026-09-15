@@ -96,6 +96,11 @@ and deployment-order gates.
 - Beside the digestivo buttons, "Search all beverages" reaches the rest of the
   live catalogue, so a drink nobody put on a button does not need an admin trip
   mid-service. A searched drink is added alongside the button picks.
+- Every position named in the detail sheet — the beverage scope chips, the
+  restriction position picker, and the restriction tags themselves — carries
+  the guest's Mr / Mrs beside it, in the same chip the board card and the
+  kitchen ticket use. A chair nobody has named stays unmarked. Setting a
+  guest's gender is still board-card work.
 - Both button lists also appear in the table detail sheet, under BEVERAGES,
   behind the APERITIF / DIGESTIVO / WITH MENU phase chips. There they ADD to
   whoever the seat-scope chips select (the whole party, or one position) rather
