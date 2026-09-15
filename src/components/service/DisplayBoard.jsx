@@ -12,6 +12,10 @@ import {
 import QuickBeverageSearch from "./QuickBeverageSearch.jsx";
 import { POUR_MODES, POUR_MODE_LABEL, POUR_MODE_TITLE, seatPourMode, withPourMode, withPairing } from "../../utils/pourMode.js";
 import {
+  extraOf, linkedPairingFor, extraShareState, extraShareLabel, withExtraShareCycled,
+  extraPairingState, withExtraPairingCycled, EXTRA_PAIRING_LABEL,
+} from "../../utils/seatExtras.js";
+import {
   digestivoVariants, digestivoCurrentState, digestivoNextState,
   cycleSeatDigestivo, digestivoEntryMatchesOption, addSeatDigestivo,
 } from "../../utils/digestivo.js";
@@ -477,63 +481,24 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
 
                     {/* EXTRAS — toggleable; linked extras cycle through alco/non-alc */}
                     {(() => {
-                      const pairingByExtraKey = new Map();
-                      (optionalPairings || []).forEach(opt => { if (opt.extraKey) pairingByExtraKey.set(opt.extraKey, opt); });
                       const visible = (optionalExtras || []).slice(0, 4);
                       if (visible.length === 0) return null;
+                      // The cycles themselves live in utils/seatExtras.js, so
+                      // the floor map's dock scrolls the same states in the
+                      // same order — one extra, one behaviour, two surfaces.
                       return sectionBlock("Extras", visible.map(dish => {
-                        const extra = s.extras?.[dish.key] || s.extras?.[dish.id] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
+                        const extra = extraOf(s, dish);
                         const dishOn = !!extra.ordered;
-                        const linked = pairingByExtraKey.get(dish.key);
-
-                        // Share-cycle helper: off → on → ½P{x} per other seat → off
+                        const linked = linkedPairingFor(dish, optionalPairings);
                         const otherSeats = seats.filter(x => x.id !== s.id);
                         const curSharedWith = extra.sharedWith ?? null;
-                        const extraStates = ["off", "on", ...otherSeats.map(x => x.id)];
-                        const extraCurState = !dishOn ? "off" : (curSharedWith !== null ? curSharedWith : "on");
-                        const extraCurIdx = extraStates.indexOf(extraCurState);
-                        const extraNextState = extraStates[(extraCurIdx + 1) % extraStates.length];
-                        const cycleExtraShare = () => {
-                          if (!upd) return;
-                          const ordered = extraNextState !== "off";
-                          const newSharedWith = typeof extraNextState === "number" ? extraNextState : null;
-                          // Only mutate the `extras.sharedWith` linkage here. Do NOT
-                          // touch the partner seat's optionalPairings — a previous
-                          // version cleared it, which silently wiped a pairing the
-                          // partner had selected independently (the "beetroot pairing
-                          // disappears when I touch share" bug). The generator already
-                          // guards the shared case via the seat's own sharedWith flag.
-                          upd(t.id, "seats", prev => prev.map(seat => {
-                            if (seat.id === s.id) {
-                              return { ...seat, extras: { ...seat.extras, [dish.key]: { ...extra, ordered, sharedWith: newSharedWith } } };
-                            }
-                            if (seat.id === curSharedWith && curSharedWith !== null && curSharedWith !== newSharedWith) {
-                              const oldEx = seat.extras?.[dish.key] || {};
-                              return { ...seat, extras: { ...seat.extras, [dish.key]: { ...oldEx, ordered: false, sharedWith: null } } };
-                            }
-                            if (seat.id === newSharedWith && newSharedWith !== null) {
-                              const tEx = seat.extras?.[dish.key] || { ordered: false, pairing: extra.pairing };
-                              return { ...seat, extras: { ...seat.extras, [dish.key]: { ...tEx, ordered: true, sharedWith: s.id } } };
-                            }
-                            return seat;
-                          }));
-                        };
-                        const shareLabel = typeof extraCurState === "number" ? `½P${extraCurState}` : extraCurState === "on" ? "on" : "off";
+                        const shareState = extraShareState(s, dish);
+                        const cycleExtraShare = () => upd && upd(t.id, "seats",
+                          prev => withExtraShareCycled(prev, s.id, dish));
 
                         if (linked) {
-                          const raw = s.optionalPairings?.[linked.key];
-                          const pairingOrdered = raw?.ordered !== undefined ? !!raw.ordered : false;
-                          const pmode = raw?.mode || null;
-                          const pairingStates = ["off", "on"];
-                          if (linked.hasAlco) pairingStates.push("alco");
-                          if (linked.hasNonAlco) pairingStates.push("nonalc");
-                          let cur;
-                          if (!dishOn) cur = "off";
-                          else if (!pairingOrdered) cur = "on";
-                          else if (pmode === "alco") cur = "alco";
-                          else if (pmode === "nonalc") cur = "nonalc";
-                          else cur = "on";
-                          const subLabel = { off: "off", on: "on", alco: "wine", nonalc: "n/a" }[cur];
+                          const cur = extraPairingState(s, dish, linked);
+                          const subLabel = EXTRA_PAIRING_LABEL[cur];
                           const styleMap = {
                             off:    { border: tokens.neutral[200], bg: tokens.neutral[0],     color: tokens.text.disabled },
                             on:     { border: tokens.neutral[500], bg: tokens.tint.parchment, color: tokens.neutral[700] },
@@ -542,29 +507,8 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                           }[cur];
                           return (
                             <div key={dish.key || dish.id} style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
-                              <button onClick={() => upd && upd(t.id, "seats", prev => (prev || []).map(seat => {
-                                if (seat.id !== s.id) return seat;
-                                const r = seat.optionalPairings?.[linked.key];
-                                const xtra = seat.extras?.[dish.key] || { ordered: false, pairing: dish.pairings?.[0] || "—" };
-                                const po = r?.ordered !== undefined ? !!r.ordered : false;
-                                const pm = r?.mode || null;
-                                let c;
-                                if (!xtra.ordered) c = "off";
-                                else if (!po) c = "on";
-                                else if (pm === "alco") c = "alco";
-                                else if (pm === "nonalc") c = "nonalc";
-                                else c = "on";
-                                const nx = pairingStates[(pairingStates.indexOf(c) + 1) % pairingStates.length];
-                                return {
-                                  ...seat,
-                                  extras: { ...seat.extras, [dish.key]: { ...xtra, ordered: nx !== "off", pairing: dish.pairings?.[0] || "—" } },
-                                  optionalPairings: { ...(seat.optionalPairings || {}), [linked.key]: {
-                                    ...(r || {}),
-                                    ordered: nx === "alco" || nx === "nonalc",
-                                    ...(nx === "alco" ? { mode: "alco" } : nx === "nonalc" ? { mode: "nonalc" } : { mode: null }),
-                                  }},
-                                };
-                              }))} style={{
+                              <button onClick={() => upd && upd(t.id, "seats",
+                                prev => withExtraPairingCycled(prev, s.id, dish, linked))} style={{
                                 fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "7px 12px",
                                 border: `1px solid ${styleMap.border}`, borderRadius: 0, cursor: "pointer",
                                 background: styleMap.bg, color: styleMap.color, lineHeight: 1,
@@ -588,10 +532,6 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                         }
 
                         // Plain extra — cycles off → on → ½P{seat} per other seat → off
-                        const plainStyle = {
-                          off: { border: tokens.neutral[200], bg: tokens.neutral[0],     color: tokens.text.disabled },
-                          on:  { border: tokens.neutral[500], bg: tokens.tint.parchment, color: tokens.neutral[700] },
-                        }[typeof extraCurState === "number" || extraCurState === "on" ? (dishOn ? "on" : "off") : extraCurState] || { border: tokens.charcoal.default, bg: tokens.tint.parchment, color: tokens.ink[0] };
                         return (
                           <button key={dish.key || dish.id} onClick={cycleExtraShare} style={{
                             fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "7px 12px",
@@ -603,7 +543,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                             touchAction: "manipulation",
                           }}>
                             <span style={{ fontWeight: dishOn ? 700 : 400 }}>{String(dish.name || dish.key || "").slice(0, 8)}</span>
-                            <span style={{ fontSize: 9, opacity: 0.7, textTransform: "lowercase" }}>{shareLabel}</span>
+                            <span style={{ fontSize: 9, opacity: 0.7, textTransform: "lowercase" }}>{extraShareLabel(shareState)}</span>
                           </button>
                         );
                       }));

@@ -96,6 +96,16 @@ and deployment-order gates.
 - Beside the digestivo buttons, "Search all beverages" reaches the rest of the
   live catalogue, so a drink nobody put on a button does not need an admin trip
   mid-service. A searched drink is added alongside the button picks.
+- Both button lists also appear in the table detail sheet, under BEVERAGES,
+  behind the APERITIF / DIGESTIVO / WITH MENU phase chips. There they ADD to
+  whoever the seat-scope chips select (the whole party, or one position) rather
+  than toggling — a party of four ordering coffee is one tap, not four. A
+  digestivo button with subcategories opens them as a row instead of scrolling.
+- Cheese and beetroot carry three answers per chair — ordered, ½ shared with
+  another chair, and the linked pairing (wine / non-alc) when the menu pours
+  one. The board card's quick access and the floor map's table dock both give
+  all three; the cycles themselves live in `utils/seatExtras.js`, so the two
+  surfaces cannot drift apart.
 - A guest who is not on a pairing can be marked BTG (by the glass) or BTB (by
   the bottle) beside the pairing control in service quick access. The two are
   mutually exclusive with a pairing, and the next Send carries the choice to the

@@ -3,6 +3,10 @@ import { tokens } from "../../styles/tokens.js";
 import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
 import { kitchenSnapshot, kitchenDelta, mergeKitchenAlert } from "../../utils/kitchenAlerts.js";
 import { fmt } from "../../utils/tableHelpers.js";
+import {
+  extraOf, linkedPairingFor, extraShareState, extraShareLabel, withExtraShareCycled,
+  extraPairingState, withExtraPairingCycled, EXTRA_PAIRING_LABEL,
+} from "../../utils/seatExtras.js";
 import { restrictionCode } from "./FloorMap.jsx";
 
 const FONT = tokens.font;
@@ -132,26 +136,17 @@ export default function FloorDock({
     if (bt.kitchenArchived) upd(bt.id, "kitchenArchived", false);
   };
 
-  // Toggle one seat's extra on/off. Mirrors the board card's off-transition:
-  // turning OFF also releases a share partner pointing at this seat. Pairing
-  // mode and share linking stay on the board card — the dock is the quick
-  // "P2 wants cheese" gesture, not the full editor.
-  const toggleExtra = (dish, seat) => {
-    if (!upd || !bt) return;
-    const cur = seat.extras?.[dish.key] || seat.extras?.[dish.id]
-      || { ordered: false, pairing: dish.pairings?.[0] || "—" };
-    const next = !cur.ordered;
-    upd(bt.id, "seats", (prev) => (prev || []).map((s) => {
-      if (s.id === seat.id) {
-        return { ...s, extras: { ...s.extras, [dish.key]: { ...cur, ordered: next, sharedWith: next ? cur.sharedWith ?? null : null } } };
-      }
-      const pex = s.extras?.[dish.key];
-      if (!next && pex?.sharedWith === seat.id) {
-        return { ...s, extras: { ...s.extras, [dish.key]: { ...pex, ordered: false, sharedWith: null } } };
-      }
-      return s;
-    }));
-  };
+  // The extras controls, scrolling exactly the states the board card scrolls
+  // (utils/seatExtras). A plain dish cycles off → on → ½P{chair} → off on its
+  // own button; a dish with a linked pairing cycles off → on → wine → n/a
+  // there and carries a separate ½ for the share. The dock used to offer only
+  // on/off and send staff back across the room to say "they'll split it" or
+  // "with the wine" — the two things most often said in the same breath as
+  // "and a beetroot for P2".
+  const cycleShare = (dish, seat) => upd && bt
+    && upd(bt.id, "seats", (prev) => withExtraShareCycled(prev, seat.id, dish));
+  const cyclePairing = (dish, seat, linked) => upd && bt
+    && upd(bt.id, "seats", (prev) => withExtraPairingCycled(prev, seat.id, dish, linked));
 
   // FIRE / UNDO from the floor — the kitchen ticket's semantics exactly
   // (KitchenBoard fire/unfire): functional kitchenLog update, firing the
@@ -404,7 +399,7 @@ export default function FloorDock({
                     <span style={{ fontFamily: FONT, fontSize: 8, color: isNext && announced ? tokens.signal.warn : tokens.ink[3], fontWeight: isNext ? 700 : 400 }}>
                       {c.firedAt ? courseTime(c) : isNext && announced ? "ANN" : ""}
                     </span>
-                  </div>
+                    </div>
                 );
               })}
             </div>
@@ -429,38 +424,75 @@ export default function FloorDock({
           {extrasVisible.length > 0 && seats.length > 0 && upd && (
             <div style={{ padding: padTight }}>
               <div style={{ ...lbl, marginBottom: 5 }}>[EXTRAS]</div>
-              {extrasVisible.map((dish) => (
-                <div key={dish.key || dish.id} style={{ display: "flex", gap: 5, alignItems: "center", padding: "2px 0", flexWrap: "wrap" }}>
-                  <span style={{ fontFamily: FONT, fontSize: 9, textTransform: "uppercase", color: tokens.ink[2], minWidth: 60, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {dish.name}
-                  </span>
-                  {seats.map((s) => {
-                    const on = !!(s.extras?.[dish.key] || s.extras?.[dish.id])?.ordered;
-                    return (
-                      <button
-                        key={s.id}
-                        onClick={() => toggleExtra(dish, s)}
-                        style={{
-                          fontFamily: FONT, fontSize: 9, fontWeight: on ? 700 : 400,
-                          padding: "5px 7px", borderRadius: 0, cursor: "pointer", lineHeight: 1,
-                          border: `1px solid ${on ? tokens.neutral[500] : tokens.ink[4]}`,
-                          background: on ? tokens.tint.parchment : tokens.neutral[0],
-                          color: on ? tokens.neutral[700] : tokens.ink[3],
-                          touchAction: "manipulation",
-                        }}
-                      >P{s.id}</button>
-                    );
-                  })}
-                </div>
-              ))}
+              {extrasVisible.map((dish) => {
+                const dishName = String(dish.name || dish.key || "");
+                const linked = linkedPairingFor(dish, optionalPairings);
+                return (
+                  <div key={dish.key || dish.id} style={{ display: "flex", gap: 5, alignItems: "center", padding: "2px 0", flexWrap: "wrap" }}>
+                    <span style={{ fontFamily: FONT, fontSize: 9, textTransform: "uppercase", color: tokens.ink[2], minWidth: 60, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {dishName}
+                    </span>
+                    {seats.map((s) => {
+                      const extra = extraOf(s, dish);
+                      const on = !!extra.ordered;
+                      const sharedWith = extra.sharedWith ?? null;
+                      // The sub-label carries whichever answer this dish has to
+                      // give — the pairing when it pours one, the share partner
+                      // otherwise. An unordered chair shows none: "off" is
+                      // already what the flat styling says, and four dishes
+                      // across four chairs cannot afford the word.
+                      const state = linked
+                        ? EXTRA_PAIRING_LABEL[extraPairingState(s, dish, linked)]
+                        : extraShareLabel(extraShareState(s, dish));
+                      const sub = on ? state : "";
+                      const tone = state === "wine" || state === "n/a"
+                        ? { border: tokens.green.border, bg: tokens.green.bg, color: tokens.green.text }
+                        : on ? { border: tokens.neutral[500], bg: tokens.tint.parchment, color: tokens.neutral[700] }
+                        : { border: tokens.ink[4], bg: tokens.neutral[0], color: tokens.ink[3] };
+                      return (
+                        <span key={s.id} style={{ display: "inline-flex", alignItems: "center", gap: 1 }}>
+                          <button
+                            onClick={() => (linked ? cyclePairing(dish, s, linked) : cycleShare(dish, s))}
+                            title={`${dishName} for P${s.id} — ${state}`}
+                            style={{
+                              fontFamily: FONT, fontSize: 9, fontWeight: on ? 700 : 400,
+                              padding: "5px 7px", borderRadius: 0, cursor: "pointer", lineHeight: 1,
+                              border: `1px solid ${tone.border}`, background: tone.bg, color: tone.color,
+                              display: "inline-flex", alignItems: "center", gap: 4,
+                              touchAction: "manipulation",
+                            }}
+                          >
+                            P{s.id}
+                            {sub && <span style={{ fontSize: 8, opacity: 0.75, fontWeight: 400 }}>{sub}</span>}
+                          </button>
+                          {/* A linked dish spends its own button on the pairing,
+                              so the share needs one of its own — the same ½ the
+                              board card gives it. */}
+                          {linked && on && seats.length > 1 && (
+                            <button
+                              onClick={() => cycleShare(dish, s)}
+                              title={`Share ${dishName} from P${s.id}`}
+                              style={{
+                                fontFamily: FONT, fontSize: 8, fontWeight: 700,
+                                padding: "5px 4px", borderRadius: 0, cursor: "pointer", lineHeight: 1,
+                                border: `1px solid ${sharedWith !== null ? tokens.neutral[500] : tokens.ink[4]}`,
+                                background: sharedWith !== null ? tokens.tint.parchment : tokens.neutral[0],
+                                color: sharedWith !== null ? tokens.neutral[700] : tokens.ink[3],
+                                touchAction: "manipulation", whiteSpace: "nowrap",
+                              }}
+                            >{sharedWith !== null ? `½P${sharedWith}` : "½"}</button>
+                          )}
+                        </span>
+                      );
+                    })}
+                  </div>
+                );
+              })}
               <button
                 disabled={upToDate}
                 onClick={sendOrder}
                 style={{ ...actionBtn(false, upToDate), display: "block", width: "100%", textAlign: "center", marginTop: 6, fontWeight: 700 }}
               >{upToDate ? "✓ KITCHEN UP TO DATE" : "SEND ORDER → KITCHEN"}</button>
-              <div style={{ fontFamily: FONT, fontSize: 7, letterSpacing: "0.10em", textTransform: "uppercase", color: tokens.ink[4], marginTop: 5 }}>
-                PAIRING &amp; SHARE → BOARD CARD
-              </div>
             </div>
           )}
         </>

@@ -208,18 +208,80 @@ describe("TableSheet — courses", () => {
   });
 });
 
-describe("TableSheet — no Quick Access overlap", () => {
-  it("carries no quick-aperitif shortcuts — those stay on the board card", () => {
-    // The sheet is table-level. Per-seat aperitif work belongs to the card's
-    // Quick Access and to TICKET & MENUS; duplicating it here gave the same
-    // party three editors.
-    setup({}, { aperitifOptions: [{ label: "SPRITZ", searchKey: "spritz" }] });
-    expect(screen.queryByText("[QUICK APERITIF]")).toBeNull();
-    expect(screen.queryByText("SPRITZ")).toBeNull();
-    // Table-level drink work is still here.
+describe("TableSheet — the configured aperitif and digestivo buttons", () => {
+  // The sheet is where a server already is when the table orders coffee for
+  // four. Reaching the same drinks meant a trip back to the board card and
+  // four separate taps, one per chair.
+  const APERITIFS = [{ label: "SPRITZ", searchKey: "spritz", type: "cocktail" }];
+  const DIGESTIVOS = [
+    { id: 7, label: "Coffee", searchKey: "Coffee", type: "cocktail", variants: ["Espresso", "Decaf"] },
+    { id: 8, label: "Grappa", searchKey: "Grappa", type: "spirit" },
+  ];
+  const withButtons = (over = {}) =>
+    setup(over, { aperitifOptions: APERITIFS, digestivoOptions: DIGESTIVOS });
+
+  it("offers the aperitif buttons and lands one on every chair at once", () => {
+    const { updSeat } = withButtons();
+    fireEvent.click(screen.getByLabelText("Add SPRITZ"));
+    expect(updSeat.mock.calls.map(c => [c[0], c[1]])).toEqual([[1, "aperitifs"], [2, "aperitifs"]]);
+    expect(updSeat.mock.calls[0][2].map(x => x.name)).toEqual(["SPRITZ"]);
+  });
+
+  it("swaps to the digestivo buttons on the digestivo phase", () => {
+    withButtons();
+    expect(screen.queryByLabelText("Add Grappa")).toBeNull();
+    fireEvent.click(screen.getByText("DIGESTIVO"));
+    expect(screen.getByLabelText("Add Grappa")).toBeTruthy();
+    expect(screen.queryByLabelText("Add SPRITZ")).toBeNull();
+  });
+
+  it("writes a digestivo to the digestivo list, not the aperitif one", () => {
+    const { updSeat } = withButtons();
+    fireEvent.click(screen.getByText("DIGESTIVO"));
+    fireEvent.click(screen.getByLabelText("Add Grappa"));
+    expect(updSeat.mock.calls[0][1]).toBe("digestivos");
+    expect(updSeat.mock.calls[0][2][0]).toMatchObject({ name: "Grappa", baseName: "Grappa", digestivoId: 8 });
+  });
+
+  it("opens a button's subcategories rather than scrolling them", () => {
+    // The board scrolls off → Espresso → Decaf → off because it speaks for one
+    // chair. Here a pick can land on a party sitting in four different states,
+    // which has no single state to scroll FROM — so they open as a row.
+    const { updSeat } = withButtons();
+    fireEvent.click(screen.getByText("DIGESTIVO"));
+    expect(screen.queryByLabelText("Add Coffee Decaf")).toBeNull();
+    fireEvent.click(screen.getByLabelText("Choose which Coffee"));
+    fireEvent.click(screen.getByLabelText("Add Coffee Decaf"));
+    expect(updSeat.mock.calls[0][2][0]).toMatchObject({
+      name: "Coffee (Decaf)", baseName: "Coffee", variant: "Decaf", digestivoId: 7,
+    });
+    // Picking one closes the row again.
+    expect(screen.queryByLabelText("Add Coffee Decaf")).toBeNull();
+  });
+
+  it("respects the seat scope — P2 only means P2 only", () => {
+    const { updSeat } = withButtons();
+    fireEvent.click(screen.getByLabelText("Drinks for position 2"));
+    fireEvent.click(screen.getByLabelText("Add SPRITZ"));
+    expect(updSeat.mock.calls.map(c => c[0])).toEqual([2]);
+  });
+
+  it("offers no button list WITH MENU — that phase is the catalogue", () => {
+    withButtons();
+    fireEvent.click(screen.getByText("WITH MENU"));
+    expect(screen.queryByLabelText("Add SPRITZ")).toBeNull();
+    expect(screen.queryByLabelText("Add Grappa")).toBeNull();
     expect(screen.getByText("[BEVERAGES]")).toBeTruthy();
   });
 
+  it("shows no buttons at all for a restaurant that configured none", () => {
+    setup();
+    expect(screen.getByText("[BEVERAGES]")).toBeTruthy();
+    expect(screen.queryByLabelText("Add SPRITZ")).toBeNull();
+  });
+});
+
+describe("TableSheet — no Quick Access overlap", () => {
   it("carries no water controls — water is per-seat work on the card", () => {
     setup();
     expect(screen.queryByText("[WATER & WINE]")).toBeNull();
