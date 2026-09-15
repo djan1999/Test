@@ -160,6 +160,27 @@ export const digestivoNextState = (seat, opt, catalogs = {}) => {
 };
 
 /**
+ * One stored digestivo pick.
+ *
+ * `name` carries the subcategory so every downstream reader — the ×n grouping,
+ * the ticket line, the archive — sees two subcategories of one button as two
+ * different drinks. `baseName`, `variant` and `digestivoId` ride alongside so
+ * the button that wrote it can find its own picks again. Every surface that
+ * records a digestivo builds one through here, or they drift.
+ */
+export const digestivoEntry = (item, { baseName, variant = null, optionId = null } = {}) => {
+  const base = String(baseName ?? item?.name ?? "").trim();
+  const sub = String(variant ?? "").trim() || null;
+  return {
+    ...(item || { notes: "", __cocktail: true }),
+    name: digestivoDisplayName(base, sub),
+    baseName: base,
+    ...(sub ? { variant: sub } : {}),
+    ...(optionId != null ? { digestivoId: optionId } : {}),
+  };
+};
+
+/**
  * The seat's digestivo list after one tap of this button.
  *
  * Every pick belonging to this button is replaced, never appended to: scrolling
@@ -171,15 +192,11 @@ export const cycleSeatDigestivo = (seat, opt, resolvedItem, catalogs = {}) => {
   const next = digestivoNextState(seat, opt, catalogs);
   const kept = (seat?.digestivos || []).filter((e) => !digestivoEntryMatchesOption(e, opt, catalogs));
   if (next === "off") return kept;
-  const variant = next === "on" ? null : next;
-  const baseName = String(resolvedItem?.name || opt?.label || "").trim();
-  return [...kept, {
-    ...(resolvedItem || { notes: "", __cocktail: true }),
-    name: digestivoDisplayName(baseName, variant),
-    baseName,
-    ...(variant ? { variant } : {}),
-    ...(opt?.id != null ? { digestivoId: opt.id } : {}),
-  }];
+  return [...kept, digestivoEntry(resolvedItem, {
+    baseName: resolvedItem?.name || opt?.label,
+    variant: next === "on" ? null : next,
+    optionId: opt?.id,
+  })];
 };
 
 /**
@@ -195,7 +212,6 @@ export const cycleSeatDigestivo = (seat, opt, resolvedItem, catalogs = {}) => {
  */
 export const addSeatDigestivo = (seat, item) => {
   const current = Array.isArray(seat?.digestivos) ? seat.digestivos : [];
-  const name = String(item?.name || "").trim();
-  if (!name) return current;
-  return [...current, { ...item, name, baseName: name }];
+  if (!String(item?.name || "").trim()) return current;
+  return [...current, digestivoEntry(item)];
 };

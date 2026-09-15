@@ -5946,6 +5946,8 @@ export default function App() {
           onEditBooking={patch => saveBookingEdit(sel, patch)}
           hotelGuestsEnabled={hotelGuestsEnabled}
           roomOptions={roomOptions}
+          aperitifOptions={serviceAperitifOptions}
+          digestivoOptions={digestivoOptions}
         />
       )}
 

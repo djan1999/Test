@@ -553,6 +553,68 @@ describe("FOH table dock (quick access beside the map)", () => {
     expect(upd.mock.calls.find((c) => c[1] === "kitchenSent")).toBeTruthy();
   });
 
+  it("dock extras: the ½ share and the beetroot pairing, without a trip to the board card", () => {
+    // The dock used to offer on/off only, with a note pointing at the board
+    // card for the two things most often said in the same breath as "and a
+    // beetroot for P2" — that they'll split it, and that it's with the wine.
+    const upd = vi.fn();
+    const BEET = { key: "beetroot", id: "beetroot", name: "Beetroot", pairings: ["—"] };
+    const LINKED = { key: "beet_pairing", extraKey: "beetroot", hasAlco: true, hasNonAlco: true };
+    const withBeet = withFired.map((t) =>
+      t.id === 1 ? {
+        ...t,
+        seats: [
+          { id: 1, water: "—", pairing: "", extras: { beetroot: { ordered: true, pairing: "—" } }, optionalPairings: {}, floorPositions: {} },
+          { id: 2, water: "—", pairing: "", extras: {}, optionalPairings: {}, floorPositions: {} },
+        ],
+      } : t);
+    const { container, getByText } = setup({
+      tables: withBeet, menuCourses, optionalExtras: [BEET], optionalPairings: [LINKED], upd,
+    });
+    fireEvent.click(findTable(container, "T1"));
+    const dock = dockOf(getByText);
+    const start = withBeet.find((t) => t.id === 1).seats;
+
+    // P1's own button now carries the PAIRING, because this dish pours one.
+    const p1 = within(dock).getByTitle(/^Beetroot for P1/);
+    expect(p1.title).toContain("on");
+    fireEvent.click(p1);
+    const paired = upd.mock.calls.filter((c) => c[1] === "seats").at(-1)[2](start);
+    expect(paired.find((s) => s.id === 1).optionalPairings.beet_pairing)
+      .toMatchObject({ ordered: true, mode: "alco" });
+
+    // The ½ beside it is the share — a second button, because the first one
+    // is spent on the pairing.
+    fireEvent.click(within(dock).getByTitle("Share Beetroot from P1"));
+    const shared = upd.mock.calls.filter((c) => c[1] === "seats").at(-1)[2](start);
+    expect(shared.find((s) => s.id === 1).extras.beetroot.sharedWith).toBe(2);
+    expect(shared.find((s) => s.id === 2).extras.beetroot).toMatchObject({ ordered: true, sharedWith: 1 });
+  });
+
+  it("dock extras: a dish with no pairing scrolls the share on its own button", () => {
+    const upd = vi.fn();
+    const CHEESE = { key: "cheese", id: "cheese", name: "Cheese", pairings: ["—"] };
+    const withCheese = withFired.map((t) =>
+      t.id === 1 ? {
+        ...t,
+        seats: [
+          { id: 1, water: "—", pairing: "", extras: { cheese: { ordered: true, pairing: "—" } }, optionalPairings: {}, floorPositions: {} },
+          { id: 2, water: "—", pairing: "", extras: {}, optionalPairings: {}, floorPositions: {} },
+        ],
+      } : t);
+    const { container, getByText } = setup({ tables: withCheese, menuCourses, optionalExtras: [CHEESE], upd });
+    fireEvent.click(findTable(container, "T1"));
+    const dock = dockOf(getByText);
+    // No separate ½ — an unlinked dish spends its one button on the share.
+    expect(within(dock).queryByTitle("Share Cheese from P1")).toBeNull();
+    const p1 = within(dock).getByTitle(/^Cheese for P1/);
+    expect(p1.textContent).toContain("on");
+    fireEvent.click(p1);
+    const next = upd.mock.calls.filter((c) => c[1] === "seats").at(-1)[2](
+      withCheese.find((t) => t.id === 1).seats);
+    expect(next.find((s) => s.id === 1).extras.cheese.sharedWith).toBe(2);
+  });
+
   it("a chair tap swaps the dock column to that ONE seat's quick access (22.08)", () => {
     const upd = vi.fn();
     const { container, handlers, getByText, queryByText } = setup({

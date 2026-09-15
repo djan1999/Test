@@ -7,6 +7,8 @@ import {
   digestivoCurrentState,
   digestivoNextState,
   cycleSeatDigestivo,
+  digestivoEntry,
+  addSeatDigestivo,
   digestivoEntryMatchesOption,
   digestivoAnchorKeys,
   isDigestivoAnchor,
@@ -99,6 +101,30 @@ describe("the seat factory carries digestivos", () => {
 
   it("keeps the picks already on the chair", () => {
     expect(makeSeats(1, [{ digestivos: [{ name: "Tea" }] }])[0].digestivos).toEqual([{ name: "Tea" }]);
+  });
+});
+
+describe("one shape for a stored pick, wherever it was recorded", () => {
+  // A button on the board, the search beside it, the detail sheet's party-wide
+  // add: three surfaces, and a pick that loses `baseName` on any of them stops
+  // being recognised by the button that could take it off again.
+  it("folds the subcategory into the name and keeps the matching fields beside it", () => {
+    expect(digestivoEntry({ name: "Coffee", notes: "" }, { baseName: "Coffee", variant: "Decaf", optionId: 7 }))
+      .toEqual({ name: "Coffee (Decaf)", baseName: "Coffee", variant: "Decaf", digestivoId: 7, notes: "" });
+  });
+
+  it("omits what it was not given rather than storing a null", () => {
+    const e = digestivoEntry({ name: "Grappa", notes: "" });
+    expect(e).toEqual({ name: "Grappa", baseName: "Grappa", notes: "" });
+    expect("variant" in e).toBe(false);
+    expect("digestivoId" in e).toBe(false);
+  });
+
+  it("is the shape the board button and the search both write", () => {
+    const fromButton = cycleSeatDigestivo({ id: 1, digestivos: [] }, COFFEE, product("Coffee"), {});
+    const fromSearch = addSeatDigestivo({ id: 1, digestivos: [] }, { name: "Chartreuse", notes: "" });
+    expect(Object.keys(fromButton[0])).toContain("baseName");
+    expect(fromSearch[0]).toMatchObject({ name: "Chartreuse", baseName: "Chartreuse" });
   });
 });
 

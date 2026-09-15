@@ -15,6 +15,8 @@ import {
 } from "../../utils/tableSheetState.js";
 import { searchBeverages } from "../../utils/beverageSearch.js";
 import { addOne, groupDrinks, removeAll, removeOne } from "../../utils/drinkQuantities.js";
+import { resolveAperitifFromQuickAccessOption } from "../../utils/quickAccessResolve.js";
+import { addSeatDigestivo, digestivoEntry, digestivoVariants } from "../../utils/digestivo.js";
 import TablePickerModal from "./TablePickerModal.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
 import BookingEditModal from "./BookingEditModal.jsx";
@@ -155,6 +157,8 @@ export default function TableSheet({
   onEditBooking,
   hotelGuestsEnabled = false,
   roomOptions = [],
+  aperitifOptions = [],
+  digestivoOptions = [],
 }) {
   const isMobile = useIsMobile(TABLE_SHEET_BP);
   const [toast, setToast] = useState(null);
@@ -171,6 +175,11 @@ export default function TableSheet({
   // are ordered per person as often as per table, and the sheet was writing
   // every pick to all four guests with no way to say "just P2".
   const [drinkSeat, setDrinkSeat] = useState(null);
+  // Which digestivo button has its subcategories open. The board scrolls them
+  // one tap at a time on a single chair; here a pick can land on the whole
+  // party at once, where a scroll has no single state to scroll FROM — so the
+  // subcategories open as a row and each one is its own add.
+  const [openVariants, setOpenVariants] = useState(null);
   const [nowMin, setNowMin] = useState(() => minutesOfDay());
   const scrollRef = useRef(null);
   const toastTimer = useRef(null);
@@ -205,6 +214,7 @@ export default function TableSheet({
     setDrinkQuery("");
     setDrinkPhase("aperitif");
     setDrinkSeat(null);
+    setOpenVariants(null);
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [table?.id]);
 
@@ -287,6 +297,15 @@ export default function TableSheet({
 
   // Which per-seat list a with-menu pick belongs to.
   const MENU_FIELD = { wine: "glasses", cocktail: "cocktails", spirit: "spirits", beer: "beers" };
+  // The two phases that name their own list; "menu" defers to MENU_FIELD,
+  // because with the menu a wine is a glass and a gin is a spirit.
+  const PHASE_FIELD = { aperitif: "aperitifs", digestivo: "digestivos" };
+  const PHASE_LABEL = { aperitif: "APERITIF", digestivo: "DIGESTIVO", menu: "WITH MENU" };
+  const quickOptions = drinkPhase === "aperitif" ? (aperitifOptions || [])
+    : drinkPhase === "digestivo" ? (digestivoOptions || [])
+    : [];
+  const openVariantsOf = openVariants == null ? null
+    : quickOptions.find(o => (o.id ?? o.label) === openVariants) || null;
   const targetSeats = drinkSeat == null ? seats : seats.filter(s => s.id === drinkSeat);
 
   /**
@@ -308,11 +327,37 @@ export default function TableSheet({
       return;
     }
     const stored = type === "wine" ? { ...item, byGlass: true } : item;
-    const field = drinkPhase === "aperitif" ? "aperitifs" : (MENU_FIELD[type] || "cocktails");
+    const field = PHASE_FIELD[drinkPhase] || MENU_FIELD[type] || "cocktails";
+    // A digestivo carries the button-matching fields whether it came from a
+    // button or from the catalogue, so the board's buttons still recognise it.
+    targetSeats.forEach(s => updSeat(s.id, field,
+      field === "digestivos" ? addSeatDigestivo(s, stored) : [...(s[field] || []), stored]));
+    const who = drinkSeat == null ? "PARTY" : `P${drinkSeat}`;
+    flash(`${PHASE_LABEL[drinkPhase]} · ${who} — ${name}`);
+    setDrinkQuery("");
+  };
+
+  /**
+   * Add one of the configured quick-access drinks to whoever is selected.
+   *
+   * The same buttons the seat carries in quick access, at the surface where a
+   * server is already standing when the table orders coffee for four. It ADDS
+   * — the board's buttons toggle and scroll because they speak for one chair,
+   * and there is no honest way to scroll one cycle across a party that is in
+   * four different states. The rows below take it off again.
+   */
+  const addQuickDrink = (opt, variant = null) => {
+    const found = resolveAperitifFromQuickAccessOption(opt, { wines, cocktails, spirits, beers });
+    const baseName = String(found?.name || opt?.label || "").trim();
+    const item = found || { name: baseName, notes: "", __cocktail: true };
+    const field = PHASE_FIELD[drinkPhase];
+    const stored = field === "digestivos"
+      ? digestivoEntry(item, { baseName, variant, optionId: opt?.id })
+      : item;
     targetSeats.forEach(s => updSeat(s.id, field, [...(s[field] || []), stored]));
     const who = drinkSeat == null ? "PARTY" : `P${drinkSeat}`;
-    flash(`${drinkPhase === "aperitif" ? "APERITIF" : "WITH MENU"} · ${who} — ${name}`);
-    setDrinkQuery("");
+    flash(`${PHASE_LABEL[drinkPhase]} · ${who} — ${String(stored.name).toUpperCase()}`);
+    setOpenVariants(null);
   };
 
   /**
@@ -715,12 +760,12 @@ export default function TableSheet({
           label="BEVERAGES"
           right={
             <div style={{ display: "flex", gap: 4 }}>
-              {[["aperitif", "APERITIF"], ["menu", "WITH MENU"]].map(([ph, label]) => (
+              {[["aperitif", "APERITIF"], ["digestivo", "DIGESTIVO"], ["menu", "WITH MENU"]].map(([ph, label]) => (
                 <button
                   key={ph}
                   type="button"
                   aria-pressed={drinkPhase === ph}
-                  onClick={() => setDrinkPhase(ph)}
+                  onClick={() => { setDrinkPhase(ph); setOpenVariants(null); }}
                   style={{ ...chip(drinkPhase === ph), minHeight: 34, fontSize: 8, padding: "6px 9px" }}
                 >{label}</button>
               ))}
@@ -739,6 +784,58 @@ export default function TableSheet({
                   aria-label={`Drinks for position ${s.id}`}
                   onClick={() => setDrinkSeat(drinkSeat === s.id ? null : s.id)}
                 >P{s.id}</button>
+              ))}
+            </div>
+          )}
+
+          {/* The configured quick-access buttons for whichever phase is
+              selected — the same list the seat carries on the board, at the
+              surface a server is already looking at when the table orders
+              coffee for four. A phase with none configured shows none, and
+              WITH MENU has no button list of its own: the catalogue below is
+              the whole point of that phase. */}
+          {quickOptions.length > 0 && (
+            <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 8 }}>
+              {quickOptions.map(opt => {
+                const label = opt.label ?? String(opt);
+                const variants = drinkPhase === "digestivo" ? digestivoVariants(opt) : [];
+                const key = opt.id ?? label;
+                if (variants.length === 0) {
+                  return (
+                    <button key={key} type="button" style={{ ...chip(false), minHeight: 36 }}
+                      aria-label={`Add ${label}`}
+                      onClick={() => addQuickDrink(opt)}>{label}</button>
+                  );
+                }
+                const open = openVariants === key;
+                return (
+                  <button key={key} type="button" style={{ ...chip(open), minHeight: 36 }}
+                    aria-expanded={open}
+                    aria-label={`Choose which ${label}`}
+                    onClick={() => setOpenVariants(open ? null : key)}
+                  >{label} <span style={{ fontSize: 8, opacity: 0.6 }}>{open ? "▾" : "▸"}</span></button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* The open button's subcategories, on a row of their own under the
+              buttons. Mixed into the row above they wrapped away from the
+              button they belong to, and DECAF sitting beside GRAPPA reads as
+              a third digestivo rather than a kind of coffee. */}
+          {openVariantsOf && (
+            <div style={{
+              display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center",
+              marginBottom: 8, padding: "6px 8px", background: tokens.ink[5],
+            }}>
+              <span style={{ ...micro, letterSpacing: "0.10em", flexShrink: 0 }}>
+                {(openVariantsOf.label ?? "").toUpperCase()} →
+              </span>
+              {digestivoVariants(openVariantsOf).map(v => (
+                <button key={v} type="button"
+                  style={{ ...chip(false), minHeight: 36, background: tokens.neutral[0] }}
+                  aria-label={`Add ${openVariantsOf.label} ${v}`}
+                  onClick={() => addQuickDrink(openVariantsOf, v)}>{v}</button>
               ))}
             </div>
           )}
