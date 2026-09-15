@@ -2,7 +2,21 @@ import { useState } from "react";
 import BeverageSearch from "./BeverageSearch.jsx";
 import { tokens } from "../../styles/tokens.js";
 
-export default function QuickAperitifSearch({ wines = [], cocktails = [], spirits = [], beers = [], onAdd }) {
+/**
+ * The "everything else" escape hatch under a row of configured quick-access
+ * buttons. The buttons carry what the restaurant pours every night; this
+ * reaches the rest of the live catalogue without an admin trip.
+ *
+ * It serves both ends of the menu — the aperitif before it and the digestivo
+ * inside it — so the wording is a prop. The defaults are the aperitif's,
+ * because that is where the control started and where most tables use it.
+ */
+export default function QuickBeverageSearch({
+  wines = [], cocktails = [], spirits = [], beers = [], onAdd,
+  label = "⌕ Search all beverages",
+  ariaLabel = "Search all beverages for an aperitif",
+  placeholder = "find any beverage for aperitif…",
+}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -10,7 +24,7 @@ export default function QuickAperitifSearch({ wines = [], cocktails = [], spirit
       <button
         type="button"
         aria-expanded={open}
-        aria-label="Search all beverages for an aperitif"
+        aria-label={ariaLabel}
         onClick={() => setOpen((value) => !value)}
         style={{
           fontFamily: tokens.font, fontSize: 9, letterSpacing: "0.08em",
@@ -19,7 +33,7 @@ export default function QuickAperitifSearch({ wines = [], cocktails = [], spirit
           color: open ? tokens.ink[1] : tokens.ink[3], textTransform: "uppercase",
           touchAction: "manipulation",
         }}
-      >⌕ Search all beverages</button>
+      >{label}</button>
       {open && (
         <div style={{ marginTop: 6 }}>
           <BeverageSearch
@@ -29,7 +43,7 @@ export default function QuickAperitifSearch({ wines = [], cocktails = [], spirit
             beers={beers}
             autoFocus
             inlineResults
-            placeholder="find any beverage for aperitif…"
+            placeholder={placeholder}
             onAdd={(entry) => {
               onAdd?.(entry.item);
               setOpen(false);

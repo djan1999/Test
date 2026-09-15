@@ -1,7 +1,6 @@
 import { extraPairingForSeat } from "../constants/pairings.js";
 import { getCourseMod, applyModOverride } from "./menuUtils.js";
 import { seatPourMode } from "./pourMode.js";
-import { seatDigestivoNames } from "./digestivo.js";
 
 // ── Kitchen "send" deltas ─────────────────────────────────────────────────────
 // Service pings the kitchen as a table's order firms up (pairings, optional
@@ -11,8 +10,13 @@ import { seatDigestivoNames } from "./digestivo.js";
 // send.
 //
 // A snapshot is the diff-friendly shape of a table's current orders:
-//   { [seatId]: { gender, pairing, pourMode, digestivos, pairingSharedWith,
+//   { [seatId]: { gender, pairing, pourMode, pairingSharedWith,
 //                 extras: [{key,name,pairing,sharedWith}] } }
+// Digestivos are deliberately NOT in here. They print on the ticket straight
+// from the seat, as a service line above the course admin anchored them to —
+// nobody has to start a plate for one, so interrupting the pass with a popup
+// about a coffee is noise on a surface that only works when every popup
+// matters. See digestivo.js.
 // The kitchen stores the snapshot it acknowledged (table.kitchenSent); the next
 // Send diffs the live snapshot against it.
 
@@ -50,9 +54,6 @@ export function kitchenSnapshot(seats = [], optionalExtras = [], optionalPairing
       // simply read as no drink at all.
       pourMode: seatPourMode(s),
       pairingSharedWith: s.pairingSharedWith ?? null,
-      // Ordered before the menu reaches its anchor course, so the pass has to
-      // hear about it on the Send, not when the plate is already going out.
-      digestivos: seatDigestivoNames(s),
       extras,
     };
   });
@@ -84,20 +85,13 @@ export function kitchenDelta(current = {}, baseline = {}) {
       // the same chair, so the kitchen hears a switch between them as one
       // change and the popup prints whichever now holds.
       || (cur.pourMode ?? null) !== (base.pourMode ?? null);
-    const curDigestivos = Array.isArray(cur.digestivos) ? cur.digestivos : [];
-    const baseDigestivos = Array.isArray(base.digestivos) ? base.digestivos : [];
-    const digestivosChanged = curDigestivos.join("\u0000") !== baseDigestivos.join("\u0000");
-    if (newExtras.length === 0 && !pairingChanged && !digestivosChanged) return;
+    if (newExtras.length === 0 && !pairingChanged) return;
     seats.push({
       id: Number(id),
       gender: cur.gender ?? null,
       pairing: pairingChanged ? cur.pairing : null,
       pourMode: pairingChanged ? (cur.pourMode ?? null) : null,
       pairingSharedWith: pairingChanged ? cur.pairingSharedWith : null,
-      // Same ambiguity the pairing has: an empty list means "unchanged" unless
-      // the flag says the guest cancelled the digestivo back to nothing.
-      digestivos: digestivosChanged ? curDigestivos : [],
-      digestivosChanged,
       // `pairing: null` alone is ambiguous — unchanged, or cancelled back to
       // '—'. The alert merge below must know which, or a cancellation would
       // resurrect the pending alert's stale pairing in the kitchen popup.
@@ -153,11 +147,6 @@ function mergeAlertSeats(pending = [], next = []) {
     // "unchanged" (null + false); alerts written before the flag existed fall
     // back to treating a concrete value as a change
     const pairingKnown = s.pairingChanged ?? (s.pairing != null || s.pairingSharedWith != null);
-    // Digestivos carry the same "unchanged vs cancelled" ambiguity as the
-    // pairing, and the same answer: only a delta that says it changed them
-    // may overwrite what the pending popup is already showing.
-    const digestivosKnown = s.digestivosChanged
-      ?? (Array.isArray(s.digestivos) && s.digestivos.length > 0);
     byId.set(Number(s.id), {
       ...prev,
       gender: s.gender ?? prev.gender ?? null,
@@ -165,10 +154,6 @@ function mergeAlertSeats(pending = [], next = []) {
       pourMode: pairingKnown ? (s.pourMode ?? null) : (prev.pourMode ?? null),
       pairingSharedWith: pairingKnown ? (s.pairingSharedWith ?? null) : (prev.pairingSharedWith ?? null),
       pairingChanged: pairingKnown || !!prev.pairingChanged,
-      digestivos: digestivosKnown
-        ? (Array.isArray(s.digestivos) ? s.digestivos : [])
-        : (Array.isArray(prev.digestivos) ? prev.digestivos : []),
-      digestivosChanged: digestivosKnown || !!prev.digestivosChanged,
       extras,
     });
   });

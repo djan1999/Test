@@ -86,11 +86,16 @@ and deployment-order gates.
   is the drink before the menu; DIGESTIVO is the one served inside it. A
   digestivo only reaches the kitchen ticket once a course is marked "Digestivo
   served before this course" in Admin > Menu Layout > Courses — the ticket then
-  prints a DIGESTIVO service line directly above that course.
+  prints a DIGESTIVO service line directly above that course. It needs no Send
+  and raises no kitchen popup: nobody has to start a plate for a coffee, so the
+  line simply appears on the ticket the pass is already reading.
 - A digestivo button can carry subcategories (Coffee → espresso, cappuccino, …).
   On the seat it scrolls through them like the pairing button scrolls its types,
   and the kitchen ticket prints the chosen one. A button with none stays a plain
   on/off toggle.
+- Beside the digestivo buttons, "Search all beverages" reaches the rest of the
+  live catalogue, so a drink nobody put on a button does not need an admin trip
+  mid-service. A searched drink is added alongside the button picks.
 - A guest who is not on a pairing can be marked BTG (by the glass) or BTB (by
   the bottle) beside the pairing control in service quick access. The two are
   mutually exclusive with a pairing, and the next Send carries the choice to the

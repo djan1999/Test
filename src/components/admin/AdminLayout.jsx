@@ -542,9 +542,10 @@ export default function AdminLayout({
               />
               {/* The second list on the same tab, because it is the same
                   gesture at a later moment: these buttons appear on the seat
-                  under [DIGESTIVO], and a Send puts them on the kitchen
-                  ticket above the course flagged "Digestivo served before
-                  this course" in Menu Layout. */}
+                  under [DIGESTIVO], and a pick lands on the kitchen ticket
+                  above the course flagged "Digestivo served before this
+                  course" in Menu Layout. No Send and no popup — it is a
+                  service line the pass reads where it is poured. */}
               <div style={{ borderTop: `1px solid ${tokens.ink[4]}`, paddingTop: 26 }}>
                 <QuickAccessPanel
                   quickAccessItems={digestivoItems}
@@ -553,7 +554,7 @@ export default function AdminLayout({
                   cocktails={cocktails}
                   spirits={spirits}
                   beers={beers}
-                  heading="DIGESTIVO — buttons shown on the seat, sent to the kitchen ticket above the flagged course"
+                  heading="DIGESTIVO — buttons shown on the seat, printed on the kitchen ticket above the flagged course"
                   addPlaceholder="e.g. Espresso"
                   emptyLabel="No digestivo items configured"
                   showMenuOnly={false}

@@ -172,6 +172,52 @@ describe("the digestivo buttons on the seat", () => {
     expect(screen.getByText("D · Coffee (Espresso)")).toBeTruthy();
   });
 
+  it("reaches the rest of the catalogue through the search beside the buttons", () => {
+    // The buttons carry what the house pours nightly. A guest asking for the
+    // one bottle nobody put on a button should not send a server to admin in
+    // the middle of service.
+    const updSeat = vi.fn();
+    render(
+      <DisplayBoardCard t={table([{}])} quickMode updSeat={updSeat} upd={vi.fn()}
+        aperitifOptions={[]} digestivoOptions={DIGESTIVO_OPTIONS}
+        spirits={[{ id: "s1", name: "Chartreuse", notes: "herbal" }]} />,
+    );
+    fireEvent.click(screen.getByLabelText("Search all beverages for a digestivo"));
+    fireEvent.change(screen.getByPlaceholderText("find any beverage for digestivo…"),
+      { target: { value: "chart" } });
+    fireEvent.mouseDown(screen.getByText("Chartreuse"));
+
+    const [tableId, seatId, field, value] = updSeat.mock.calls.at(-1);
+    expect([tableId, seatId, field]).toEqual([1, 1, "digestivos"]);
+    expect(value.map((x) => x.name)).toEqual(["Chartreuse"]);
+  });
+
+  it("a searched drink joins the button's pick instead of replacing it", () => {
+    // Scrolling a button is one guest changing their mind; a second drink
+    // found in the catalogue is a second drink.
+    const updSeat = vi.fn();
+    render(
+      <DisplayBoardCard
+        t={table([{ digestivos: [{ name: "Grappa", baseName: "Grappa", digestivoId: 8 }] }])}
+        quickMode updSeat={updSeat} upd={vi.fn()}
+        aperitifOptions={[]} digestivoOptions={DIGESTIVO_OPTIONS}
+        spirits={[{ id: "s1", name: "Chartreuse", notes: "herbal" }]} />,
+    );
+    fireEvent.click(screen.getByLabelText("Search all beverages for a digestivo"));
+    fireEvent.change(screen.getByPlaceholderText("find any beverage for digestivo…"),
+      { target: { value: "chart" } });
+    fireEvent.mouseDown(screen.getByText("Chartreuse"));
+    expect(updSeat.mock.calls.at(-1)[3].map((x) => x.name)).toEqual(["Grappa", "Chartreuse"]);
+  });
+
+  it("offers no digestivo search to a restaurant that runs no digestivo", () => {
+    render(
+      <DisplayBoardCard t={table([{}])} quickMode updSeat={vi.fn()} upd={vi.fn()}
+        aperitifOptions={[]} digestivoOptions={[]} />,
+    );
+    expect(screen.queryByLabelText("Search all beverages for a digestivo")).toBeNull();
+  });
+
   it("does not touch the aperitif list, which is a different moment of the night", () => {
     const updSeat = vi.fn();
     render(
@@ -281,7 +327,10 @@ describe("the DIGESTIVO line on the kitchen ticket", () => {
     renderTicket([{ digestivos: [{ name: "Coffee" }, { name: "Coffee" }] }, { digestivos: [{ name: "Grappa" }] }]);
     expect(screen.getByText("DIGESTIVO")).toBeTruthy();
     expect(screen.getByText("3×")).toBeTruthy();
-    expect(screen.getByText("P1 Coffee ×2 · P2 Grappa")).toBeTruthy();
+    // One segment per chair, so a long round wraps instead of ellipsizing
+    // away the drink the pass still has to pour.
+    expect(screen.getByText("P1 Coffee ×2")).toBeTruthy();
+    expect(screen.getByText("P2 Grappa")).toBeTruthy();
   });
 
   it("prints nothing when nobody ordered one, however the menu is anchored", () => {
@@ -301,6 +350,17 @@ describe("the DIGESTIVO line on the kitchen ticket", () => {
     expect(text.indexOf("DIGESTIVO")).toBeLessThan(text.indexOf("Buchtel"));
   });
 
+  it("wears none of the next-due highlight it sits beside", () => {
+    // The row used to take the parchment fill and the charcoal left edge the
+    // ticket uses for the course that is about to go out, which made every
+    // digestivo read as the next fire — and hid the course that really was.
+    const { container } = renderTicket([{ digestivos: [{ name: "Coffee" }] }]);
+    const row = container.querySelector("[data-digestivo-line]");
+    expect(row.style.background).not.toBe("rgb(242, 237, 227)");
+    expect(row.style.borderLeft).toBe("4px solid transparent");
+    expect(container.textContent).toContain("DIGESTIVO");
+  });
+
   it("shows BTG on the seat chip of an unpaired guest, and never beside a pairing", () => {
     const { container } = renderTicket([{ pourMode: "btg" }, { pairing: "Wine", pourMode: "btb" }]);
     // P1 has no pairing, so its chip says BTG; P2 took the Wine pairing, so
@@ -309,5 +369,33 @@ describe("the DIGESTIVO line on the kitchen ticket", () => {
     expect(within(container).queryByTitle("By the bottle")).toBeNull();
     expect(container.textContent).toContain("BTG");
     expect(container.textContent).not.toContain("BTB");
+  });
+});
+
+describe("Send does not pop the digestivo at the kitchen", () => {
+  // The line is already on the ticket the moment service records it. A popup
+  // on top of that is an interruption the pass has to dismiss before it can
+  // read anything else, over a drink nobody has to start cooking.
+  const alerted = (seats) => ({
+    ...table(seats),
+    kitchenAlert: {
+      timestamp: Date.now(),
+      confirmed: false,
+      course: null,
+      seats: [{ id: 1, gender: null, pairing: "Non-Alc", pairingChanged: true, extras: [] }],
+    },
+  });
+
+  it("names the pairing it really is about, and never the digestivo", () => {
+    const { container } = render(
+      <KitchenBoard
+        tables={[alerted([{ pairing: "Non-Alc", digestivos: [{ name: "Coffee" }] }])]}
+        menuCourses={[makeCourse(1, "danube", "Danube")]}
+        upd={vi.fn()} updMany={vi.fn()} />,
+    );
+    const popup = screen.getByText("CONFIRM").closest("div").parentElement;
+    expect(within(popup).queryByText("DIGESTIVO")).toBeNull();
+    expect(within(popup).queryByText(/Coffee/)).toBeNull();
+    expect(container.textContent).toContain("Non-Alc");
   });
 });

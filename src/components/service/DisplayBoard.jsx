@@ -9,11 +9,11 @@ import {
   resolveAperitifFromQuickAccessOption,
   aperitifMatchesQuickAccessOption,
 } from "../../utils/quickAccessResolve.js";
-import QuickAperitifSearch from "./QuickAperitifSearch.jsx";
+import QuickBeverageSearch from "./QuickBeverageSearch.jsx";
 import { POUR_MODES, POUR_MODE_LABEL, POUR_MODE_TITLE, seatPourMode, withPourMode, withPairing } from "../../utils/pourMode.js";
 import {
   digestivoVariants, digestivoCurrentState, digestivoNextState,
-  cycleSeatDigestivo, digestivoEntryMatchesOption,
+  cycleSeatDigestivo, digestivoEntryMatchesOption, addSeatDigestivo,
 } from "../../utils/digestivo.js";
 
 const FONT = tokens.font;
@@ -635,7 +635,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                           }}>{label}</button>
                         );
                       }),
-                      <QuickAperitifSearch
+                      <QuickBeverageSearch
                         key="all-beverage-search"
                         wines={wines}
                         cocktails={cocktails}
@@ -646,13 +646,16 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                     ])}
 
                     {/* DIGESTIVO — the same gesture as the aperitif above, at
-                        the other end of the menu. A pick here is what puts the
+                        the other end of the menu. A pick here puts the
                         DIGESTIVO service line on the kitchen ticket, above the
-                        course admin flagged, on the next Send. Configured in
-                        Admin → Quick Access → DIGESTIVO; a restaurant that
-                        runs none sees no section at all. */}
-                    {(digestivoOptions || []).length > 0 && sectionBlock("Digestivo",
-                      (digestivoOptions || []).map(opt => {
+                        course admin flagged. It needs no Send and raises no
+                        popup: nobody has to start a plate for a coffee, so it
+                        simply appears on the ticket the pass is already
+                        reading. Configured in Admin → Quick Access →
+                        DIGESTIVO; a restaurant that runs none sees no section
+                        at all. */}
+                    {(digestivoOptions || []).length > 0 && sectionBlock("Digestivo", [
+                      ...(digestivoOptions || []).map(opt => {
                         const label = opt.label ?? opt;
                         const catalogs = { wines, cocktails, spirits, beers };
                         // A configured button SCROLLS its subcategories, the
@@ -699,7 +702,22 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                             )}
                           </button>
                         );
-                      }))}
+                      }),
+                      // The configured buttons are what the house pours every
+                      // night; the rest of the catalogue is one tap behind
+                      // this, so a guest asking for the bottle nobody put on a
+                      // button does not need an admin trip mid-service.
+                      <QuickBeverageSearch
+                        key="all-beverage-digestivo-search"
+                        wines={wines}
+                        cocktails={cocktails}
+                        spirits={spirits}
+                        beers={beers}
+                        ariaLabel="Search all beverages for a digestivo"
+                        placeholder="find any beverage for digestivo…"
+                        onAdd={(item) => updSeat && updSeat(t.id, s.id, "digestivos", addSeatDigestivo(s, item))}
+                      />,
+                    ])}
 
                     <div style={{ height: 6 }} />
                   </div>
