@@ -370,6 +370,11 @@ export default function App() {
   const [cocktails, setCocktails] = useState(localBev?.cocktails ?? initCocktails);
   const [spirits,   setSpirits]   = useState(localBev?.spirits   ?? initSpirits);
   const [beers,     setBeers]     = useState(localBev?.beers      ?? initBeers);
+  // Tea and coffee are catalogue categories like any other — the digestivo
+  // buttons link to them, which is how "Tea" stops resolving to whatever wine
+  // happens to contain those three letters.
+  const [teas,      setTeas]      = useState(localBev?.teas       ?? []);
+  const [coffees,   setCoffees]   = useState(localBev?.coffees    ?? []);
   // Every app open (and every sign-in) starts at the MODE SELECTION screen —
   // the operating mode is a per-session choice, never restored from a previous
   // session. Auto-resuming the stored mode dropped freshly opened devices
@@ -1308,9 +1313,9 @@ export default function App() {
     }
   }, []);
 
-  const boardState = { tables, cocktails, spirits, beers };
+  const boardState = { tables, cocktails, spirits, beers, teas, coffees };
   const tablesJson = useMemo(() => JSON.stringify(tables), [tables]);
-  const boardJson  = useMemo(() => JSON.stringify(boardState), [tablesJson, cocktails, spirits, beers]); // eslint-disable-line react-hooks/exhaustive-deps
+  const boardJson  = useMemo(() => JSON.stringify(boardState), [tablesJson, cocktails, spirits, beers, teas, coffees]); // eslint-disable-line react-hooks/exhaustive-deps
   const boardStateRef = useRef(boardState);
   boardStateRef.current = boardState;
   tablesRef.current = tables;
@@ -1946,6 +1951,7 @@ export default function App() {
         cocktails: json.cocktails,
         beers: json.beers,
         spirits: json.spirits,
+        byCategory: json.byCategory || null,
         failedCountries: json.failedCountries || [],
         failedBeveragePages: json.failedBeveragePages || [],
         skippedCategories: json.skippedCategories || [],
@@ -2123,7 +2129,7 @@ export default function App() {
     return { ok: true };
   };
 
-  const saveBeverages = async ({ cocktails: newC, spirits: newS, beers: newB }) => {
+  const saveBeverages = async ({ cocktails: newC, spirits: newS, beers: newB, teas: newT, coffees: newK }) => {
     if (sandboxRef.current) return { ok: true }; // test service: catalog not persisted
     // Only categories whose list actually changed are rewritten (the write is
     // a replace-all within its category), so saving a cocktail edit can't
@@ -2136,11 +2142,15 @@ export default function App() {
       ...(sameList(newC, cocktails) ? [] : [{ category: "cocktail", rows: bevRows(newC, "cocktail") }]),
       ...(sameList(newS, spirits)   ? [] : [{ category: "spirit",   rows: bevRows(newS, "spirit") }]),
       ...(sameList(newB, beers)     ? [] : [{ category: "beer",     rows: bevRows(newB, "beer") }]),
+      ...(sameList(newT, teas)      ? [] : [{ category: "tea",      rows: bevRows(newT, "tea") }]),
+      ...(sameList(newK, coffees)   ? [] : [{ category: "coffee",   rows: bevRows(newK, "coffee") }]),
     ];
     setCocktails(newC);
     setSpirits(newS);
     setBeers(newB);
-    writeLocalBeverages({ cocktails: newC, spirits: newS, beers: newB });
+    setTeas(newT);
+    setCoffees(newK);
+    writeLocalBeverages({ cocktails: newC, spirits: newS, beers: newB, teas: newT, coffees: newK });
     if (!supabase || changed.length === 0) return { ok: true };
     const categories = changed.map(c => c.category);
     const rows = changed.flatMap(c => c.rows);
@@ -2304,6 +2314,7 @@ export default function App() {
         snapshot: {
           menuCourses: menuCoursesRef.current || [],
           cocktails: snap.cocktails, spirits: snap.spirits, beers: snap.beers,
+          teas: snap.teas, coffees: snap.coffees,
         },
       });
       if (!result.ok) {
@@ -2571,6 +2582,7 @@ export default function App() {
         ? {
             menuCourses: snapCourses,
             cocktails: board.cocktails, spirits: board.spirits, beers: board.beers,
+            teas: board.teas, coffees: board.coffees,
           }
         : null;
       const result = await endServiceStore(svc.id, { reason: "rollover", label, snapshot });
@@ -4654,10 +4666,14 @@ export default function App() {
             const c = pickBeveragesForCategory(data, "cocktail");
             const s = pickBeveragesForCategory(data, "spirit");
             const b = pickBeveragesForCategory(data, "beer");
+            const tea = pickBeveragesForCategory(data, "tea");
+            const cof = pickBeveragesForCategory(data, "coffee");
             setCocktails(c);
             setSpirits(s);
             setBeers(b);
-            writeLocalBeverages({ cocktails: c, spirits: s, beers: b });
+            setTeas(tea);
+            setCoffees(cof);
+            writeLocalBeverages({ cocktails: c, spirits: s, beers: b, teas: tea, coffees: cof });
           },
           onMenuCourses: (rows) => {
             if (cancelled || (!rows.length && !powerSyncStatus?.hasSynced)) return;
@@ -4730,10 +4746,14 @@ export default function App() {
       const c = pickBeveragesForCategory(data, "cocktail");
       const s = pickBeveragesForCategory(data, "spirit");
       const b = pickBeveragesForCategory(data, "beer");
+      const tea = pickBeveragesForCategory(data, "tea");
+      const cof = pickBeveragesForCategory(data, "coffee");
       setCocktails(c);
       setSpirits(s);
       setBeers(b);
-      writeLocalBeverages({ cocktails: c, spirits: s, beers: b });
+      setTeas(tea);
+      setCoffees(cof);
+      writeLocalBeverages({ cocktails: c, spirits: s, beers: b, teas: tea, coffees: cof });
     } catch (e) {
       // Keep the cached beverages already on screen rather than blanking them.
       console.warn("Beverages load failed — keeping cached list:", e);
@@ -4749,6 +4769,8 @@ export default function App() {
       if (Array.isArray(cached.cocktails)) setCocktails(cached.cocktails);
       if (Array.isArray(cached.spirits))   setSpirits(cached.spirits);
       if (Array.isArray(cached.beers))     setBeers(cached.beers);
+      if (Array.isArray(cached.teas))      setTeas(cached.teas);
+      if (Array.isArray(cached.coffees))   setCoffees(cached.coffees);
     }
     if (!psResolved || sqlitePrimary) return; // primary: the watches own the list
     loadBeverages();
@@ -5643,6 +5665,8 @@ export default function App() {
         cocktails={cocktails}
         spirits={spirits}
         beers={beers}
+        teas={teas}
+        coffees={coffees}
         onUpdateWines={saveWines}
         onSaveBeverages={saveBeverages}
         onSyncWines={canRunCatalogSync ? syncWines : undefined}
@@ -5862,6 +5886,8 @@ export default function App() {
               cocktails={cocktails}
               spirits={spirits}
               beers={beers}
+              teas={teas}
+              coffees={coffees}
               updSeat={updSeat}
               onCycleStatus={(mapId, label) => updateFloorStatus(fs => cycleFloorStatus(fs, mapId, label))}
               onUpdateFloorMaps={updateFloorMaps}
@@ -5908,6 +5934,8 @@ export default function App() {
                   cocktails={cocktails}
                   spirits={spirits}
                   beers={beers}
+                  teas={teas}
+                  coffees={coffees}
                 />
               );
             })()
@@ -5929,6 +5957,8 @@ export default function App() {
           cocktails={cocktails}
           spirits={spirits}
           beers={beers}
+          teas={teas}
+          coffees={coffees}
           reservationOnTable={reservationOnTable}
           seatCapOf={id => mapSeatCountForBoardTable(getActiveDiningMap(floorMapsForDay), id)}
           onClose={() => setSel(null)}

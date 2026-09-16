@@ -108,7 +108,7 @@ export const MIN_QUERY = 2;
  *                        the DOM, not a display limit.
  * @returns {{key, type, item, sub, score}[]} best match first
  */
-export function searchBeverages(query, { wines = [], cocktails = [], spirits = [], beers = [] } = {}, limit = 40) {
+export function searchBeverages(query, { wines = [], cocktails = [], spirits = [], beers = [], teas = [], coffees = [] } = {}, limit = 40) {
   if (foldText(query).replace(/ /g, "").length < MIN_QUERY) return [];
   const out = [];
 
@@ -124,7 +124,8 @@ export function searchBeverages(query, { wines = [], cocktails = [], spirits = [
     });
   });
 
-  [["cocktail", cocktails], ["spirit", spirits], ["beer", beers]].forEach(([type, list]) => {
+  [["cocktail", cocktails], ["spirit", spirits], ["beer", beers],
+   ["tea", teas], ["coffee", coffees]].forEach(([type, list]) => {
     (list || []).forEach((d, i) => {
       const score = matchScore(query, d?.name, d?.notes);
       if (score == null) return;

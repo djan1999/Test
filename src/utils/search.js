@@ -53,7 +53,7 @@ export const keyHitsText = (text, key) => {
 };
 
 /** @deprecated Prefer resolveAperitifFromQuickAccessOption from quickAccessResolve.js when linkedKey exists */
-export function resolveAperitifCatalogItem(searchKey, type, { wines = [], cocktails = [], spirits = [], beers = [] } = {}) {
+export function resolveAperitifCatalogItem(searchKey, type, { wines = [], cocktails = [], spirits = [], beers = [], teas = [], coffees = [] } = {}) {
   const sk = String(searchKey || "").trim().toLowerCase();
   if (!sk) return null;
 
@@ -80,16 +80,14 @@ export function resolveAperitifCatalogItem(searchKey, type, { wines = [], cockta
   if (type === "wine") {
     return wines.find(w => w.byGlass && wineHit(w)) || wines.find(wineHit) || null;
   }
-  if (type === "cocktail") return cocktails.find(drinkHit) || null;
-  if (type === "spirit") return spirits.find(drinkHit) || null;
-  if (type === "beer") return beers.find(drinkHit) || null;
-  return null;
+  const byType = { cocktail: cocktails, spirit: spirits, beer: beers, tea: teas, coffee: coffees };
+  return byType[type]?.find(drinkHit) || null;
 }
 
 /** True if a chip already on the seat is the same product as this Quick Access row. */
-export function aperitifMatchesQuickAccess(stored, searchKey, type, { wines = [], cocktails = [], spirits = [], beers = [] } = {}) {
+export function aperitifMatchesQuickAccess(stored, searchKey, type, catalogs = {}) {
   if (!stored) return false;
-  const resolved = resolveAperitifCatalogItem(searchKey, type, { wines, cocktails, spirits, beers });
+  const resolved = resolveAperitifCatalogItem(searchKey, type, catalogs);
   if (resolved) {
     if (type === "wine") {
       return stored.id && resolved.id

@@ -41,9 +41,9 @@ function DrinkListEditor({ list, setList, newItem, setNewItem, nextId, label }) 
   );
 }
 
-// ── DrinksPanel — manage wines, cocktails, spirits, beers + pairings ──
+// ── DrinksPanel — manage wines, cocktails, spirits, beers, tea, coffee + pairings ──
 export default function DrinksPanel({
-  dishes, wines, cocktails, spirits, beers,
+  dishes, wines, cocktails, spirits, beers, teas = [], coffees = [],
   onUpdateWines, onSaveBeverages,
 }) {
   const isMobile = useIsMobile(BP.md);
@@ -75,6 +75,17 @@ export default function DrinksPanel({
   const [newBeer, setNewBeer] = useState({ name: "", notes: "" });
   const nextBeerId = useRef(Math.max(...beers.map(b => b.id), 0) + 1);
 
+  // Tea and coffee are ordinary catalogue categories, edited exactly like the
+  // three above. They exist so a digestivo button can point at a real product
+  // rather than guess one from its label.
+  const [localTeas, setLocalTeas] = useState(teas.map(x => ({ ...x })));
+  const [newTea, setNewTea] = useState({ name: "", notes: "" });
+  const nextTeaId = useRef(Math.max(...teas.map(x => x.id), 0) + 1);
+
+  const [localCoffees, setLocalCoffees] = useState(coffees.map(x => ({ ...x })));
+  const [newCoffee, setNewCoffee] = useState({ name: "", notes: "" });
+  const nextCoffeeId = useRef(Math.max(...coffees.map(x => x.id), 0) + 1);
+
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -91,7 +102,10 @@ export default function DrinksPanel({
       setSaveError(wRes.error?.message || String(wRes.error || "Wine save failed"));
       return;
     }
-    const bRes = await onSaveBeverages({ cocktails: localCocktails, spirits: localSpirits, beers: localBeers });
+    const bRes = await onSaveBeverages({
+      cocktails: localCocktails, spirits: localSpirits, beers: localBeers,
+      teas: localTeas, coffees: localCoffees,
+    });
     if (bRes && bRes.ok === false) {
       setSaveError(bRes.error?.message || String(bRes.error || "Beverage save failed"));
       return;
@@ -104,7 +118,8 @@ export default function DrinksPanel({
       savingRef.current = false;
       setSaving(false);
     }
-  }, [localWines, localCocktails, localSpirits, localBeers, onUpdateWines, onSaveBeverages]);
+  }, [localWines, localCocktails, localSpirits, localBeers, localTeas, localCoffees,
+      onUpdateWines, onSaveBeverages]);
 
   const tabBtn = t => ({
     fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 14px",
@@ -118,7 +133,7 @@ export default function DrinksPanel({
   return (
     <div>
       <div style={{ display: "flex", flexWrap: "wrap", marginBottom: 8 }}>
-        {["wines", "cocktails", "spirits", "beers"].map(t => (
+        {["wines", "cocktails", "spirits", "beers", "tea", "coffee"].map(t => (
           <button key={t} style={tabBtn(t)} onClick={() => setDrinkTab(t)}>{t.toUpperCase()}</button>
         ))}
         <button type="button" disabled={saving} onClick={handleSaveDrinks} style={{
@@ -236,6 +251,18 @@ export default function DrinksPanel({
         <DrinkListEditor list={localBeers} setList={setLocalBeers}
           newItem={newBeer} setNewItem={setNewBeer}
           nextId={nextBeerId} label="beer" />
+      )}
+
+      {drinkTab === "tea" && (
+        <DrinkListEditor list={localTeas} setList={setLocalTeas}
+          newItem={newTea} setNewItem={setNewTea}
+          nextId={nextTeaId} label="tea" />
+      )}
+
+      {drinkTab === "coffee" && (
+        <DrinkListEditor list={localCoffees} setList={setLocalCoffees}
+          newItem={newCoffee} setNewItem={setNewCoffee}
+          nextId={nextCoffeeId} label="coffee" />
       )}
     </div>
   );

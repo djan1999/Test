@@ -166,6 +166,8 @@ export default function TableSheet({
   cocktails = [],
   spirits = [],
   beers = [],
+  teas = [],
+  coffees = [],
   reservationOnTable,
   seatCapOf,
   onClose,
@@ -252,7 +254,7 @@ export default function TableSheet({
   // The WHOLE catalog, not just wine, and forgiving about how it is typed —
   // accents folded, word order free, small typos tolerated (utils/beverageSearch).
   const drinkMatches = useMemo(
-    () => searchBeverages(drinkQuery, { wines, cocktails, spirits, beers }),
+    () => searchBeverages(drinkQuery, { wines, cocktails, spirits, beers, teas, coffees }),
     [drinkQuery, wines, cocktails, spirits, beers],
   );
 
@@ -373,7 +375,7 @@ export default function TableSheet({
    * four different states. The rows below take it off again.
    */
   const addQuickDrink = (opt, variant = null) => {
-    const found = resolveAperitifFromQuickAccessOption(opt, { wines, cocktails, spirits, beers });
+    const found = resolveAperitifFromQuickAccessOption(opt, { wines, cocktails, spirits, beers, teas, coffees });
     const baseName = String(found?.name || opt?.label || "").trim();
     const item = found || { name: baseName, notes: "", __cocktail: true };
     const field = PHASE_FIELD[drinkPhase];

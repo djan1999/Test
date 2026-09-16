@@ -117,6 +117,8 @@ const bevGlyph = {
   aperitif: "◐",
   digestivo: "◑",
   bottle:   "◉",
+  tea:      "◌",
+  coffee:   "◍",
 };
 
 // ── Beverage border colors ────────────────────────────────────

@@ -43,7 +43,7 @@ const WATER_QUICK = ["XC", "XW", "OC", "OW"];
 // onlySeatId: render just that seat's row (the floor's chair-tap quick
 // access) — the seat LOGIC still sees the whole party, so share cycles and
 // the Send delta stay correct.
-export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onAssignTerrace, optionalExtras = [], optionalPairings = [], aperitifOptions, digestivoOptions = [], wines = [], cocktails = [], spirits = [], beers = [], onlySeatId = null }) {
+export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onAssignTerrace, optionalExtras = [], optionalPairings = [], aperitifOptions, digestivoOptions = [], wines = [], cocktails = [], spirits = [], beers = [], teas = [], coffees = [], onlySeatId = null }) {
     const isSeated = t.active;
     // Terrace-flow decoration (derived in App, never persisted on the row):
     // 'terrace' = party outside on t._visit.terraceLabel.
@@ -558,7 +558,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                     {sectionBlock("Aperitif", [
                       ...(aperitifOptions || []).map(opt => {
                         const label = opt.label ?? opt;
-                        const apMatch = (x) => aperitifMatchesQuickAccessOption(x, opt, { wines, cocktails, spirits, beers });
+                        const apMatch = (x) => aperitifMatchesQuickAccessOption(x, opt, catalogs);
                         const active = (s.aperitifs || []).some(apMatch);
                         return (
                           <button key={label} onClick={() => {
@@ -566,7 +566,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                             if (active) {
                               updSeat(t.id, s.id, "aperitifs", (s.aperitifs || []).filter(x => !apMatch(x)));
                             } else {
-                              const found = resolveAperitifFromQuickAccessOption(opt, { wines, cocktails, spirits, beers });
+                              const found = resolveAperitifFromQuickAccessOption(opt, catalogs);
                               const item = found || { name: label, notes: "", __cocktail: true };
                               updSeat(t.id, s.id, "aperitifs", [...(s.aperitifs || []), item]);
                             }
@@ -586,6 +586,8 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                         cocktails={cocktails}
                         spirits={spirits}
                         beers={beers}
+                        teas={teas}
+                        coffees={coffees}
                         onAdd={(item) => updSeat && updSeat(t.id, s.id, "aperitifs", [...(s.aperitifs || []), item])}
                       />,
                     ])}
@@ -602,7 +604,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                     {(digestivoOptions || []).length > 0 && sectionBlock("Digestivo", [
                       ...(digestivoOptions || []).map(opt => {
                         const label = opt.label ?? opt;
-                        const catalogs = { wines, cocktails, spirits, beers };
+                        const catalogs = { wines, cocktails, spirits, beers, teas, coffees };
                         // A configured button SCROLLS its subcategories, the
                         // same gesture as the pairing button one block up:
                         // off → Espresso → Cappuccino → off. With none
@@ -665,6 +667,8 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                         cocktails={cocktails}
                         spirits={spirits}
                         beers={beers}
+                        teas={teas}
+                        coffees={coffees}
                         ariaLabel="Search all beverages for a digestivo"
                         placeholder="find any beverage for digestivo…"
                         onAdd={(item) => updSeat && updSeat(t.id, s.id, "digestivos", addSeatDigestivo(s, item))}
@@ -738,7 +742,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                   {/* Two of the same aperitif is one chip reading ×2, the same
                       count the sheet's counter writes. */}
                   {groupDrinks(s.aperitifs).map(({ key, item: ap, qty }) => {
-                    const matchOpt = aperitifOptions?.find(opt => aperitifMatchesQuickAccessOption(ap, opt, { wines, cocktails, spirits, beers }));
+                    const matchOpt = aperitifOptions?.find(opt => aperitifMatchesQuickAccessOption(ap, opt, { wines, cocktails, spirits, beers, teas, coffees }));
                     const label = `${matchOpt?.label || ap.name}${qtySuffix(qty)}`;
                     return (
                       <span key={key} style={{
@@ -755,7 +759,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                     // ("Coffee (Espresso)"), so it is what the chip shows —
                     // falling back to the button label would throw the
                     // guest's actual choice away.
-                    const matchOpt = digestivoOptions?.find(opt => digestivoEntryMatchesOption(dg, opt, { wines, cocktails, spirits, beers }));
+                    const matchOpt = digestivoOptions?.find(opt => digestivoEntryMatchesOption(dg, opt, { wines, cocktails, spirits, beers, teas, coffees }));
                     const label = `${dg.name || matchOpt?.label || ""}${qtySuffix(qty)}`;
                     return (
                       <span key={key} title="Digestivo" style={{
@@ -876,7 +880,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
           const seat = seats.find(x => x.id === digestivoPick.seatId);
           const opt = (digestivoOptions || []).find(o => (o.id ?? o.label) === digestivoPick.optKey);
           if (!seat || !opt) return null;
-          const catalogs = { wines, cocktails, spirits, beers };
+          const catalogs = { wines, cocktails, spirits, beers, teas, coffees };
           const label = opt.label ?? String(opt);
           return (
             <DigestivoPicker
@@ -898,7 +902,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
     );
 }
 
-export function DisplayBoard({ tables, sittingTimes = [], optionalExtras = [], optionalPairings = [], upd, quickTableId = null, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onAssignTerrace, aperitifOptions = [], digestivoOptions = [], wines = [], cocktails = [], spirits = [], beers = [] }) {
+export function DisplayBoard({ tables, sittingTimes = [], optionalExtras = [], optionalPairings = [], upd, quickTableId = null, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onAssignTerrace, aperitifOptions = [], digestivoOptions = [], wines = [], cocktails = [], spirits = [], beers = [], teas = [], coffees = [] }) {
   const isMobile = useIsMobile(BP.md);
 
   // Tables that belong to a combined booking are grouped solely by their

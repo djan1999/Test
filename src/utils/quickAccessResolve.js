@@ -12,33 +12,33 @@ function parseBeverageLinkedKey(linkedKey) {
   return { category: s.slice(0, i).trim().toLowerCase(), name: s.slice(i + 1).trim() };
 }
 
-export function resolveQuickAccessLinkedItem(linkedKey, type, { wines = [], cocktails = [], spirits = [], beers = [] } = {}) {
+export function resolveQuickAccessLinkedItem(linkedKey, type, { wines = [], cocktails = [], spirits = [], beers = [], teas = [], coffees = [] } = {}) {
   if (!linkedKey) return null;
   if (type === "wine") {
     return wines.find(w => w.id === linkedKey) || null;
   }
   const parsed = parseBeverageLinkedKey(linkedKey);
   if (!parsed) return null;
-  const lists = { cocktail: cocktails, spirit: spirits, beer: beers };
+  const lists = { cocktail: cocktails, spirit: spirits, beer: beers, tea: teas, coffee: coffees };
   const list = lists[parsed.category] || lists[type];
   if (!list) return null;
   return list.find(x => x.name === parsed.name) || null;
 }
 
 /** Resolve Quick Access row to a catalog row: linkedKey first, then fuzzy searchKey. */
-export function resolveAperitifFromQuickAccessOption(ap, { wines, cocktails, spirits, beers }) {
+export function resolveAperitifFromQuickAccessOption(ap, catalogs = {}) {
   const type = ap?.type || "wine";
   if (ap?.linkedKey) {
-    const byLink = resolveQuickAccessLinkedItem(ap.linkedKey, type, { wines, cocktails, spirits, beers });
+    const byLink = resolveQuickAccessLinkedItem(ap.linkedKey, type, catalogs);
     if (byLink) return byLink;
   }
-  return resolveAperitifCatalogItem(ap?.searchKey || ap?.label, type, { wines, cocktails, spirits, beers });
+  return resolveAperitifCatalogItem(ap?.searchKey || ap?.label, type, catalogs);
 }
 
 /** Whether a seat chip is the same product as this Quick Access config row. */
-export function aperitifMatchesQuickAccessOption(stored, ap, { wines, cocktails, spirits, beers }) {
+export function aperitifMatchesQuickAccessOption(stored, ap, catalogs = {}) {
   if (!stored) return false;
-  const resolved = resolveAperitifFromQuickAccessOption(ap, { wines, cocktails, spirits, beers });
+  const resolved = resolveAperitifFromQuickAccessOption(ap, catalogs);
   const type = ap?.type || "wine";
   if (resolved) {
     if (type === "wine") {

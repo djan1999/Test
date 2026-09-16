@@ -12,7 +12,7 @@ import { tokens } from "../../styles/tokens.js";
  * because that is where the control started and where most tables use it.
  */
 export default function QuickBeverageSearch({
-  wines = [], cocktails = [], spirits = [], beers = [], onAdd,
+  wines = [], cocktails = [], spirits = [], beers = [], teas = [], coffees = [], onAdd,
   label = "⌕ Search all beverages",
   ariaLabel = "Search all beverages for an aperitif",
   placeholder = "find any beverage for aperitif…",
@@ -41,6 +41,8 @@ export default function QuickBeverageSearch({
             cocktails={cocktails}
             spirits={spirits}
             beers={beers}
+            teas={teas}
+            coffees={coffees}
             autoFocus
             inlineResults
             placeholder={placeholder}

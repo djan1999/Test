@@ -238,6 +238,60 @@ const SPIRIT_HTML = `
 </table>
 `;
 
+// The hotel's non-alcoholic page, in miniature: teas, then two coffee
+// sections, all on one page. Coffee has no page of its own to fetch instead.
+const NONALC_HTML = `
+<h2>Kava in Čaj</h2>
+<h3>Čaji</h3>
+<table>
+  <tr><td>Ime</td><td>Država</td></tr>
+  <tr><td>MILKA Tea Mix</td><td></td></tr>
+  <tr><td>Genmaicha</td><td></td></tr>
+</table>
+<h3>COFFEE - FILTER</h3>
+<table>
+  <tr><td>Nestor Lasso Ají Decaf</td><td>BANI BEANS</td><td>Colombia</td></tr>
+</table>
+<h3>COFFEE - ESPRESSO</h3>
+<table>
+  <tr><td>Cappucino</td><td>Banibeans</td></tr>
+  <tr><td>Macchiato</td><td>Banibeans</td></tr>
+</table>
+`;
+
+describe("parseBeveragesFromHtml — one page, more than one category", () => {
+  it("takes only the sections it was asked for", () => {
+    const coffee = parseBeveragesFromHtml(NONALC_HTML, "coffee", "Coffee", "COFFEE");
+    expect(coffee.map(b => b.name)).toEqual(["Nestor Lasso Ají Decaf", "Cappucino", "Macchiato"]);
+    // The teas above them on the same page are not coffee.
+    expect(coffee.some(b => b.name.includes("Tea"))).toBe(false);
+  });
+
+  it("keeps each section's own name on its rows", () => {
+    // Filter and espresso are the difference between two rows that otherwise
+    // read alike, and the floor picks one off a digestivo button.
+    const coffee = parseBeveragesFromHtml(NONALC_HTML, "coffee", "Coffee", "COFFEE");
+    expect(coffee[0].notes).toBe("Filter, BANI BEANS");
+    expect(coffee[1].notes).toBe("Espresso, Banibeans");
+  });
+
+  it("reads the whole page when no section is asked for", () => {
+    expect(parseBeveragesFromHtml(NONALC_HTML, "tea", "Tea")).toHaveLength(5);
+  });
+
+  it("returns nothing when the section is not on the page", () => {
+    // The caller turns an empty page into a thrown error, which preserves the
+    // rows already stored rather than emptying the category.
+    expect(parseBeveragesFromHtml(COCKTAIL_HTML, "coffee", "Coffee", "COFFEE")).toEqual([]);
+  });
+
+  it("labels a tea from the page's own heading", () => {
+    const tea = parseBeveragesFromHtml(NONALC_HTML, "tea", "Tea", "ČAJI");
+    expect(tea.map(b => b.name)).toEqual(["MILKA Tea Mix", "Genmaicha"]);
+    expect(tea[0].notes).toBe("Tea");
+  });
+});
+
 describe("parseBeveragesFromHtml", () => {
   it("parses cocktail rows from HTML", () => {
     const beverages = parseBeveragesFromHtml(COCKTAIL_HTML, "cocktail", "Cocktail");

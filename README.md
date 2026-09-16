@@ -93,6 +93,13 @@ and deployment-order gates.
   On the seat it opens a panel listing them all, so any one is a single tap in
   either direction and NONE is always on screen; the kitchen ticket prints the
   chosen one. A button with none stays a plain on/off toggle.
+- Tea and coffee are catalogue categories of their own, edited in Admin >
+  Drinks beside Cocktails / Spirits / Beers and filled by the same hotel-website
+  sync that feeds the wine list. Tea has its own source page; coffee shares the
+  non-alcoholic page with it and is read by section, so FILTER and ESPRESSO stay
+  told apart. A digestivo (or aperitif) button can link straight to one of those
+  rows, which is the real fix for a button that used to guess its product from a
+  search key.
 - Quick-access keys resolve against the catalogue on a word boundary, not as a
   bare substring: "Tea" no longer matches Co*tea*ux or Cha*tea*u. A prefix key
   ("Nebb") still finds its wine; a key that matches nothing leaves the button

@@ -66,6 +66,8 @@ export default function AdminLayout({
   cocktails,
   spirits,
   beers,
+  teas = [],
+  coffees = [],
   onUpdateWines,
   onSaveBeverages,
   // Sync
@@ -525,6 +527,8 @@ export default function AdminLayout({
               cocktails={cocktails}
               spirits={spirits}
               beers={beers}
+              teas={teas}
+              coffees={coffees}
               onUpdateWines={onUpdateWines}
               onSaveBeverages={onSaveBeverages}
             />
@@ -539,6 +543,8 @@ export default function AdminLayout({
                 cocktails={cocktails}
                 spirits={spirits}
                 beers={beers}
+                teas={teas}
+                coffees={coffees}
               />
               {/* The second list on the same tab, because it is the same
                   gesture at a later moment: these buttons appear on the seat
@@ -554,6 +560,8 @@ export default function AdminLayout({
                   cocktails={cocktails}
                   spirits={spirits}
                   beers={beers}
+                  teas={teas}
+                  coffees={coffees}
                   heading="DIGESTIVO — buttons shown on the seat, printed on the kitchen ticket above the flagged course"
                   addPlaceholder="e.g. Espresso"
                   emptyLabel="No digestivo items configured"

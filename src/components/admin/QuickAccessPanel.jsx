@@ -5,7 +5,7 @@ import { fuzzy, fuzzyDrink } from "../../utils/search.js";
 import { buildBeverageLinkedKey, resolveAperitifFromQuickAccessOption } from "../../utils/quickAccessResolve.js";
 
 // ── WinePickerInput — sets stable linkedKey + display searchKey ─────────────
-function WinePickerInput({ searchKey, linkedKey, onPick, type, wines, cocktails, spirits, beers, style }) {
+function WinePickerInput({ searchKey, linkedKey, onPick, type, wines, cocktails, spirits, beers, teas = [], coffees = [], style }) {
   const [q, setQ]       = useState("");
   const [open, setOpen] = useState(false);
   const ref             = useRef(null);
@@ -16,7 +16,8 @@ function WinePickerInput({ searchKey, linkedKey, onPick, type, wines, cocktails,
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  const list = type === "wine" ? wines : type === "cocktail" ? cocktails : type === "spirit" ? spirits : beers;
+  const byType = { wine: wines, cocktail: cocktails, spirit: spirits, beer: beers, tea: teas, coffee: coffees };
+  const list = byType[type] || beers;
   const results = q.length > 0
     ? (type === "wine" ? fuzzy(q, wines, null) : fuzzyDrink(q, list)).slice(0, 8)
     : [];
@@ -49,7 +50,8 @@ function WinePickerInput({ searchKey, linkedKey, onPick, type, wines, cocktails,
         value={q}
         onChange={e => { setQ(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
-        placeholder={(searchKey || linkedKey) ? "search to replace…" : `search ${type === "wine" ? "wines" : `${type}s`}…`}
+        placeholder={(searchKey || linkedKey) ? "search to replace…"
+          : `search ${type === "wine" ? "wines" : type === "tea" || type === "coffee" ? type : `${type}s`}…`}
         style={style}
       />
       {open && results.length > 0 && (
@@ -78,14 +80,14 @@ function WinePickerInput({ searchKey, linkedKey, onPick, type, wines, cocktails,
   );
 }
 
-function linkedPreviewText(item, wines, cocktails, spirits, beers) {
+function linkedPreviewText(item, catalogs) {
   const ap = {
     label: item.label,
     searchKey: item.searchKey || item.label,
     linkedKey: item.linkedKey,
     type: item.type || "wine",
   };
-  const r = resolveAperitifFromQuickAccessOption(ap, { wines, cocktails, spirits, beers });
+  const r = resolveAperitifFromQuickAccessOption(ap, catalogs);
   if (!r) return null;
   if ((item.type || "wine") === "wine") {
     return r.producer ? `${r.producer} – ${r.name}` : r.name;
@@ -110,7 +112,7 @@ function linkedPreviewText(item, wines, cocktails, spirits, beers) {
 export default function QuickAccessPanel({
   quickAccessItems = [],
   onUpdateQuickAccess,
-  wines = [], cocktails = [], spirits = [], beers = [],
+  wines = [], cocktails = [], spirits = [], beers = [], teas = [], coffees = [],
   heading = "QUICK ACCESS — configure aperitif/drink buttons shown during service",
   addPlaceholder = "e.g. Slapšak",
   emptyLabel = "No quick access items configured",
@@ -202,11 +204,14 @@ export default function QuickAccessPanel({
       <option value="cocktail">Cocktail</option>
       <option value="spirit">Spirit</option>
       <option value="beer">Beer</option>
+      <option value="tea">Tea</option>
+      <option value="coffee">Coffee</option>
     </select>
   );
 
+  const catalogs = { wines, cocktails, spirits, beers, teas, coffees };
   const pickerProps = (type, searchKey, linkedKey, onPick) => ({
-    wines, cocktails, spirits, beers, type, searchKey, linkedKey, onPick, style: inpSm,
+    ...catalogs, type, searchKey, linkedKey, onPick, style: inpSm,
   });
 
   return (
@@ -217,7 +222,7 @@ export default function QuickAccessPanel({
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
         {quickAccessItems.map((item, idx) => {
-          const preview = linkedPreviewText(item, wines, cocktails, spirits, beers);
+          const preview = linkedPreviewText(item, catalogs);
           const broken = Boolean(item.linkedKey) && !preview;
           return (
             <div key={item.id} style={{
