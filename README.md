@@ -90,9 +90,13 @@ and deployment-order gates.
   and raises no kitchen popup: nobody has to start a plate for a coffee, so the
   line simply appears on the ticket the pass is already reading.
 - A digestivo button can carry subcategories (Coffee → espresso, cappuccino, …).
-  On the seat it scrolls through them like the pairing button scrolls its types,
-  and the kitchen ticket prints the chosen one. A button with none stays a plain
-  on/off toggle.
+  On the seat it opens a panel listing them all, so any one is a single tap in
+  either direction and NONE is always on screen; the kitchen ticket prints the
+  chosen one. A button with none stays a plain on/off toggle.
+- Quick-access keys resolve against the catalogue on a word boundary, not as a
+  bare substring: "Tea" no longer matches Co*tea*ux or Cha*tea*u. A prefix key
+  ("Nebb") still finds its wine; a key that matches nothing leaves the button
+  recording its own label rather than the wrong product.
 - Beside the digestivo buttons, "Search all beverages" reaches the rest of the
   live catalogue, so a drink nobody put on a button does not need an admin trip
   mid-service. A searched drink is added alongside the button picks.

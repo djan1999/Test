@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { fuzzy, fuzzyDrink, resolveAperitifCatalogItem, aperitifMatchesQuickAccess } from "../utils/search.js";
+import { fuzzy, fuzzyDrink, keyHitsText, resolveAperitifCatalogItem, aperitifMatchesQuickAccess } from "../utils/search.js";
 
 const wines = [
   { name: "Riesling Spätlese", producer: "Mosel Estate", vintage: "2021", byGlass: true },
@@ -126,5 +126,60 @@ describe("aperitifMatchesQuickAccess", () => {
       "wine",
       { wines }
     )).toBe(true);
+  });
+});
+
+describe("a quick-access key must land on a word boundary", () => {
+  // The bug this pins: the Tea digestivo button came back linked to a
+  // champagne. "tea" is a substring of Co·tea·ux and Cha·tea·u, and the
+  // resolver picks ONE match silently rather than offering a list — so the
+  // first by-the-glass Coteaux Champenois on the wine list won a button meant
+  // for a pot of tea.
+  const cellar = [
+    { id: "w1", name: "Adrien Renoir – Coteaux Champenois Verzy blanc", producer: "Adrien Renoir", byGlass: true },
+    { id: "w2", name: "Chateau Thivin – Cote de Brouilly", producer: "Chateau Thivin", byGlass: true },
+    { id: "w3", name: "Nebbiolo d'Alba", producer: "Produttori", byGlass: true },
+  ];
+
+  it("refuses the middle of somebody else's word", () => {
+    expect(keyHitsText("Adrien Renoir – Coteaux Champenois", "tea")).toBe(false);
+    expect(keyHitsText("Chateau Thivin", "tea")).toBe(false);
+    expect(resolveAperitifCatalogItem("Tea", "wine", { wines: cellar })).toBeNull();
+  });
+
+  it("still takes a whole word, wherever it sits", () => {
+    expect(keyHitsText("Milka Tea", "tea")).toBe(true);
+    expect(keyHitsText("Tea", "tea")).toBe(true);
+    expect(keyHitsText("Earl Grey – Tea House", "tea")).toBe(true);
+  });
+
+  it("still takes a prefix, so a shortened key keeps working", () => {
+    expect(keyHitsText("Nebbiolo d'Alba", "nebb")).toBe(true);
+    expect(resolveAperitifCatalogItem("Nebb", "wine", { wines: cellar })?.id).toBe("w3");
+  });
+
+  it("finds the tea once the catalogue actually has one", () => {
+    const withTea = [...cellar, { id: "w9", name: "Milka Tea Blend", producer: "House", byGlass: true }];
+    expect(resolveAperitifCatalogItem("Tea", "wine", { wines: withTea })?.id).toBe("w9");
+  });
+
+  it("holds for drinks as well as wines", () => {
+    const pours = [{ name: "Coteaux Punch", notes: "" }, { name: "Tea Punch", notes: "" }];
+    expect(resolveAperitifCatalogItem("Tea", "cocktail", { cocktails: pours })?.name).toBe("Tea Punch");
+  });
+
+  it("treats a stored chip the same way when nothing resolves", () => {
+    // The fallback compare has to agree, or a seat would keep a champagne chip
+    // that the button no longer claims.
+    expect(aperitifMatchesQuickAccess(
+      { name: "Adrien Renoir – Coteaux Champenois", producer: "Adrien Renoir" },
+      "Tea", "wine", { wines: [] },
+    )).toBe(false);
+    expect(aperitifMatchesQuickAccess({ name: "Milka Tea" }, "Tea", "wine", { wines: [] })).toBe(true);
+  });
+
+  it("escapes a key that looks like a pattern instead of throwing", () => {
+    expect(keyHitsText("Riesling (dry)", "(dry)")).toBe(true);
+    expect(keyHitsText("Riesling", "*")).toBe(false);
   });
 });

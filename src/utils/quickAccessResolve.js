@@ -1,4 +1,4 @@
-import { resolveAperitifCatalogItem } from "./search.js";
+import { resolveAperitifCatalogItem, keyHitsText } from "./search.js";
 
 /** Stable beverage id for Quick Access: `${category}|${name}` (name is full display name from DB). */
 export function buildBeverageLinkedKey(category, name) {
@@ -51,5 +51,6 @@ export function aperitifMatchesQuickAccessOption(stored, ap, { wines, cocktails,
   if (!sk) return false;
   const xn = (stored.name || "").toLowerCase();
   const xp = (stored.producer || "").toLowerCase();
-  return xn.includes(sk) || xp.includes(sk) || (xn.length >= 4 && sk.includes(xn)) || (xp.length >= 4 && sk.includes(xp));
+  return keyHitsText(xn, sk) || keyHitsText(xp, sk)
+    || (xn.length >= 4 && sk.includes(xn)) || (xp.length >= 4 && sk.includes(xp));
 }

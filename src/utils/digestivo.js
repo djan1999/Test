@@ -181,23 +181,32 @@ export const digestivoEntry = (item, { baseName, variant = null, optionId = null
 };
 
 /**
- * The seat's digestivo list after one tap of this button.
+ * The seat's digestivo list with this button set to ONE exact choice.
  *
- * Every pick belonging to this button is replaced, never appended to: scrolling
- * from espresso to cappuccino is one guest changing their mind, not a second
- * coffee. Quantities still come from the table sheet's counter, as they do for
- * every other drink.
+ * `variant` is a subcategory label, "on" for a button that carries none, or
+ * null to clear. Every pick belonging to this button is replaced, never
+ * appended to: moving from espresso to decaf is one guest changing their mind,
+ * not a second coffee. Quantities still come from the table sheet's counter,
+ * as they do for every other drink.
  */
-export const cycleSeatDigestivo = (seat, opt, resolvedItem, catalogs = {}) => {
-  const next = digestivoNextState(seat, opt, catalogs);
+export const setSeatDigestivo = (seat, opt, resolvedItem, variant, catalogs = {}) => {
   const kept = (seat?.digestivos || []).filter((e) => !digestivoEntryMatchesOption(e, opt, catalogs));
-  if (next === "off") return kept;
+  if (variant == null || variant === "off") return kept;
   return [...kept, digestivoEntry(resolvedItem, {
     baseName: resolvedItem?.name || opt?.label,
-    variant: next === "on" ? null : next,
+    variant: variant === "on" ? null : variant,
     optionId: opt?.id,
   })];
 };
+
+/**
+ * The seat's digestivo list after one tap of a button with NO subcategories —
+ * a plain off → on → off toggle. A button that HAS them opens the picker
+ * instead (components/service/DigestivoPicker), where every option is on
+ * screen at once rather than five taps apart.
+ */
+export const cycleSeatDigestivo = (seat, opt, resolvedItem, catalogs = {}) =>
+  setSeatDigestivo(seat, opt, resolvedItem, digestivoNextState(seat, opt, catalogs), catalogs);
 
 /**
  * The seat's digestivo list after a drink picked from the beverage SEARCH

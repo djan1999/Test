@@ -93,35 +93,69 @@ describe("the digestivo buttons on the seat", () => {
     expect(updSeat.mock.calls.at(-1)[3]).toEqual([]);
   });
 
-  it("scrolls a configured button through its subcategories, then back off", () => {
+  it("opens a panel with every subcategory on it, and records the one picked", () => {
+    // It used to SCROLL: one tap per step, so reaching Filter past espresso,
+    // latte, cappuccino and decaf was five taps, and a guest saying "no, the
+    // decaf" had to be scrolled to rather than picked.
     const updSeat = vi.fn();
-    let seat = {};
-    const renderAt = () => render(
-      <DisplayBoardCard t={table([seat])} quickMode updSeat={updSeat} upd={vi.fn()}
+    render(
+      <DisplayBoardCard t={table([{}])} quickMode updSeat={updSeat} upd={vi.fn()}
         aperitifOptions={[]} digestivoOptions={DIGESTIVO_WITH_SUBS} />,
     );
+    fireEvent.click(screen.getByTitle(/^Coffee — none chosen/));
 
-    // off → Espresso
-    let view = renderAt();
-    fireEvent.click(view.getByTitle(/^Coffee — off; tap for Espresso$/));
-    expect(updSeat.mock.calls.at(-1)[3].map(d => d.name)).toEqual(["Coffee (Espresso)"]);
+    const panel = screen.getByRole("dialog", { name: "Choose Coffee" });
+    expect(within(panel).getByText("Espresso")).toBeTruthy();
+    expect(within(panel).getByText("Cappuccino")).toBeTruthy();
 
-    // Espresso → Cappuccino, replacing rather than stacking
-    seat = { digestivos: updSeat.mock.calls.at(-1)[3] };
-    view.unmount();
-    view = renderAt();
-    fireEvent.click(view.getByTitle(/^Coffee — Espresso; tap for Cappuccino$/));
+    fireEvent.click(within(panel).getByText("Cappuccino"));
     expect(updSeat.mock.calls.at(-1)[3].map(d => d.name)).toEqual(["Coffee (Cappuccino)"]);
+    // The panel closes behind the choice.
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
 
-    // Cappuccino → off
-    seat = { digestivos: updSeat.mock.calls.at(-1)[3] };
-    view.unmount();
-    view = renderAt();
-    fireEvent.click(view.getByTitle(/^Coffee — Cappuccino; tap for off$/));
+  it("reaches any subcategory in one tap, in either direction", () => {
+    const updSeat = vi.fn();
+    render(
+      <DisplayBoardCard
+        t={table([{ digestivos: [{ name: "Coffee (Cappuccino)", baseName: "Coffee", variant: "Cappuccino", digestivoId: 7 }] }])}
+        quickMode updSeat={updSeat} upd={vi.fn()}
+        aperitifOptions={[]} digestivoOptions={DIGESTIVO_WITH_SUBS} />,
+    );
+    fireEvent.click(screen.getByTitle(/^Coffee — Cappuccino/));
+    const panel = screen.getByRole("dialog", { name: "Choose Coffee" });
+    // The one that is on reads as chosen, and stepping BACK is a single tap.
+    expect(within(panel).getByText("Cappuccino").getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(within(panel).getByText("Espresso"));
+    expect(updSeat.mock.calls.at(-1)[3].map(d => d.name)).toEqual(["Coffee (Espresso)"]);
+  });
+
+  it("offers NONE, so taking the drink back off is never a scroll to the end", () => {
+    const updSeat = vi.fn();
+    render(
+      <DisplayBoardCard
+        t={table([{ digestivos: [{ name: "Coffee (Espresso)", baseName: "Coffee", variant: "Espresso", digestivoId: 7 }] }])}
+        quickMode updSeat={updSeat} upd={vi.fn()}
+        aperitifOptions={[]} digestivoOptions={DIGESTIVO_WITH_SUBS} />,
+    );
+    fireEvent.click(screen.getByTitle(/^Coffee — Espresso/));
+    fireEvent.click(within(screen.getByRole("dialog")).getByText("✕ None"));
     expect(updSeat.mock.calls.at(-1)[3]).toEqual([]);
   });
 
-  it("shows the current subcategory on the button, with the scroll affordance", () => {
+  it("closes without recording anything when dismissed", () => {
+    const updSeat = vi.fn();
+    render(
+      <DisplayBoardCard t={table([{}])} quickMode updSeat={updSeat} upd={vi.fn()}
+        aperitifOptions={[]} digestivoOptions={DIGESTIVO_WITH_SUBS} />,
+    );
+    fireEvent.click(screen.getByTitle(/^Coffee — none chosen/));
+    fireEvent.click(screen.getByLabelText("Close"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(updSeat).not.toHaveBeenCalled();
+  });
+
+  it("shows the chosen subcategory on the button, with the open affordance", () => {
     render(
       <DisplayBoardCard
         t={table([{ digestivos: [{ name: "Coffee (Cappuccino)", baseName: "Coffee", variant: "Cappuccino", digestivoId: 7 }] }])}
@@ -130,27 +164,22 @@ describe("the digestivo buttons on the seat", () => {
     );
     const btn = screen.getByTitle(/^Coffee — Cappuccino/);
     expect(btn.textContent).toContain("Cappuccino");
-    expect(btn.textContent).toContain("→");
+    // ▾ (a panel opens), not → (the label advances one step)
+    expect(btn.textContent).toContain("▾");
+    expect(btn.textContent).not.toContain("→");
   });
 
-  it("advertises the first subcategory while the button is still off", () => {
+  it("says CHOOSE rather than naming one subcategory while none is picked", () => {
+    // Advertising "Espresso" on an off button read as though espresso were
+    // already the choice, one tap from being ordered.
     render(
       <DisplayBoardCard t={table([{}])} quickMode updSeat={vi.fn()} upd={vi.fn()}
         aperitifOptions={[]} digestivoOptions={DIGESTIVO_WITH_SUBS} />,
     );
-    expect(screen.getByTitle(/^Coffee — off; tap for Espresso$/).textContent).toContain("Espresso");
+    expect(screen.getByTitle(/^Coffee — none chosen/).textContent).toContain("choose");
   });
 
-  it("leaves a button with no subcategories as a plain toggle, with no arrow", () => {
-    render(
-      <DisplayBoardCard t={table([{}])} quickMode updSeat={vi.fn()} upd={vi.fn()}
-        aperitifOptions={[]} digestivoOptions={DIGESTIVO_WITH_SUBS} />,
-    );
-    const grappa = screen.getByTitle("Grappa");
-    expect(grappa.textContent).toBe("Grappa");
-  });
-
-  it("scrolling one button leaves the other button's pick alone", () => {
+  it("choosing on one button leaves the other button's pick alone", () => {
     const updSeat = vi.fn();
     render(
       <DisplayBoardCard
@@ -158,7 +187,8 @@ describe("the digestivo buttons on the seat", () => {
         quickMode updSeat={updSeat} upd={vi.fn()}
         aperitifOptions={[]} digestivoOptions={DIGESTIVO_WITH_SUBS} />,
     );
-    fireEvent.click(screen.getByTitle(/^Coffee — off/));
+    fireEvent.click(screen.getByTitle(/^Coffee — none chosen/));
+    fireEvent.click(within(screen.getByRole("dialog")).getByText("Espresso"));
     expect(updSeat.mock.calls.at(-1)[3].map(d => d.name).sort())
       .toEqual(["Coffee (Espresso)", "Grappa"]);
   });

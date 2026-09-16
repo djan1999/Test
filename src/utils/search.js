@@ -30,6 +30,28 @@ export const fuzzyDrink = (q, list) => {
  * Resolve a Quick Access searchKey to a row from the live catalog (wines / cocktails / spirits / beers).
  * Matches grape name, producer, and full "Grape – Producer" strings so keys saved from the picker still work.
  */
+const KEY_ESCAPE = /[.*+?^${}()|[\]\\]/g;
+
+/**
+ * Does this catalogue text answer to this quick-access key?
+ *
+ * The key has to land on a WORD BOUNDARY. A bare substring test is what linked
+ * the "Tea" digestivo button to a champagne: "tea" sits inside both Co·tea·ux
+ * and Cha·tea·u, so the first by-the-glass Coteaux Champenois on the list won a
+ * button meant for a pot of tea — silently, because this resolver picks one
+ * match rather than offering a list to choose from.
+ *
+ * Only the LEADING edge is checked, so a prefix key still works: "Nebb" finds
+ * Nebbiolo, "Grappa" finds Grappa Williams. What it refuses is the middle of
+ * somebody else's word.
+ */
+export const keyHitsText = (text, key) => {
+  const t = String(text || "").toLowerCase();
+  const k = String(key || "").trim().toLowerCase();
+  if (!t || !k) return false;
+  return new RegExp(`(^|[^\\p{L}\\p{N}])${k.replace(KEY_ESCAPE, "\\$&")}`, "u").test(t);
+};
+
 /** @deprecated Prefer resolveAperitifFromQuickAccessOption from quickAccessResolve.js when linkedKey exists */
 export function resolveAperitifCatalogItem(searchKey, type, { wines = [], cocktails = [], spirits = [], beers = [] } = {}) {
   const sk = String(searchKey || "").trim().toLowerCase();
@@ -40,9 +62,11 @@ export function resolveAperitifCatalogItem(searchKey, type, { wines = [], cockta
     const wp = (w.producer || "").toLowerCase();
     const full = wn && wp ? `${wn} – ${wp}` : (wn || wp);
     return (
-      wn.includes(sk) ||
-      wp.includes(sk) ||
-      full.includes(sk) ||
+      keyHitsText(wn, sk) ||
+      keyHitsText(wp, sk) ||
+      keyHitsText(full, sk) ||
+      // The reverse direction — a key that NAMES the product ("Aperol Spritz"
+      // for an Aperol). Length-guarded, so a short row cannot swallow it.
       (wn.length >= 4 && sk.includes(wn)) ||
       (wp.length >= 4 && sk.includes(wp))
     );
@@ -50,7 +74,7 @@ export function resolveAperitifCatalogItem(searchKey, type, { wines = [], cockta
 
   const drinkHit = (d) => {
     const cn = (d?.name || "").toLowerCase();
-    return cn.includes(sk) || (cn.length >= 4 && sk.includes(cn)) || ((d?.notes || "").toLowerCase().includes(sk));
+    return keyHitsText(cn, sk) || (cn.length >= 4 && sk.includes(cn)) || keyHitsText(d?.notes, sk);
   };
 
   if (type === "wine") {
@@ -78,5 +102,6 @@ export function aperitifMatchesQuickAccess(stored, searchKey, type, { wines = []
   if (!sk) return false;
   const xn = (stored.name || "").toLowerCase();
   const xp = (stored.producer || "").toLowerCase();
-  return xn.includes(sk) || xp.includes(sk) || (xn.length >= 4 && sk.includes(xn)) || (xp.length >= 4 && sk.includes(xp));
+  return keyHitsText(xn, sk) || keyHitsText(xp, sk)
+    || (xn.length >= 4 && sk.includes(xn)) || (xp.length >= 4 && sk.includes(xp));
 }

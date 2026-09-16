@@ -17,8 +17,9 @@ import {
 } from "../../utils/seatExtras.js";
 import {
   digestivoVariants, digestivoCurrentState, digestivoNextState,
-  cycleSeatDigestivo, digestivoEntryMatchesOption, addSeatDigestivo,
+  cycleSeatDigestivo, setSeatDigestivo, digestivoEntryMatchesOption, addSeatDigestivo,
 } from "../../utils/digestivo.js";
+import DigestivoPicker from "./DigestivoPicker.jsx";
 
 const FONT = tokens.font;
 
@@ -54,6 +55,10 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
     const allRestr = (t.restrictions || []).filter(r => r.note);
     const [assigningIdx, setAssigningIdx] = useState(null);
     const [justSent, setJustSent] = useState(false);
+    // Which seat's digestivo button has its picker open — { seatId, optKey }.
+    // Ids, not the rows themselves, so the panel reads the seat as it is now
+    // rather than as it was when the button was tapped.
+    const [digestivoPick, setDigestivoPick] = useState(null);
     const seats = t.seats || [];
 
     // Service → kitchen "Send" only carries what's new since this table LAST
@@ -605,19 +610,25 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                         // has always been.
                         const variants = digestivoVariants(opt);
                         const cur = digestivoCurrentState(s, opt, catalogs);
-                        const next = digestivoNextState(s, opt, catalogs);
                         const active = cur !== "off";
                         const subLabel = cur === "off"
-                          ? (variants.length ? variants[0] : "off")
+                          ? (variants.length ? "choose" : "off")
                           : cur === "on" ? "on" : cur;
                         return (
                           <button
                             key={opt.id ?? label}
                             title={variants.length
-                              ? `${label} — ${cur === "off" ? "off" : cur === "on" ? "on" : cur}; tap for ${next === "off" ? "off" : next}`
+                              ? `${label} — ${cur === "off" ? "none chosen" : cur === "on" ? "on" : cur}; tap to choose`
                               : label}
                             onClick={() => {
                               if (!updSeat) return;
+                              // A button with subcategories OPENS them; only a
+                              // plain one is still a toggle, because off → on
+                              // → off is the whole of its cycle anyway.
+                              if (variants.length) {
+                                setDigestivoPick({ seatId: s.id, optKey: opt.id ?? label });
+                                return;
+                              }
                               const found = resolveAperitifFromQuickAccessOption(opt, catalogs);
                               const item = found || { name: label, notes: "", __cocktail: true };
                               updSeat(t.id, s.id, "digestivos", cycleSeatDigestivo(s, opt, item, catalogs));
@@ -631,13 +642,14 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                               touchAction: "manipulation",
                             }}>
                             <span style={{ fontWeight: active ? 700 : 500 }}>{label}</span>
-                            {/* The subcategory reads under the name the way an
-                                extra's mode does, with the pairing button's →
-                                to say there is more behind the tap. */}
+                            {/* The chosen subcategory reads under the name the
+                                way an extra's mode does. ▾, not the pairing
+                                button's →, because a panel opens here rather
+                                than the label advancing one step. */}
                             {variants.length > 0 && (
                               <>
                                 <span style={{ fontSize: 9, opacity: active ? 0.75 : 0.55 }}>{subLabel}</span>
-                                <span style={{ fontSize: 8, opacity: 0.55 }}>→</span>
+                                <span style={{ fontSize: 8, opacity: 0.55 }}>▾</span>
                               </>
                             )}
                           </button>
@@ -856,6 +868,32 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
             ) : null}
           </div>
         )}
+
+        {/* One panel per card, not per button: it is fixed to the viewport, so
+            where it sits in the tree changes nothing, and reading the seat back
+            out of state keeps it honest if the row updates underneath. */}
+        {digestivoPick && (() => {
+          const seat = seats.find(x => x.id === digestivoPick.seatId);
+          const opt = (digestivoOptions || []).find(o => (o.id ?? o.label) === digestivoPick.optKey);
+          if (!seat || !opt) return null;
+          const catalogs = { wines, cocktails, spirits, beers };
+          const label = opt.label ?? String(opt);
+          return (
+            <DigestivoPicker
+              label={label}
+              variants={digestivoVariants(opt)}
+              current={digestivoCurrentState(seat, opt, catalogs)}
+              onClose={() => setDigestivoPick(null)}
+              onPick={(variant) => {
+                const found = resolveAperitifFromQuickAccessOption(opt, catalogs);
+                const item = found || { name: label, notes: "", __cocktail: true };
+                updSeat && updSeat(t.id, seat.id, "digestivos",
+                  setSeatDigestivo(seat, opt, item, variant, catalogs));
+                setDigestivoPick(null);
+              }}
+            />
+          );
+        })()}
       </div>
     );
 }
