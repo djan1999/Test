@@ -158,6 +158,12 @@ export function generateMenuHTML({
   const aperitifs = Array.isArray(seat.aperitifs)
     ? seat.aperitifs.filter(x => x && (x.name || x.producer || x.notes))
     : [];
+  // Digestivos: the same shape at the other end of the menu. Whether they are
+  // PRINTED is the template's business — a drinks block with source
+  // "digestivo", placed wherever the menu serves them.
+  const digestivos = Array.isArray(seat.digestivos)
+    ? seat.digestivos.filter(x => x && (x.name || x.producer || x.notes))
+    : [];
   // By-the-glass wines: from Danube Salmon row onwards
   const glasses = Array.isArray(seat.glasses)
     ? seat.glasses.filter(w => w && (w.name || w.producer || w.vintage || w.notes))
@@ -291,6 +297,11 @@ export function generateMenuHTML({
     __type: x.__type || x.type || ((x.producer || x.vintage) ? "wine" : "cocktail"),
   })));
 
+  const digestivoQueue = dedup(digestivos.map(x => ({
+    ...x,
+    __type: x.__type || x.type || ((x.producer || x.vintage) ? "wine" : "cocktail"),
+  })));
+
   const glassByGlassQueue = dedup([
     ...glasses.map(w => ({ ...w, __type: "wine" })),
     ...cocktails.map(c => ({ ...c, __type: "cocktail" })),
@@ -317,6 +328,7 @@ export function generateMenuHTML({
   // ── Walk template rows → internal row list ────────────────────────────────
   // Independent queue copies so template walking doesn't mutate the originals.
   const aQ = [...aperitifQueue];
+  const dQ = [...digestivoQueue];
   const gQ = [...glassByGlassQueue];
   const bQ = [...bottleQueue];
 
@@ -336,6 +348,7 @@ export function generateMenuHTML({
   // A standalone aperitif block, or a drinks block whose source is "aperitif",
   // both consume from the aperitif queue.
   const isAperitif = (b) => b?.type === "aperitif" || normDrinkSource(b) === "aperitif";
+  const isDigestivo = (b) => normDrinkSource(b) === "digestivo";
   const _courseLeft = Math.min(99, Math.max(1, Math.round(Number(s("courseColSplit", 55)) || 55)));
 
   for (const tRow of effectiveTemplateRows) {
@@ -462,6 +475,16 @@ export function generateMenuHTML({
     // rows that fill course right-columns, keeping all aperitifs evenly spaced.
     if ((isAperitif(lb) || isAperitif(rb)) && lb?.type !== "course" && rb?.type !== "course") {
       if (aQ.length > 0) rows.push({ type: "course", courseKey: null, left: null, right: fmtDrinkParts(aQ.shift()), rowClass: "", widthPreset: drinkRowWp, gap: consumeGap() });
+      continue;
+    }
+
+    // ── digestivo ──
+    // One block, one digestivo, in the order the guest ordered them — the same
+    // contract the aperitif row above keeps. A table that had two and a menu
+    // with one block prints the first; the second needs a second block, which
+    // is the template saying how many it expects to pour.
+    if ((isDigestivo(lb) || isDigestivo(rb)) && lb?.type !== "course" && rb?.type !== "course") {
+      if (dQ.length > 0) rows.push({ type: "course", courseKey: null, left: null, right: fmtDrinkParts(dQ.shift()), rowClass: "", widthPreset: drinkRowWp, gap: consumeGap() });
       continue;
     }
 

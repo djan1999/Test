@@ -479,6 +479,7 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
             <option value="by_the_glass">By the Glass</option>
             <option value="bottle">Bottle Wine</option>
             <option value="aperitif">Aperitif</option>
+            <option value="digestivo">Digestivo</option>
           </select>
 
           {drinkSource === "pairing" && (<>
@@ -507,6 +508,14 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
           {drinkSource === "aperitif" && (
             <div style={{ fontFamily: FONT, fontSize: 8.5, color: tokens.ink[3], lineHeight: 1.5 }}>
               Consumes next aperitif from the seat's aperitif queue.
+            </div>
+          )}
+
+          {drinkSource === "digestivo" && (
+            <div style={{ fontFamily: FONT, fontSize: 8.5, color: tokens.ink[3], lineHeight: 1.5 }}>
+              Consumes next digestivo from the seat's digestivo queue — the coffee
+              or spirit ordered inside the menu. Place the block where the menu
+              serves it; one block prints one digestivo.
             </div>
           )}
         </div>

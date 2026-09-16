@@ -93,6 +93,14 @@ and deployment-order gates.
   On the seat it opens a panel listing them all, so any one is a single tap in
   either direction and NONE is always on screen; the kitchen ticket prints the
   chosen one. A button with none stays a plain on/off toggle.
+- A button WITH subcategories is a category, and a category names no drink — the
+  bar cannot pour a "Coffee". Each subcategory links its own product instead, and
+  the category's own link is neither read nor shown. A button with no
+  subcategories is a plain button and still links directly.
+- To print a digestivo on the guest menu, add a drinks block with source
+  "Digestivo" in Admin > Menu Layout where the menu serves it. One block prints
+  one digestivo, the same contract the aperitif block keeps. The kitchen ticket
+  does not depend on this — it prints the digestivo either way.
 - Tea and coffee are catalogue categories of their own, edited in Admin >
   Drinks beside Cocktails / Spirits / Beers and filled by the same hotel-website
   sync that feeds the wine list. Tea has its own source page; coffee shares the

@@ -2,6 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   courseAnchorsDigestivo,
   digestivoVariants,
+  digestivoVariantOptions,
+  digestivoVariantFor,
+  resolveDigestivoProduct,
   digestivoCycleStates,
   digestivoDisplayName,
   digestivoCurrentState,
@@ -101,6 +104,61 @@ describe("the seat factory carries digestivos", () => {
 
   it("keeps the picks already on the chair", () => {
     expect(makeSeats(1, [{ digestivos: [{ name: "Tea" }] }])[0].digestivos).toEqual([{ name: "Tea" }]);
+  });
+});
+
+describe("the category names no drink — its subcategories do", () => {
+  // "Coffee" is not something the bar can pour; "Espresso – Banibeans" is. So
+  // the group carries no link of its own and the product comes from whichever
+  // subcategory was chosen. A group that resolved itself is how the Tea button
+  // ended up holding a champagne.
+  const COFFEES = [
+    { id: 31, name: "Espresso", notes: "Espresso, Banibeans" },
+    { id: 32, name: "Nestor Lasso Ají Decaf", notes: "Filter, BANI BEANS" },
+  ];
+  const CELLAR = [{ id: "w1", name: "Coteaux Champenois", producer: "Adrien Renoir", byGlass: true }];
+  const catalogs = { wines: CELLAR, cocktails: [], spirits: [], beers: [], teas: [], coffees: COFFEES };
+
+  const GROUP = {
+    id: 7, label: "Coffee", searchKey: "Coffee", type: "wine",
+    variants: [
+      { label: "Espresso", type: "coffee", searchKey: "Espresso", linkedKey: "coffee|Espresso" },
+      { label: "Decaf", type: "coffee", searchKey: "Nestor Lasso Ají Decaf", linkedKey: "coffee|Nestor Lasso Ají Decaf" },
+    ],
+  };
+
+  it("reads a subcategory's own link", () => {
+    expect(resolveDigestivoProduct(GROUP, "Espresso", catalogs)?.id).toBe(31);
+    expect(resolveDigestivoProduct(GROUP, "Decaf", catalogs)?.id).toBe(32);
+  });
+
+  it("never falls back to the category's link, however it is configured", () => {
+    // GROUP still carries type "wine" and searchKey "Coffee" from before the
+    // subcategories existed. Consulting either is what has to stay impossible.
+    expect(resolveDigestivoProduct(GROUP, null, catalogs)).toBeNull();
+    expect(resolveDigestivoProduct(GROUP, "Nonexistent", catalogs)).toBeNull();
+    const unlinked = { ...GROUP, variants: [{ label: "Espresso" }] };
+    expect(resolveDigestivoProduct(unlinked, "Espresso", catalogs)).toBeNull();
+  });
+
+  it("still links directly when the button has no subcategories at all", () => {
+    // A Grappa button is a button, not a category — it reaches its own drink.
+    const plain = { id: 8, label: "Espresso", searchKey: "Espresso", type: "coffee" };
+    expect(resolveDigestivoProduct(plain, null, catalogs)?.id).toBe(31);
+  });
+
+  it("reads a config written before subcategories carried links", () => {
+    const legacy = { id: 7, label: "Coffee", variants: ["Espresso", " Decaf ", "", "espresso"] };
+    expect(digestivoVariants(legacy)).toEqual(["Espresso", "Decaf"]);
+    expect(digestivoVariantOptions(legacy)[0]).toEqual({ label: "Espresso" });
+    // It has no link yet, so it resolves to nothing rather than to a guess.
+    expect(resolveDigestivoProduct(legacy, "Espresso", catalogs)).toBeNull();
+  });
+
+  it("finds a subcategory by label, case and padding forgiven", () => {
+    expect(digestivoVariantFor(GROUP, "  espresso ")?.linkedKey).toBe("coffee|Espresso");
+    expect(digestivoVariantFor(GROUP, "latte")).toBeNull();
+    expect(digestivoVariantFor(GROUP, "")).toBeNull();
   });
 });
 

@@ -18,6 +18,7 @@ import {
 import {
   digestivoVariants, digestivoCurrentState, digestivoNextState,
   cycleSeatDigestivo, setSeatDigestivo, digestivoEntryMatchesOption, addSeatDigestivo,
+  resolveDigestivoProduct,
 } from "../../utils/digestivo.js";
 import DigestivoPicker from "./DigestivoPicker.jsx";
 
@@ -631,7 +632,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                                 setDigestivoPick({ seatId: s.id, optKey: opt.id ?? label });
                                 return;
                               }
-                              const found = resolveAperitifFromQuickAccessOption(opt, catalogs);
+                              const found = resolveDigestivoProduct(opt, null, catalogs);
                               const item = found || { name: label, notes: "", __cocktail: true };
                               updSeat(t.id, s.id, "digestivos", cycleSeatDigestivo(s, opt, item, catalogs));
                             }} style={{
@@ -889,7 +890,9 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
               current={digestivoCurrentState(seat, opt, catalogs)}
               onClose={() => setDigestivoPick(null)}
               onPick={(variant) => {
-                const found = resolveAperitifFromQuickAccessOption(opt, catalogs);
+                // The subcategory carries the link, so the product is resolved
+                // from the one just chosen — not from the group it sits in.
+                const found = resolveDigestivoProduct(opt, variant, catalogs);
                 const item = found || { name: label, notes: "", __cocktail: true };
                 updSeat && updSeat(t.id, seat.id, "digestivos",
                   setSeatDigestivo(seat, opt, item, variant, catalogs));
