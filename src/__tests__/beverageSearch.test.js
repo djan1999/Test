@@ -137,3 +137,22 @@ describe("searchBeverages", () => {
     expect(searchBeverages("rebula", { wines: [{ name: "Rebula" }] })).toHaveLength(1);
   });
 });
+
+describe("tea and coffee are searchable alongside the rest", () => {
+  const catalogs = {
+    wines: [], cocktails: [], spirits: [], beers: [],
+    teas: [{ id: 21, name: "MILKA Tea Mix", notes: "Tea" }],
+    coffees: [{ id: 31, name: "Nestor Lasso Ají Decaf", notes: "Filter, BANI BEANS" }],
+  };
+
+  it("finds a tea by name", () => {
+    const hits = searchBeverages("milka tea", catalogs);
+    expect(hits.map(h => h.type)).toContain("tea");
+  });
+
+  it("finds a coffee by its subcategory note, accents folded", () => {
+    // "Aji" typed without the accent still has to reach "Ají".
+    expect(searchBeverages("aji decaf", catalogs).map(h => h.item.name)).toContain("Nestor Lasso Ají Decaf");
+    expect(searchBeverages("filter", catalogs).map(h => h.type)).toContain("coffee");
+  });
+});

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { tokens } from "../../styles/tokens.js";
 
-export default function BeverageSearch({ wines, cocktails, spirits, beers, onAdd, autoFocus = false, placeholder = "search beverages…", inlineResults = false }) {
+export default function BeverageSearch({ wines, cocktails, spirits, beers, teas = [], coffees = [], onAdd, autoFocus = false, placeholder = "search beverages…", inlineResults = false }) {
   const [q, setQ] = useState("");
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
@@ -76,6 +76,15 @@ export default function BeverageSearch({ wines, cocktails, spirits, beers, onAdd
       if (b.name.toLowerCase().includes(lq) || (b.notes || "").toLowerCase().includes(lq)) {
         r.push({ type: "beer", item: b, label: b.name, sub: b.notes || "" });
       }
+    });
+    // The espresso a guest asks for after the menu is reached from here too,
+    // not only from a configured digestivo button.
+    [["tea", teas], ["coffee", coffees]].forEach(([type, list]) => {
+      (list || []).forEach((d) => {
+        if (d.name.toLowerCase().includes(lq) || (d.notes || "").toLowerCase().includes(lq)) {
+          r.push({ type, item: d, label: d.name, sub: d.notes || "" });
+        }
+      });
     });
     setResults(r.slice(0, 10));
     setOpen(r.length > 0);

@@ -60,6 +60,10 @@ const COUNTRY_NAMES = {
 
 const BEVERAGE_PAGES = [
   { url: `${BASE}/category/cocktails/`,   category: "cocktail", label: "Cocktail"        },
+  // Tea has a page of its own. Coffee does not — it is two sections of the
+  // non-alcoholic page it shares with tea, so it is read by section instead.
+  { url: `${BASE}/category/brezalkoholne-pijace/caji/`, category: "tea", label: "Tea" },
+  { url: `${BASE}/category/brezalkoholne-pijace/`, category: "coffee", label: "Coffee", section: "COFFEE" },
   { url: `${BASE}/category/pivo/`,        category: "beer",     label: "Beer"            },
   { url: `${BASE}/category/viski`,        category: "spirit",   label: "Whisky"          },
   { url: `${BASE}/category/cognac`,       category: "spirit",   label: "Cognac / Brandy" },
@@ -79,6 +83,8 @@ const MILKA_SYNC_CONFIG = {
   wineCountries: ["SI", "AT", "IT", "FR", "HR"],
   beveragePages: [
     { category: "cocktail", label: "Cocktail", url: `${BASE}/category/cocktails/` },
+    { category: "tea", label: "Tea", url: `${BASE}/category/brezalkoholne-pijace/caji/` },
+    { category: "coffee", label: "Coffee", url: `${BASE}/category/brezalkoholne-pijace/` },
     { category: "beer", label: "Beer", url: `${BASE}/category/pivo/` },
     { category: "spirit", label: "Whisky", url: `${BASE}/category/viski` },
     { category: "spirit", label: "Cognac / Brandy", url: `${BASE}/category/cognac` },
@@ -245,10 +251,39 @@ export function parseWinesFromHtml(html, countryLabel) {
   return wines;
 }
 
-export function parseBeveragesFromHtml(html, category, subcategoryLabel) {
+/**
+ * Rows from one catalogue page.
+ *
+ * `section` narrows a page that carries MORE THAN ONE category. The hotel's
+ * non-alcoholic page is one such: a table of teas, then COFFEE - FILTER, then
+ * COFFEE - ESPRESSO, and coffee has no page of its own to fetch instead. When
+ * it is set, only tables introduced by a heading naming that section are read,
+ * and that heading becomes the row's own sub-label — so a filter coffee and an
+ * espresso stay told apart in the list.
+ */
+export function parseBeveragesFromHtml(html, category, subcategoryLabel, section = null) {
   const beverages = [];
   const tableRe = /<table[\s\S]*?<\/table>/gi;
+  const wanted = section ? String(section).toUpperCase() : null;
+  let cursor = 0;
   for (const table of html.match(tableRe) || []) {
+    const at = html.indexOf(table, cursor);
+    // Everything since the PREVIOUS table ended — which is exactly this
+    // table's own heading, however long or short the table above it was. A
+    // fixed lookback window reads the heading above that one on a short table
+    // and files its rows under the wrong section.
+    const between = html.slice(cursor, at);
+    cursor = at + table.length;
+    let label = subcategoryLabel;
+    if (wanted) {
+      const heading = between.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+      const i = heading.toUpperCase().lastIndexOf(wanted);
+      if (i < 0) continue;
+      // "COFFEE - FILTER" → "Filter". The row already carries its category, so
+      // repeating it in every note spends width the chip does not have.
+      const tail = heading.slice(i + wanted.length).replace(/^[\s\-–—:]+/, "").trim();
+      label = tail ? tail.charAt(0).toUpperCase() + tail.slice(1).toLowerCase() : subcategoryLabel;
+    }
     for (const row of table.match(/<tr[\s\S]*?<\/tr>/gi) || []) {
       const cells = extractCells(row);
       if (cells.length < 2) continue;
@@ -261,6 +296,11 @@ export function parseBeveragesFromHtml(html, category, subcategoryLabel) {
         const region   = cells[2] || "";
         displayName = producer ? `${name} – ${producer}` : name;
         notes = [subcategoryLabel, region].filter(Boolean).join(", ");
+      } else if (category === "tea" || category === "coffee") {
+        // The floor reads these off a digestivo button, where "Filter" or
+        // "Japan" beside the name is the whole difference between two rows.
+        displayName = name;
+        notes = [label, cells[1] || ""].filter(Boolean).join(", ");
       } else {
         displayName = name;
         // cocktails/beers: description is col 1; extra cols (volume, price) are ignored
@@ -285,9 +325,9 @@ async function fetchWineCountry({ param, label }) {
   return { label, wines };
 }
 
-async function fetchBeveragePage({ url, category, label }) {
+async function fetchBeveragePage({ url, category, label, section }) {
   const html = await withRetry(() => fetchHtml(url), label);
-  const items = parseBeveragesFromHtml(html, category, label);
+  const items = parseBeveragesFromHtml(html, category, label, section);
   if (items.length === 0) {
     throw new Error(`Source page for ${label} returned no beverage rows; preserving existing data`);
   }
@@ -470,10 +510,14 @@ export default async function handler(req, res) {
     }
     const allBeverages = successfulBeveragePages.flatMap(x => x.result.value);
 
-    const byGlassCount  = allWines.filter(w => w.by_glass).length;
-    const cocktailCount = allBeverages.filter(b => b.category === "cocktail").length;
-    const beerCount     = allBeverages.filter(b => b.category === "beer").length;
-    const spiritCount   = allBeverages.filter(b => b.category === "spirit").length;
+    const byGlassCount = allWines.filter(w => w.by_glass).length;
+    // Counted by whatever categories actually came back, so a page added to
+    // the config reports itself instead of going missing from the dry run.
+    const countsByCategory = allBeverages.reduce((acc, b) => {
+      acc[b.category] = (acc[b.category] || 0) + 1;
+      return acc;
+    }, {});
+    const sampleOf = (cat) => allBeverages.find(b => b.category === cat);
 
     if (dry) {
       log("info", "catalog_sync_completed", {
@@ -485,12 +529,17 @@ export default async function handler(req, res) {
       return res.status(200).json({
         ok: true, dry: true,
         wines: allWines.length, byGlass: byGlassCount,
-        cocktails: cocktailCount, beers: beerCount, spirits: spiritCount,
+        cocktails: countsByCategory.cocktail || 0,
+        beers: countsByCategory.beer || 0,
+        spirits: countsByCategory.spirit || 0,
+        byCategory: countsByCategory,
         failedCountries: failedCountries.map(c => c.label),
         failedBeveragePages,
-        sampleCocktail: allBeverages.find(b => b.category === "cocktail"),
-        sampleSpirit:   allBeverages.find(b => b.category === "spirit"),
-        sampleBeer:     allBeverages.find(b => b.category === "beer"),
+        sampleCocktail: sampleOf("cocktail"),
+        sampleSpirit:   sampleOf("spirit"),
+        sampleBeer:     sampleOf("beer"),
+        sampleTea:      sampleOf("tea"),
+        sampleCoffee:   sampleOf("coffee"),
       });
     }
 
@@ -580,7 +629,10 @@ export default async function handler(req, res) {
       ok: true,
       partial,
       wines: winesUpserted, byGlass: byGlassCount,
-      cocktails: cocktailCount, beers: beerCount, spirits: spiritCount,
+      cocktails: countsByCategory.cocktail || 0,
+      beers: countsByCategory.beer || 0,
+      spirits: countsByCategory.spirit || 0,
+      byCategory: countsByCategory,
       failedCountries: failedCountries.map(c => c.label),
       failedBeveragePages,
       skippedCategories,

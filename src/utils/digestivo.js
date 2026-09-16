@@ -21,7 +21,7 @@
  */
 
 import { groupDrinks, qtySuffix } from "./drinkQuantities.js";
-import { aperitifMatchesQuickAccessOption } from "./quickAccessResolve.js";
+import { aperitifMatchesQuickAccessOption, resolveAperitifFromQuickAccessOption } from "./quickAccessResolve.js";
 
 /** The course key a ticket anchors the digestivo line above, normalised. */
 export const digestivoCourseKey = (course) =>
@@ -93,18 +93,65 @@ export const digestivoCount = (seats = []) =>
 // the same shape as the pairing button's cycle, so the gesture is one the
 // floor already knows.
 
-/** The configured subcategory labels of a button, cleaned and de-duplicated. */
-export const digestivoVariants = (opt) => {
+/**
+ * The configured subcategories of a button, cleaned and de-duplicated.
+ *
+ * Each one carries its OWN catalogue link, because the category does not name
+ * a product: "Coffee" is not something the bar can pour, "Espresso – Banibeans"
+ * is. Older configs stored a bare string per subcategory; those still read, they
+ * simply have nothing linked yet.
+ */
+export const digestivoVariantOptions = (opt) => {
   const seen = new Set();
   return (Array.isArray(opt?.variants) ? opt.variants : [])
-    .map((v) => String(v ?? "").trim())
+    .map((v) => (typeof v === "string"
+      ? { label: v.trim() }
+      : {
+          label: String(v?.label ?? "").trim(),
+          ...(v?.type ? { type: v.type } : {}),
+          ...(v?.searchKey ? { searchKey: v.searchKey } : {}),
+          ...(v?.linkedKey ? { linkedKey: v.linkedKey } : {}),
+        }))
     .filter((v) => {
-      if (!v) return false;
-      const key = v.toLowerCase();
+      if (!v.label) return false;
+      const key = v.label.toLowerCase();
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
+};
+
+/** Just the labels — what the cycle, the picker and the stored name work in. */
+export const digestivoVariants = (opt) => digestivoVariantOptions(opt).map((v) => v.label);
+
+/** The configured subcategory a chosen label refers to, or null. */
+export const digestivoVariantFor = (opt, label) => {
+  const wanted = String(label ?? "").trim().toLowerCase();
+  if (!wanted) return null;
+  return digestivoVariantOptions(opt).find((v) => v.label.toLowerCase() === wanted) || null;
+};
+
+/**
+ * The catalogue product behind one digestivo pick.
+ *
+ * A button WITH subcategories is a grouping, and only the subcategory names a
+ * product — so the parent's own link is not consulted at all. Consulting it is
+ * what used to hand a "Tea" group whatever the wine list had that looked like
+ * the word. A button with NO subcategories is a plain button and still links
+ * directly, which is how a Grappa button reaches its grappa.
+ */
+export const resolveDigestivoProduct = (opt, variant, catalogs = {}) => {
+  const variants = digestivoVariantOptions(opt);
+  if (variants.length === 0) return resolveAperitifFromQuickAccessOption(opt, catalogs);
+  const chosen = digestivoVariantFor(opt, variant);
+  if (!chosen) return null;
+  if (!chosen.linkedKey && !chosen.searchKey) return null;
+  return resolveAperitifFromQuickAccessOption({
+    label: chosen.label,
+    searchKey: chosen.searchKey || chosen.label,
+    linkedKey: chosen.linkedKey,
+    type: chosen.type || "coffee",
+  }, catalogs);
 };
 
 /**
@@ -181,23 +228,32 @@ export const digestivoEntry = (item, { baseName, variant = null, optionId = null
 };
 
 /**
- * The seat's digestivo list after one tap of this button.
+ * The seat's digestivo list with this button set to ONE exact choice.
  *
- * Every pick belonging to this button is replaced, never appended to: scrolling
- * from espresso to cappuccino is one guest changing their mind, not a second
- * coffee. Quantities still come from the table sheet's counter, as they do for
- * every other drink.
+ * `variant` is a subcategory label, "on" for a button that carries none, or
+ * null to clear. Every pick belonging to this button is replaced, never
+ * appended to: moving from espresso to decaf is one guest changing their mind,
+ * not a second coffee. Quantities still come from the table sheet's counter,
+ * as they do for every other drink.
  */
-export const cycleSeatDigestivo = (seat, opt, resolvedItem, catalogs = {}) => {
-  const next = digestivoNextState(seat, opt, catalogs);
+export const setSeatDigestivo = (seat, opt, resolvedItem, variant, catalogs = {}) => {
   const kept = (seat?.digestivos || []).filter((e) => !digestivoEntryMatchesOption(e, opt, catalogs));
-  if (next === "off") return kept;
+  if (variant == null || variant === "off") return kept;
   return [...kept, digestivoEntry(resolvedItem, {
     baseName: resolvedItem?.name || opt?.label,
-    variant: next === "on" ? null : next,
+    variant: variant === "on" ? null : variant,
     optionId: opt?.id,
   })];
 };
+
+/**
+ * The seat's digestivo list after one tap of a button with NO subcategories —
+ * a plain off → on → off toggle. A button that HAS them opens the picker
+ * instead (components/service/DigestivoPicker), where every option is on
+ * screen at once rather than five taps apart.
+ */
+export const cycleSeatDigestivo = (seat, opt, resolvedItem, catalogs = {}) =>
+  setSeatDigestivo(seat, opt, resolvedItem, digestivoNextState(seat, opt, catalogs), catalogs);
 
 /**
  * The seat's digestivo list after a drink picked from the beverage SEARCH

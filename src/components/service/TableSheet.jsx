@@ -16,7 +16,9 @@ import {
 import { searchBeverages } from "../../utils/beverageSearch.js";
 import { addOne, groupDrinks, removeAll, removeOne } from "../../utils/drinkQuantities.js";
 import { resolveAperitifFromQuickAccessOption } from "../../utils/quickAccessResolve.js";
-import { addSeatDigestivo, digestivoEntry, digestivoVariants } from "../../utils/digestivo.js";
+import {
+  addSeatDigestivo, digestivoEntry, digestivoVariants, resolveDigestivoProduct,
+} from "../../utils/digestivo.js";
 import TablePickerModal from "./TablePickerModal.jsx";
 import ConfirmDialog from "./ConfirmDialog.jsx";
 import BookingEditModal from "./BookingEditModal.jsx";
@@ -166,6 +168,8 @@ export default function TableSheet({
   cocktails = [],
   spirits = [],
   beers = [],
+  teas = [],
+  coffees = [],
   reservationOnTable,
   seatCapOf,
   onClose,
@@ -252,7 +256,7 @@ export default function TableSheet({
   // The WHOLE catalog, not just wine, and forgiving about how it is typed —
   // accents folded, word order free, small typos tolerated (utils/beverageSearch).
   const drinkMatches = useMemo(
-    () => searchBeverages(drinkQuery, { wines, cocktails, spirits, beers }),
+    () => searchBeverages(drinkQuery, { wines, cocktails, spirits, beers, teas, coffees }),
     [drinkQuery, wines, cocktails, spirits, beers],
   );
 
@@ -373,7 +377,10 @@ export default function TableSheet({
    * four different states. The rows below take it off again.
    */
   const addQuickDrink = (opt, variant = null) => {
-    const found = resolveAperitifFromQuickAccessOption(opt, { wines, cocktails, spirits, beers });
+    const catalogs = { wines, cocktails, spirits, beers, teas, coffees };
+    const found = drinkPhase === "digestivo"
+      ? resolveDigestivoProduct(opt, variant, catalogs)
+      : resolveAperitifFromQuickAccessOption(opt, catalogs);
     const baseName = String(found?.name || opt?.label || "").trim();
     const item = found || { name: baseName, notes: "", __cocktail: true };
     const field = PHASE_FIELD[drinkPhase];

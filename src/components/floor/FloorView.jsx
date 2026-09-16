@@ -81,7 +81,7 @@ export default function FloorView({
   mapKind = null,
   floorMaps, floorStatus, reservations = [], tables = [],
   menuCourses = [], profiles = [], assignments = {},
-  optionalExtras = [], optionalPairings = [],
+  optionalExtras = [], optionalPairings = [], teas = [], coffees = [],
   aperitifOptions = [],     // quick-access panel: the same catalogs the board card gets
   digestivoOptions = [],    // the digestivo buttons, same list the board card shows
   wines = [], cocktails = [], spirits = [], beers = [],
@@ -624,6 +624,8 @@ export default function FloorView({
                 cocktails={cocktails}
                 spirits={spirits}
                 beers={beers}
+                teas={teas}
+                coffees={coffees}
               />
             </div>
           ) : (

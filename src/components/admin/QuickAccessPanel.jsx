@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import { tokens } from "../../styles/tokens.js";
+import { digestivoVariantOptions } from "../../utils/digestivo.js";
 import { FONT, baseInp } from "./adminStyles.js";
 import { fuzzy, fuzzyDrink } from "../../utils/search.js";
 import { buildBeverageLinkedKey, resolveAperitifFromQuickAccessOption } from "../../utils/quickAccessResolve.js";
 
 // ── WinePickerInput — sets stable linkedKey + display searchKey ─────────────
-function WinePickerInput({ searchKey, linkedKey, onPick, type, wines, cocktails, spirits, beers, style }) {
+function WinePickerInput({ searchKey, linkedKey, onPick, type, wines, cocktails, spirits, beers, teas = [], coffees = [], style }) {
   const [q, setQ]       = useState("");
   const [open, setOpen] = useState(false);
   const ref             = useRef(null);
@@ -16,7 +17,8 @@ function WinePickerInput({ searchKey, linkedKey, onPick, type, wines, cocktails,
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  const list = type === "wine" ? wines : type === "cocktail" ? cocktails : type === "spirit" ? spirits : beers;
+  const byType = { wine: wines, cocktail: cocktails, spirit: spirits, beer: beers, tea: teas, coffee: coffees };
+  const list = byType[type] || beers;
   const results = q.length > 0
     ? (type === "wine" ? fuzzy(q, wines, null) : fuzzyDrink(q, list)).slice(0, 8)
     : [];
@@ -49,7 +51,8 @@ function WinePickerInput({ searchKey, linkedKey, onPick, type, wines, cocktails,
         value={q}
         onChange={e => { setQ(e.target.value); setOpen(true); }}
         onFocus={() => setOpen(true)}
-        placeholder={(searchKey || linkedKey) ? "search to replace…" : `search ${type === "wine" ? "wines" : `${type}s`}…`}
+        placeholder={(searchKey || linkedKey) ? "search to replace…"
+          : `search ${type === "wine" ? "wines" : type === "tea" || type === "coffee" ? type : `${type}s`}…`}
         style={style}
       />
       {open && results.length > 0 && (
@@ -78,14 +81,14 @@ function WinePickerInput({ searchKey, linkedKey, onPick, type, wines, cocktails,
   );
 }
 
-function linkedPreviewText(item, wines, cocktails, spirits, beers) {
+function linkedPreviewText(item, catalogs) {
   const ap = {
     label: item.label,
     searchKey: item.searchKey || item.label,
     linkedKey: item.linkedKey,
     type: item.type || "wine",
   };
-  const r = resolveAperitifFromQuickAccessOption(ap, { wines, cocktails, spirits, beers });
+  const r = resolveAperitifFromQuickAccessOption(ap, catalogs);
   if (!r) return null;
   if ((item.type || "wine") === "wine") {
     return r.producer ? `${r.producer} – ${r.name}` : r.name;
@@ -110,7 +113,7 @@ function linkedPreviewText(item, wines, cocktails, spirits, beers) {
 export default function QuickAccessPanel({
   quickAccessItems = [],
   onUpdateQuickAccess,
-  wines = [], cocktails = [], spirits = [], beers = [],
+  wines = [], cocktails = [], spirits = [], beers = [], teas = [], coffees = [],
   heading = "QUICK ACCESS — configure aperitif/drink buttons shown during service",
   addPlaceholder = "e.g. Slapšak",
   emptyLabel = "No quick access items configured",
@@ -178,10 +181,17 @@ export default function QuickAccessPanel({
   const updVariants = (id, next) => {
     onUpdateQuickAccess(quickAccessItems.map(i => i.id === id ? { ...i, variants: next } : i));
   };
-  const variantsOf = (item) => (Array.isArray(item.variants) ? item.variants : []);
-  const addVariant    = (item)         => updVariants(item.id, [...variantsOf(item), ""]);
-  const setVariant    = (item, at, v)  => updVariants(item.id, variantsOf(item).map((x, i) => i === at ? v : x));
-  const removeVariant = (item, at)     => updVariants(item.id, variantsOf(item).filter((_, i) => i !== at));
+  // Subcategories are rows of their own now — each links to a product, because
+  // the category above them does not name one. A config written before that
+  // stored a bare string per row; digestivoVariantOptions reads both.
+  const variantsOf = (item) => digestivoVariantOptions(item);
+  const addVariant    = (item)        => updVariants(item.id, [...variantsOf(item), { label: "", type: "coffee" }]);
+  const setVariant    = (item, at, patch) =>
+    updVariants(item.id, variantsOf(item).map((x, i) => i === at ? { ...x, ...patch } : x));
+  const removeVariant = (item, at)    => updVariants(item.id, variantsOf(item).filter((_, i) => i !== at));
+  // One subcategory is enough to make the parent a grouping: its own link stops
+  // being read (utils/digestivo resolveDigestivoProduct) so it stops being shown.
+  const isGroup = (item) => showVariants && variantsOf(item).length > 0;
 
   const moveItem = (id, dir) => {
     const idx = quickAccessItems.findIndex(i => i.id === id);
@@ -202,11 +212,14 @@ export default function QuickAccessPanel({
       <option value="cocktail">Cocktail</option>
       <option value="spirit">Spirit</option>
       <option value="beer">Beer</option>
+      <option value="tea">Tea</option>
+      <option value="coffee">Coffee</option>
     </select>
   );
 
+  const catalogs = { wines, cocktails, spirits, beers, teas, coffees };
   const pickerProps = (type, searchKey, linkedKey, onPick) => ({
-    wines, cocktails, spirits, beers, type, searchKey, linkedKey, onPick, style: inpSm,
+    ...catalogs, type, searchKey, linkedKey, onPick, style: inpSm,
   });
 
   return (
@@ -217,7 +230,7 @@ export default function QuickAccessPanel({
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
         {quickAccessItems.map((item, idx) => {
-          const preview = linkedPreviewText(item, wines, cocktails, spirits, beers);
+          const preview = linkedPreviewText(item, catalogs);
           const broken = Boolean(item.linkedKey) && !preview;
           return (
             <div key={item.id} style={{
@@ -236,22 +249,24 @@ export default function QuickAccessPanel({
                 <div style={{ flex: 1 }}>
                   <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: tokens.ink[0] }}>{item.label}</div>
                   <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3] }}>
-                    search: <span style={{ color: tokens.ink[2] }}>{item.searchKey}</span>
-                    {item.linkedKey && <span style={{ color: tokens.ink[2] }}> · id: {String(item.linkedKey).slice(0, 36)}{String(item.linkedKey).length > 36 ? "…" : ""}</span>}
-                    {" · "}{item.type || "wine"}
+                    {isGroup(item) ? <span style={{ color: tokens.ink[2] }}>category — each subcategory links its own drink</span> : <>
+                      search: <span style={{ color: tokens.ink[2] }}>{item.searchKey}</span>
+                      {item.linkedKey && <span style={{ color: tokens.ink[2] }}> · id: {String(item.linkedKey).slice(0, 36)}{String(item.linkedKey).length > 36 ? "…" : ""}</span>}
+                      {" · "}{item.type || "wine"}
+                    </>}
                     {showMenuOnly && item.menuOnly && <span style={{ marginLeft: 6, color: tokens.ink[1], fontWeight: 600 }}>menu only</span>}
-                    {showVariants && variantsOf(item).filter(v => String(v).trim()).length > 0 && (
+                    {showVariants && variantsOf(item).length > 0 && (
                       <span style={{ marginLeft: 6, color: tokens.ink[2] }}>
-                        · {variantsOf(item).filter(v => String(v).trim()).length} sub
+                        · {variantsOf(item).length} sub
                       </span>
                     )}
                   </div>
-                  {preview && (
+                  {preview && !isGroup(item) && (
                     <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.green.text, marginTop: 4 }}>
                       → {preview}
                     </div>
                   )}
-                  {broken && (
+                  {broken && !isGroup(item) && (
                     <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, marginTop: 4, fontWeight: 600 }}>
                       Linked product missing — re-pick in EDIT or button falls back to label only.
                     </div>
@@ -294,43 +309,82 @@ export default function QuickAccessPanel({
               {showVariants && (
                 <div style={{ padding: "0 14px 12px" }}>
                   <div style={{ fontFamily: FONT, fontSize: 8, color: tokens.ink[3], letterSpacing: 1, marginBottom: 5, textTransform: "uppercase" }}>
-                    Subcategories — the button scrolls through these on the seat
+                    Subcategories — the seat's panel offers these, each with its own drink
                   </div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-                    {variantsOf(item).map((v, i) => (
-                      <div key={i} style={{ display: "flex", alignItems: "center", gap: 3 }}>
-                        <input
-                          value={v}
-                          onChange={e => setVariant(item, i, e.target.value)}
-                          placeholder="e.g. Espresso"
-                          aria-label={`${item.label} subcategory ${i + 1}`}
-                          style={{ ...inpSm, width: 120 }}
-                        />
-                        <button type="button" onClick={() => removeVariant(item, i)}
-                          aria-label={`Remove ${item.label} subcategory ${i + 1}`}
-                          style={{ background: "none", border: "none", color: tokens.ink[3], cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}>×</button>
-                      </div>
-                    ))}
-                    <button type="button" onClick={() => addVariant(item)} style={{
-                      fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 9px",
-                      border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer",
-                      background: tokens.neutral[0], color: tokens.ink[1],
-                    }}>+ subcategory</button>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {variantsOf(item).map((v, i) => {
+                      const vPreview = linkedPreviewText(
+                        { label: v.label, searchKey: v.searchKey || v.label, linkedKey: v.linkedKey, type: v.type || "coffee" },
+                        catalogs,
+                      );
+                      return (
+                        <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr 100px 24px", gap: 6, alignItems: "start" }}>
+                          <input
+                            value={v.label}
+                            onChange={e => setVariant(item, i, { label: e.target.value })}
+                            placeholder="e.g. Espresso"
+                            aria-label={`${item.label} subcategory ${i + 1}`}
+                            style={inpSm}
+                          />
+                          <div>
+                            <WinePickerInput
+                              {...pickerProps(v.type || "coffee", v.searchKey, v.linkedKey, ({ searchKey, linkedKey }) =>
+                                setVariant(item, i, { searchKey, linkedKey }))}
+                            />
+                            {vPreview && (
+                              <div style={{ fontFamily: FONT, fontSize: 8, color: tokens.green.text, marginTop: 3 }}>→ {vPreview}</div>
+                            )}
+                          </div>
+                          <select
+                            value={v.type || "coffee"}
+                            onChange={e => setVariant(item, i, { type: e.target.value, linkedKey: undefined })}
+                            aria-label={`${item.label} subcategory ${i + 1} type`}
+                            style={selSm}
+                          >
+                            <option value="coffee">Coffee</option>
+                            <option value="tea">Tea</option>
+                            <option value="spirit">Spirit</option>
+                            <option value="cocktail">Cocktail</option>
+                            <option value="beer">Beer</option>
+                            <option value="wine">Wine</option>
+                          </select>
+                          <button type="button" onClick={() => removeVariant(item, i)}
+                            aria-label={`Remove ${item.label} subcategory ${i + 1}`}
+                            style={{ background: "none", border: "none", color: tokens.ink[3], cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "5px 0" }}>×</button>
+                        </div>
+                      );
+                    })}
+                    <div>
+                      <button type="button" onClick={() => addVariant(item)} style={{
+                        fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "5px 9px",
+                        border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, cursor: "pointer",
+                        background: tokens.neutral[0], color: tokens.ink[1],
+                      }}>+ subcategory</button>
+                    </div>
                   </div>
-                  {variantsOf(item).filter(v => String(v).trim()).length === 0 && (
+                  {variantsOf(item).length === 0 && (
                     <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[4], marginTop: 5 }}>
-                      None — the button is a plain on/off toggle.
+                      None — the button is a plain on/off toggle and links its own drink above.
                     </div>
                   )}
                 </div>
               )}
 
               {editingId === item.id && (
-                <div style={{ padding: "0 14px 12px", display: "grid", gridTemplateColumns: "1fr 1fr 100px", gap: 8 }}>
+                <div style={{ padding: "0 14px 12px", display: "grid", gridTemplateColumns: isGroup(item) ? "1fr" : "1fr 1fr 100px", gap: 8 }}>
                   <div>
-                    <div style={{ fontFamily: FONT, fontSize: 8, color: tokens.ink[3], letterSpacing: 1, marginBottom: 3 }}>BUTTON LABEL</div>
+                    <div style={{ fontFamily: FONT, fontSize: 8, color: tokens.ink[3], letterSpacing: 1, marginBottom: 3 }}>
+                      {isGroup(item) ? "CATEGORY NAME" : "BUTTON LABEL"}
+                    </div>
                     <input value={editLabel} onChange={e => setEditLabel(e.target.value)} style={inpSm} />
+                    {isGroup(item) && (
+                      <div style={{ fontFamily: FONT, fontSize: 8.5, color: tokens.ink[3], marginTop: 4, lineHeight: 1.5 }}>
+                        A category names no drink — the bar cannot pour a “{editLabel || item.label}”.
+                        Link the products on its subcategories above.
+                      </div>
+                    )}
                   </div>
+                  {!isGroup(item) && <>
                   <div>
                     <div style={{ fontFamily: FONT, fontSize: 8, color: tokens.ink[3], letterSpacing: 1, marginBottom: 3 }}>LINKED PRODUCT</div>
                     <WinePickerInput
@@ -347,6 +401,7 @@ export default function QuickAccessPanel({
                       setEditLinkedKey(undefined);
                     }} />
                   </div>
+                  </>}
                 </div>
               )}
             </div>

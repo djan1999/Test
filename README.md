@@ -90,9 +90,28 @@ and deployment-order gates.
   and raises no kitchen popup: nobody has to start a plate for a coffee, so the
   line simply appears on the ticket the pass is already reading.
 - A digestivo button can carry subcategories (Coffee → espresso, cappuccino, …).
-  On the seat it scrolls through them like the pairing button scrolls its types,
-  and the kitchen ticket prints the chosen one. A button with none stays a plain
-  on/off toggle.
+  On the seat it opens a panel listing them all, so any one is a single tap in
+  either direction and NONE is always on screen; the kitchen ticket prints the
+  chosen one. A button with none stays a plain on/off toggle.
+- A button WITH subcategories is a category, and a category names no drink — the
+  bar cannot pour a "Coffee". Each subcategory links its own product instead, and
+  the category's own link is neither read nor shown. A button with no
+  subcategories is a plain button and still links directly.
+- To print a digestivo on the guest menu, add a drinks block with source
+  "Digestivo" in Admin > Menu Layout where the menu serves it. One block prints
+  one digestivo, the same contract the aperitif block keeps. The kitchen ticket
+  does not depend on this — it prints the digestivo either way.
+- Tea and coffee are catalogue categories of their own, edited in Admin >
+  Drinks beside Cocktails / Spirits / Beers and filled by the same hotel-website
+  sync that feeds the wine list. Tea has its own source page; coffee shares the
+  non-alcoholic page with it and is read by section, so FILTER and ESPRESSO stay
+  told apart. A digestivo (or aperitif) button can link straight to one of those
+  rows, which is the real fix for a button that used to guess its product from a
+  search key.
+- Quick-access keys resolve against the catalogue on a word boundary, not as a
+  bare substring: "Tea" no longer matches Co*tea*ux or Cha*tea*u. A prefix key
+  ("Nebb") still finds its wine; a key that matches nothing leaves the button
+  recording its own label rather than the wrong product.
 - Beside the digestivo buttons, "Search all beverages" reaches the rest of the
   live catalogue, so a drink nobody put on a button does not need an admin trip
   mid-service. A searched drink is added alongside the button picks.

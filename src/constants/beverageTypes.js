@@ -21,4 +21,6 @@ export const BEV_TYPES = {
   // Same neutral treatment as the rest — the moment it is served, not a
   // different kind of drink, is what makes a digestivo a digestivo.
   digestivo: { ...base, label: "Digestivo", glyph: tokens.bevGlyph.digestivo },
+  tea:      { ...base, label: "Tea",      glyph: tokens.bevGlyph.tea },
+  coffee:   { ...base, label: "Coffee",   glyph: tokens.bevGlyph.coffee },
 };

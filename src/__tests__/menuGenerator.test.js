@@ -769,3 +769,59 @@ describe("generateMenuHTML — layoutStyles", () => {
     expect(html).toContain("--pad-b:6mm");
   });
 });
+
+describe("a drinks block sourced from the digestivo", () => {
+  // The digestivo reaches the kitchen ticket by itself. Printing it on the
+  // GUEST menu is a separate decision, made where every other drink placement
+  // is made: a drinks block in the template, put where the menu serves it.
+  const course = makeCourse("BUHTELJ", "", { position: 1, course_key: "buhtelj" });
+  const template = (source) => ({
+    version: 2,
+    rows: [
+      { id: "c1", left: { type: "course", courseKey: "buhtelj" }, right: null, widthPreset: "55/45", gap: 0 },
+      { id: "d1", left: null, right: { type: "drinks", drinkSource: source }, widthPreset: "55/45", gap: 0 },
+    ],
+  });
+  const seat = { digestivos: [{ name: "Espresso", notes: "Banibeans" }, { name: "Grappa Williams" }] };
+
+  it("prints the guest's digestivo where the block sits", () => {
+    const html = render(seat, {}, [course], { menuTemplate: template("digestivo") });
+    expect(html).toContain("Espresso");
+  });
+
+  it("prints nothing when the guest ordered none — no empty row", () => {
+    const html = render({ digestivos: [] }, {}, [course], { menuTemplate: template("digestivo") });
+    expect(html).not.toContain("Espresso");
+  });
+
+  it("takes one per block, in the order they were ordered", () => {
+    // Two blocks, two digestivos: the second block prints the second drink
+    // rather than repeating the first.
+    const two = {
+      version: 2,
+      rows: [
+        { id: "d1", left: null, right: { type: "drinks", drinkSource: "digestivo" }, widthPreset: "55/45", gap: 0 },
+        { id: "d2", left: null, right: { type: "drinks", drinkSource: "digestivo" }, widthPreset: "55/45", gap: 0 },
+      ],
+    };
+    const html = render(seat, {}, [course], { menuTemplate: two });
+    expect(html).toContain("Espresso");
+    expect(html).toContain("Grappa Williams");
+  });
+
+  it("never spends the aperitif queue on it, or the other way round", () => {
+    const both = {
+      version: 2,
+      rows: [
+        { id: "a1", left: null, right: { type: "drinks", drinkSource: "aperitif" }, widthPreset: "55/45", gap: 0 },
+        { id: "d1", left: null, right: { type: "drinks", drinkSource: "digestivo" }, widthPreset: "55/45", gap: 0 },
+      ],
+    };
+    const html = render(
+      { aperitifs: [{ name: "Spritz" }], digestivos: [{ name: "Espresso" }] },
+      {}, [course], { menuTemplate: both },
+    );
+    expect(html).toContain("Spritz");
+    expect(html).toContain("Espresso");
+  });
+});
