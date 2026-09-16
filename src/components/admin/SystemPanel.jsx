@@ -712,6 +712,12 @@ export default function SystemPanel({
               rows={6}
               style={{ marginTop: 4, width: "100%", fontFamily: FONT, fontSize: 10, padding: "6px 8px", border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, resize: "vertical" }}
             />
+            <div style={{ fontFamily: FONT, fontSize: 8.5, color: tokens.ink[3], marginTop: 4, lineHeight: 1.5 }}>
+              A category this list does not mention at all is added by the sync
+              automatically — that is how a source's newer categories reach a
+              workspace set up before they existed. Removing one page from a
+              category you keep is respected.
+            </div>
             </label>
             <div>
               <button

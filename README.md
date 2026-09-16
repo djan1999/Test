@@ -101,6 +101,11 @@ and deployment-order gates.
   "Digestivo" in Admin > Menu Layout where the menu serves it. One block prints
   one digestivo, the same contract the aperitif block keeps. The kitchen ticket
   does not depend on this — it prints the digestivo either way.
+- A workspace's stored sync config is a SNAPSHOT of the source's pages at setup
+  time. A category it does not mention at all is added by the sync
+  automatically, so a source's newer categories (tea and coffee) reach a
+  workspace configured before they existed without an edit. Removing one page
+  from a category the config still lists is respected.
 - Tea and coffee are catalogue categories of their own, edited in Admin >
   Drinks beside Cocktails / Spirits / Beers and filled by the same hotel-website
   sync that feeds the wine list. Tea has its own source page; coffee shares the
