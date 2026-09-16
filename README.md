@@ -96,6 +96,11 @@ and deployment-order gates.
 - Beside the digestivo buttons, "Search all beverages" reaches the rest of the
   live catalogue, so a drink nobody put on a button does not need an admin trip
   mid-service. A searched drink is added alongside the button picks.
+- Every position named in the detail sheet — the beverage scope chips, the
+  restriction position picker, and the restriction tags themselves — carries
+  the guest's Mr / Mrs beside it, in the same chip the board card and the
+  kitchen ticket use. A chair nobody has named stays unmarked. Setting a
+  guest's gender is still board-card work.
 - Both button lists also appear in the table detail sheet, under BEVERAGES,
   behind the APERITIF / DIGESTIVO / WITH MENU phase chips. There they ADD to
   whoever the seat-scope chips select (the whole party, or one position) rather
@@ -109,6 +114,8 @@ and deployment-order gates.
 - A guest who is not on a pairing can be marked BTG (by the glass) or BTB (by
   the bottle) beside the pairing control in service quick access. The two are
   mutually exclusive with a pairing, and the next Send carries the choice to the
-  kitchen.
+  kitchen. The floor map's chair pill prints it under the water code, in the
+  slot the pairing code takes for a paired guest — so every chair says how it
+  is drinking, and never both at once.
 - The old shared-password gate (`VITE_ACCESS_PASSWORD`) is now only used in
   local-only mode (when Supabase isn't configured).

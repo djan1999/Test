@@ -281,6 +281,55 @@ describe("TableSheet — the configured aperitif and digestivo buttons", () => {
   });
 });
 
+describe("TableSheet — gender beside the position", () => {
+  // Gender is the only identity the app records per chair. A position picker
+  // without it asks "which position?" about people the server can see and the
+  // screen could not name.
+  const gendered = (over = {}, props = {}) => setup({
+    guests: 3,
+    seats: [
+      { ...seat(1), gender: "Mr" },
+      { ...seat(2), gender: "Mrs" },
+      seat(3),                        // nobody has said yet
+    ],
+    ...over,
+  }, props);
+
+  it("names each chair on the beverage scope chips", () => {
+    gendered();
+    expect(screen.getByLabelText("Drinks for position 1 (Mr)")).toBeTruthy();
+    expect(screen.getByLabelText("Drinks for position 2 (Mrs)")).toBeTruthy();
+    expect(screen.getByLabelText("Drinks for position 1 (Mr)").textContent).toBe("P1Mr");
+  });
+
+  it("leaves a chair nobody has named unmarked rather than guessing", () => {
+    gendered();
+    expect(screen.getByLabelText("Drinks for position 3")).toBeTruthy();
+    expect(screen.getByLabelText("Drinks for position 3").textContent).toBe("P3");
+  });
+
+  it("names them on the restriction position picker too", () => {
+    gendered();
+    fireEvent.click(screen.getByText("+ ADD"));
+    expect(screen.getByLabelText("Restriction for position 2 (Mrs)")).toBeTruthy();
+    expect(screen.getByLabelText("Restriction for position 3")).toBeTruthy();
+  });
+
+  it("reads the chair back on the restriction tag itself", () => {
+    gendered({ restrictions: [{ pos: 2, note: "gluten" }] });
+    const tag = screen.getByLabelText("Remove Gluten Free from position 2");
+    expect(tag.textContent).toContain("P2");
+    expect(tag.textContent).toContain("Mrs");
+  });
+
+  it("says nothing about a table-wide restriction, which names no chair", () => {
+    gendered({ restrictions: [{ pos: null, note: "gluten" }] });
+    const tag = screen.getByLabelText("Remove Gluten Free");
+    expect(tag.textContent).toContain("TABLE");
+    expect(tag.textContent).not.toContain("Mr");
+  });
+});
+
 describe("TableSheet — no Quick Access overlap", () => {
   it("carries no water controls — water is per-seat work on the card", () => {
     setup();
