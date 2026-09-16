@@ -125,7 +125,7 @@ describe("the digestivo buttons on the seat", () => {
     fireEvent.click(screen.getByTitle(/^Coffee — Cappuccino/));
     const panel = screen.getByRole("dialog", { name: "Choose Coffee" });
     // The one that is on reads as chosen, and stepping BACK is a single tap.
-    expect(within(panel).getByText("Cappuccino").getAttribute("aria-pressed")).toBe("true");
+    expect(within(panel).getByText("Cappuccino").closest("button").getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(within(panel).getByText("Espresso"));
     expect(updSeat.mock.calls.at(-1)[3].map(d => d.name)).toEqual(["Coffee (Espresso)"]);
   });

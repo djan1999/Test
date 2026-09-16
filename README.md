@@ -98,9 +98,11 @@ and deployment-order gates.
   the category's own link is neither read nor shown. A button with no
   subcategories is a plain button and still links directly.
 - To print a digestivo on the guest menu, add a drinks block with source
-  "Digestivo" in Admin > Menu Layout where the menu serves it. One block prints
-  one digestivo, the same contract the aperitif block keeps. The kitchen ticket
-  does not depend on this — it prints the digestivo either way.
+  "Digestivo" in Admin > Menu Layout where the menu serves it. It works on a row
+  of its own OR sharing a course row, where it takes that course's right column
+  instead of the pairing. One block prints one digestivo, the same contract the
+  aperitif block keeps. The kitchen ticket does not depend on this — it prints
+  the digestivo either way.
 - A workspace's stored sync config is a SNAPSHOT of the source's pages at setup
   time. A category it does not mention at all is added by the sync
   automatically, so a source's newer categories (tea and coffee) reach a

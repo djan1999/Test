@@ -809,6 +809,46 @@ describe("a drinks block sourced from the digestivo", () => {
     expect(html).toContain("Grappa Williams");
   });
 
+  it("prints beside a course when the block shares that course's row", () => {
+    // Where it naturally goes: next to the course the digestivo is served
+    // with. Sharing a row used to resolve nothing and fall through to the
+    // pairing columns, so the block printed the guest's wine or a blank.
+    const shared = {
+      version: 2,
+      rows: [
+        {
+          id: "c1",
+          left: { type: "course", courseKey: "buhtelj" },
+          right: { type: "drinks", drinkSource: "digestivo" },
+          widthPreset: "55/45", gap: 0,
+        },
+      ],
+    };
+    const html = render(seat, {}, [course], { menuTemplate: shared });
+    expect(html).toContain("BUHTELJ");
+    expect(html).toContain("Espresso");
+  });
+
+  it("does not let the pairing columns overwrite it on a shared row", () => {
+    // A paired guest on a course row: the pairing branch must not claim the
+    // right column the digestivo block asked for.
+    const shared = {
+      version: 2,
+      rows: [
+        {
+          id: "c1",
+          left: { type: "course", courseKey: "buhtelj" },
+          right: { type: "drinks", drinkSource: "digestivo" },
+          widthPreset: "55/45", gap: 0,
+        },
+      ],
+    };
+    const paired = makeCourse("BUHTELJ", "", { position: 1, course_key: "buhtelj", wp: { name: "Riesling", sub: "Mosel" } });
+    const html = render({ ...seat, pairing: "Wine" }, {}, [paired], { menuTemplate: shared });
+    expect(html).toContain("Espresso");
+    expect(html).not.toContain("Riesling");
+  });
+
   it("never spends the aperitif queue on it, or the other way round", () => {
     const both = {
       version: 2,
