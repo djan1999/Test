@@ -39,7 +39,7 @@ import {
   swapSeatData, moveSeatOnFloor, materializeFloorPositions,
   resolveFieldUpdate,
 } from "./utils/tableHelpers.js";
-import { pickBeveragesForCategory } from "./utils/beverages.js";
+import { pickBeveragesForCategory, manualBeverageRows } from "./utils/beverages.js";
 import { digestivoOptionFromItem } from "./utils/digestivo.js";
 import { foldTable } from "./utils/foldTable.js";
 import { randomUuid } from "./utils/uuid.js";
@@ -2135,8 +2135,11 @@ export default function App() {
     // Only categories whose list actually changed are rewritten (the write is
     // a replace-all within its category), so saving a cocktail edit can't
     // race another device's concurrent beer edit.
-    const bevRows = (list, category) =>
-      list.map((item, i) => ({ category, name: item.name, notes: item.notes || "", position: i, source: "manual" }));
+    // Only the operator's OWN rows are written back. A row the website sync
+    // carries belongs to the sync — snapshotting it into a manual twin is what
+    // left a synced category holding two of everything, one of which every
+    // read then discarded (utils/beverages).
+    const bevRows = (list, category) => manualBeverageRows(list, category);
     const sameList = (next, prev) =>
       JSON.stringify(next.map(x => [x.name, x.notes || ""])) === JSON.stringify(prev.map(x => [x.name, x.notes || ""]));
     const changed = [
