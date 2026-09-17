@@ -4,6 +4,7 @@ import {
   digestivoVariants,
   digestivoVariantOptions,
   digestivoVariantFor,
+  digestivoOptionFromItem,
   resolveDigestivoProduct,
   digestivoCycleStates,
   digestivoDisplayName,
@@ -399,5 +400,36 @@ describe("subcategories reach the kitchen as distinct drinks", () => {
       { id: 1, digestivos: [{ name: "Coffee (Espresso)" }] },
       { id: 2, digestivos: [{ name: "Grappa" }] },
     ])).toBe("P1 Coffee (Espresso) · P2 Grappa");
+  });
+});
+
+describe("a configured button, as the service surfaces receive it", () => {
+  // The bug this pins: the caller that built this inline stringified each
+  // subcategory. Once subcategories became objects carrying their own link,
+  // String(v) made every one of them "[object Object]" — identical, so the
+  // de-duplication kept exactly one, and a five-coffee button offered a single
+  // nonsense row. Subcategories must be handed on untouched.
+  it("passes linked subcategories through without flattening them", () => {
+    const item = {
+      id: 8, label: "Grappa", searchKey: "Grappa", type: "wine", enabled: true,
+      variants: [
+        { label: "Williams", type: "spirit", linkedKey: "spirit|Viljamovka – small batch – Berke" },
+        { label: "Plum", type: "spirit", linkedKey: "spirit|Plum – small batch – Berke" },
+      ],
+    };
+    const opt = digestivoOptionFromItem(item);
+    expect(digestivoVariants(opt)).toEqual(["Williams", "Plum"]);
+    expect(digestivoVariantFor(opt, "Plum").linkedKey).toBe("spirit|Plum – small batch – Berke");
+    expect(JSON.stringify(opt)).not.toContain("object Object");
+  });
+
+  it("still passes the older plain-string subcategories through", () => {
+    const opt = digestivoOptionFromItem({ id: 7, label: "Coffee", variants: ["Espresso", "Decaf"] });
+    expect(digestivoVariants(opt)).toEqual(["Espresso", "Decaf"]);
+  });
+
+  it("carries the button's own identity, and an empty list when it has none", () => {
+    const opt = digestivoOptionFromItem({ id: 9, label: "Amaro" });
+    expect(opt).toMatchObject({ id: 9, label: "Amaro", searchKey: "Amaro", type: "wine", variants: [] });
   });
 });
