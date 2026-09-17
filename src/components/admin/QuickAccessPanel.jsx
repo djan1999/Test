@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { tokens } from "../../styles/tokens.js";
-import { digestivoVariantOptions } from "../../utils/digestivo.js";
+import { digestivoVariantOptions, digestivoVariantRows } from "../../utils/digestivo.js";
 import { FONT, baseInp } from "./adminStyles.js";
 import { fuzzy, fuzzyDrink } from "../../utils/search.js";
 import { buildBeverageLinkedKey, resolveAperitifFromQuickAccessOption } from "../../utils/quickAccessResolve.js";
@@ -183,15 +183,23 @@ export default function QuickAccessPanel({
   };
   // Subcategories are rows of their own now — each links to a product, because
   // the category above them does not name one. A config written before that
-  // stored a bare string per row; digestivoVariantOptions reads both.
-  const variantsOf = (item) => digestivoVariantOptions(item);
+  // stored a bare string per row; digestivoVariantRows reads both.
+  //
+  // The editor reads the RAW rows, not the sanitised ones the floor gets: a row
+  // is blank the instant it is added and blank again halfway through a rename,
+  // and the sanitiser drops blanks. Reading through it meant every new row was
+  // written and then thrown away before the next render — "+ subcategory" did
+  // nothing at all, and clearing a label to retype it deleted the row.
+  const variantsOf = (item) => digestivoVariantRows(item);
   const addVariant    = (item)        => updVariants(item.id, [...variantsOf(item), { label: "", type: "coffee" }]);
   const setVariant    = (item, at, patch) =>
     updVariants(item.id, variantsOf(item).map((x, i) => i === at ? { ...x, ...patch } : x));
   const removeVariant = (item, at)    => updVariants(item.id, variantsOf(item).filter((_, i) => i !== at));
   // One subcategory is enough to make the parent a grouping: its own link stops
   // being read (utils/digestivo resolveDigestivoProduct) so it stops being shown.
-  const isGroup = (item) => showVariants && variantsOf(item).length > 0;
+  // Counted on the sanitised rows, so the panel changes shape when the seat
+  // does — a half-typed row has not made the button a category yet.
+  const isGroup = (item) => showVariants && digestivoVariantOptions(item).length > 0;
 
   const moveItem = (id, dir) => {
     const idx = quickAccessItems.findIndex(i => i.id === id);
@@ -255,9 +263,9 @@ export default function QuickAccessPanel({
                       {" · "}{item.type || "wine"}
                     </>}
                     {showMenuOnly && item.menuOnly && <span style={{ marginLeft: 6, color: tokens.ink[1], fontWeight: 600 }}>menu only</span>}
-                    {showVariants && variantsOf(item).length > 0 && (
+                    {showVariants && digestivoVariantOptions(item).length > 0 && (
                       <span style={{ marginLeft: 6, color: tokens.ink[2] }}>
-                        · {variantsOf(item).length} sub
+                        · {digestivoVariantOptions(item).length} sub
                       </span>
                     )}
                   </div>
