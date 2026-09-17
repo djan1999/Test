@@ -1,9 +1,11 @@
 // ── The aperitif buttons on the seat card ────────────────────────────────────
 // Reported as "quick access aperitif is broken — tapping does nothing".
 //
-// Nothing rendered wrong, which is why no existing test caught it: the fault
-// lived only in the click handler and in the match that decides whether a
-// button is lit, and a seat with no aperitifs never runs the latter.
+// Two symptoms, one fault. Tapping did nothing because the click handler
+// threw; opening quick access on a seat that already had an aperitif CRASHED,
+// because the same broken reference runs during render once there is a chip to
+// match against. A seat with no aperitifs never ran either, which is why an
+// empty card looked perfectly healthy and no existing test caught it.
 
 import { describe, it, expect, vi } from "vitest";
 import { render, fireEvent, screen } from "@testing-library/react";
@@ -62,6 +64,15 @@ describe("tapping an aperitif button", () => {
     const updSeat = setup([{}]);
     expect(() => fireEvent.click(screen.getByText("Krug"))).not.toThrow();
     expect(updSeat).toHaveBeenCalled();
+  });
+
+  it("opens on a seat that already has an aperitif, without taking the app down", () => {
+    // The reported journey: added from the Detail sheet, then quick access
+    // pressed. Deciding whether each button is lit reads every aperitif on the
+    // seat, so with one there the broken reference ran during RENDER — not in
+    // a handler — and took the card down with it.
+    const withOne = [{ aperitifs: [{ id: "krug|vintage_2013|2013|fr", name: "Vintage 2013", producer: "Krug" }] }];
+    expect(() => setup(withOne)).not.toThrow();
   });
 
   it("lights the button for a wine already on the seat", () => {
