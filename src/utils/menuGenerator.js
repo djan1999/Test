@@ -566,6 +566,14 @@ export function generateMenuHTML({
         if (aQ.length > 0) { const d = fmtDrinkParts(aQ.shift()); drink = { name: d.title || "", sub: d.sub || "" }; }
       }
 
+      // A digestivo block SHARING a course row — which is where it naturally
+      // goes, beside the course it is served with. Without this it resolved
+      // nothing and fell through to the pairing columns, so the block printed
+      // the guest's wine pairing or a blank instead of their coffee.
+      if (isDigestivo(rb)) {
+        if (dQ.length > 0) { const d = fmtDrinkParts(dQ.shift()); drink = { name: d.title || "", sub: d.sub || "" }; }
+      }
+
       // by_the_glass or bottle source on a course row — consume from queue
       if (rbSource === "by_the_glass") {
         if (gQ.length > 0) drink = (() => { const d = fmtDrinkParts(gQ.shift()); return { name: d.title || "", sub: d.sub || "" }; })();
@@ -576,7 +584,8 @@ export function generateMenuHTML({
 
       if (lb.showPairing === false && !optionalPairingDrink && rbSource !== "optional_pairing" && rbSource !== "by_the_glass" && rbSource !== "bottle") {
         // showPairing toggle off — don't resolve any drink for this course row
-      } else if ((rbSource === "pairing" || rbSource === "optional_pairing" || optionalPairingDrink || drink) && !isAperitif(rb)) {
+      } else if ((rbSource === "pairing" || rbSource === "optional_pairing" || optionalPairingDrink || drink)
+                 && !isAperitif(rb) && !isDigestivo(rb)) {
         if (pkey) {
           drink = optionalPairingDrink || (lang === "si" ? (course[`${pkey}_si`] || course[pkey]) : course[pkey]);
 

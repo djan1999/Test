@@ -147,13 +147,28 @@ function normalizeSyncConfig(raw) {
   };
   const normalizePages = () => {
     const source = Array.isArray(cfg.beveragePages) ? cfg.beveragePages : [];
-    return source
+    const stored = source
       .map((p) => ({
         category: String(p?.category || "").trim().toLowerCase(),
         label: String(p?.label || "").trim(),
         url: String(p?.url || "").trim().replace(/\/+$/, ""),
       }))
       .filter((p) => p.category && p.label && p.url);
+    if (provider !== MILKA_SYNC_PROVIDER) return stored;
+    // A stored config is a SNAPSHOT of the pages this provider had when the
+    // workspace was set up. When the provider later gains a whole new category
+    // — tea and coffee did — every existing workspace would go on syncing the
+    // ten pages it was born with and silently never fetch them.
+    //
+    // So a category the stored list does not mention AT ALL is one the config
+    // predates, and its pages are added. A category it does mention is the
+    // operator's business: removing one Whisky page must not have it put back,
+    // which is why this works per category and not per page.
+    const known = new Set(stored.map((p) => p.category));
+    const gained = BEVERAGE_PAGES
+      .filter((p) => !known.has(p.category))
+      .map((p) => ({ category: p.category, label: p.label, url: canonicalBeverageUrl(p.url) }));
+    return [...stored, ...gained];
   };
   return {
     provider,

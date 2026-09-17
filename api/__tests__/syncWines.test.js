@@ -740,6 +740,115 @@ describe("sync-wines handler — workspace scoping (Milka)", () => {
     <tr><td>Negroni</td><td>Classic cocktail</td></tr>
   </table>`;
 
+  // The ten pages every existing Milka workspace was set up with, exactly as
+  // stored — no tea, no coffee, because those categories did not exist yet.
+  const STORED_TEN = {
+    provider: "milka",
+    winesEnabled: true,
+    beveragesEnabled: true,
+    wineCountries: ["SI", "AT", "IT", "FR", "HR"],
+    beveragePages: [
+      { label: "Cocktail", url: "https://vinska-karta.hotelmilka.si/category/cocktails", category: "cocktail" },
+      { label: "Beer", url: "https://vinska-karta.hotelmilka.si/category/pivo", category: "beer" },
+      { label: "Whisky", url: "https://vinska-karta.hotelmilka.si/category/viski", category: "spirit" },
+      { label: "Liqueur", url: "https://vinska-karta.hotelmilka.si/category/likerji", category: "spirit" },
+    ],
+  };
+
+  const NONALC_HTML = `
+    <h3>Čaji</h3>
+    <table><tr><td>MILKA Tea Mix</td><td></td></tr></table>
+    <h3>COFFEE - ESPRESSO</h3>
+    <table><tr><td>Espresso</td><td>Banibeans</td></tr></table>
+  `;
+
+  const runSync = async (settingsState) => {
+    const req = { url: "http://localhost/api/sync-wines?dry=false", headers: { authorization: "Bearer s" } };
+    const res = {
+      statusCode: 200, payload: null,
+      status(code) { this.statusCode = code; return this; },
+      json(body) { this.payload = body; return this; },
+    };
+    const prev = {
+      cron: process.env.CRON_SECRET, sync: process.env.SYNC_SECRET,
+      url: process.env.SUPABASE_URL, key: process.env.SUPABASE_SERVICE_KEY,
+    };
+    process.env.CRON_SECRET = "s";
+    delete process.env.SYNC_SECRET;
+    process.env.SUPABASE_URL = "https://fake.supabase.co";
+    process.env.SUPABASE_SERVICE_KEY = "fake-key";
+    delete process.env.VITE_SUPABASE_URL;
+    delete process.env.VITE_SUPABASE_ANON_KEY;
+    sb.reset({
+      workspaces: { data: { id: "milka-ws" }, error: null },
+      service_settings: { data: { state: settingsState }, error: null },
+    });
+    const realFetch = globalThis.fetch;
+    const fetched = [];
+    globalThis.fetch = vi.fn().mockImplementation((url) => {
+      fetched.push(String(url));
+      const u = String(url);
+      return Promise.resolve({
+        ok: true, status: 200,
+        text: async () => {
+          if (u.includes("/category/vino/")) return WINE_HTML;
+          if (u.includes("brezalkoholne-pijace")) return NONALC_HTML;
+          return BEV_HTML;
+        },
+      });
+    });
+    try {
+      const p = handler(req, res);
+      await vi.advanceTimersByTimeAsync(2000);
+      await p;
+      return { res, fetched };
+    } finally {
+      globalThis.fetch = realFetch;
+      if (prev.cron === undefined) delete process.env.CRON_SECRET; else process.env.CRON_SECRET = prev.cron;
+      if (prev.sync === undefined) delete process.env.SYNC_SECRET; else process.env.SYNC_SECRET = prev.sync;
+      if (prev.url === undefined) delete process.env.SUPABASE_URL; else process.env.SUPABASE_URL = prev.url;
+      if (prev.key === undefined) delete process.env.SUPABASE_SERVICE_KEY; else process.env.SUPABASE_SERVICE_KEY = prev.key;
+    }
+  };
+
+  it("syncs a category the stored config predates, without an edit to that config", async () => {
+    // The bug this pins: a stored config is a snapshot of the pages the
+    // provider had at setup. Tea and coffee were added to the provider later,
+    // so every existing workspace went on syncing its original ten and never
+    // fetched them — the catalogue stayed empty and the quick-access picker
+    // had nothing to search.
+    const { res, fetched } = await runSync(STORED_TEN);
+    expect(res.statusCode).toBe(200);
+    expect(fetched.some(u => u.includes("brezalkoholne-pijace/caji"))).toBe(true);
+    const cats = sb.rpcCalls[0].args.p_beverage_categories;
+    expect(cats).toEqual(expect.arrayContaining(["cocktail", "beer", "spirit", "tea", "coffee"]));
+    const names = sb.rpcCalls[0].args.p_beverages.map(b => b.name);
+    expect(names).toContain("MILKA Tea Mix");
+    expect(names).toContain("Espresso");
+  });
+
+  it("does not put back a page the operator removed from a category they kept", async () => {
+    // Whisky is gone but spirit remains, so the operator meant it. Only a
+    // category with NO entry at all counts as one the config predates.
+    const withoutWhisky = {
+      ...STORED_TEN,
+      beveragePages: STORED_TEN.beveragePages.filter(p => p.label !== "Whisky"),
+    };
+    const { fetched } = await runSync(withoutWhisky);
+    // The removed page is never requested; the rest of its category still is.
+    expect(fetched.some(u => u.includes("/category/viski"))).toBe(false);
+    expect(fetched.some(u => u.includes("/category/likerji"))).toBe(true);
+    // And the genuinely new categories still arrive.
+    expect(sb.rpcCalls[0].args.p_beverage_categories)
+      .toEqual(expect.arrayContaining(["spirit", "tea", "coffee"]));
+  });
+
+  it("gains nothing for a workspace with no catalogue provider", async () => {
+    const { res, fetched } = await runSync({ provider: null, winesEnabled: false, beveragesEnabled: false, wineCountries: [], beveragePages: [] });
+    expect(res.statusCode).toBe(409);
+    expect(fetched).toEqual([]);
+  });
+
   it("sends one workspace-scoped atomic catalog replacement RPC", async () => {
     const req = {
       url: `http://localhost/api/sync-wines?dry=false`,
