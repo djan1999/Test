@@ -385,7 +385,7 @@ export default function TableSheet({
     const item = found || { name: baseName, notes: "", __cocktail: true };
     const field = PHASE_FIELD[drinkPhase];
     const stored = field === "digestivos"
-      ? digestivoEntry(item, { baseName, variant, optionId: opt?.id })
+      ? digestivoEntry(item, { baseName, variant, optionId: opt?.id, category: opt?.label })
       : item;
     targetSeats.forEach(s => updSeat(s.id, field, [...(s[field] || []), stored]));
     const who = drinkSeat == null ? "PARTY" : `P${drinkSeat}`;

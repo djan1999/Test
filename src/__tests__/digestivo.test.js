@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   courseAnchorsDigestivo,
   digestivoVariants,
+  digestivoMenuParts,
   digestivoVariantOptions,
   digestivoVariantRows,
   digestivoVariantFor,
@@ -398,34 +399,84 @@ describe("finding a seat's picks again", () => {
   });
 });
 
-describe("subcategories reach the kitchen as distinct drinks", () => {
-  it("does not collapse two subcategories of one button into a round", () => {
-    const seat = {
-      id: 1,
-      digestivos: [
-        { name: "Coffee (Espresso)", baseName: "Coffee", variant: "Espresso" },
-        { name: "Coffee (Cappuccino)", baseName: "Coffee", variant: "Cappuccino" },
-      ],
+describe("what the kitchen reads", () => {
+  // The pass pours a product. It used to be handed the menu heading with the
+  // subcategory in brackets — "Coffee (Decaf)" — which names nothing on a shelf.
+  const decaf = {
+    id: 32, name: "Nestor Lasso Ají Decaf (Decaf)", notes: "Filter, BANI BEANS",
+    baseName: "Nestor Lasso Ají Decaf", linkedName: "Nestor Lasso Ají Decaf",
+    variant: "Decaf", digestivoCategory: "Coffee", digestivoId: 7,
+  };
+  const espresso = { ...decaf, id: 31, name: "Espresso (Espresso)", linkedName: "Espresso", baseName: "Espresso", variant: "Espresso" };
+
+  it("prints the linked product alone", () => {
+    expect(seatDigestivoNames({ id: 1, digestivos: [decaf] })).toEqual(["Nestor Lasso Ají Decaf"]);
+  });
+
+  it("falls back to the subcategory when the button links nothing", () => {
+    // No product exists to name, and the subcategory is what the guest chose —
+    // more use to the pass than the category it sits under.
+    const unlinked = {
+      name: "Tea (Chamomile)", notes: "", __cocktail: true,
+      baseName: "Tea", variant: "Chamomile", digestivoCategory: "Tea", digestivoId: 9,
     };
-    expect(seatDigestivoNames(seat)).toEqual(["Coffee (Espresso)", "Coffee (Cappuccino)"]);
+    expect(seatDigestivoNames({ id: 1, digestivos: [unlinked] })).toEqual(["Chamomile"]);
+  });
+
+  it("does not collapse two subcategories of one button into a round", () => {
+    expect(seatDigestivoNames({ id: 1, digestivos: [decaf, espresso] }))
+      .toEqual(["Nestor Lasso Ají Decaf", "Espresso"]);
   });
 
   it("still collapses two of the SAME subcategory into one ×2", () => {
-    const seat = {
-      id: 1,
-      digestivos: [
-        { name: "Coffee (Espresso)", baseName: "Coffee", variant: "Espresso" },
-        { name: "Coffee (Espresso)", baseName: "Coffee", variant: "Espresso" },
-      ],
-    };
-    expect(seatDigestivoNames(seat)).toEqual(["Coffee (Espresso) ×2"]);
+    expect(seatDigestivoNames({ id: 1, digestivos: [decaf, decaf] }))
+      .toEqual(["Nestor Lasso Ají Decaf ×2"]);
   });
 
-  it("puts the chosen subcategory on the ticket line", () => {
+  it("puts the product on the ticket line", () => {
     expect(digestivoTicketLine([
-      { id: 1, digestivos: [{ name: "Coffee (Espresso)" }] },
-      { id: 2, digestivos: [{ name: "Grappa" }] },
-    ])).toBe("P1 Coffee (Espresso) · P2 Grappa");
+      { id: 1, digestivos: [decaf] },
+      { id: 2, digestivos: [{ id: 5, name: "Grappa Williams", baseName: "Grappa Williams", linkedName: "Grappa Williams" }] },
+    ])).toBe("P1 Nestor Lasso Ají Decaf · P2 Grappa Williams");
+  });
+
+  it("reads an entry stored before a pick recorded its product", () => {
+    // The catalogue row was spread in, so its id is the tell: an id means
+    // baseName is the product, none means baseName is the category.
+    const oldLinked = { id: 31, name: "Espresso (Espresso)", baseName: "Espresso", variant: "Espresso" };
+    const oldUnlinked = { name: "Coffee (Espresso)", baseName: "Coffee", variant: "Espresso", __cocktail: true };
+    expect(seatDigestivoNames({ id: 1, digestivos: [oldLinked] })).toEqual(["Espresso"]);
+    expect(seatDigestivoNames({ id: 1, digestivos: [oldUnlinked] })).toEqual(["Espresso"]);
+  });
+});
+
+describe("what the menu prints", () => {
+  it("names the subcategory and describes it with its category", () => {
+    const entry = digestivoEntry(
+      { id: 32, name: "Nestor Lasso Ají Decaf", notes: "Filter, BANI BEANS", category: "coffee" },
+      { baseName: "Nestor Lasso Ají Decaf", variant: "Decaf", optionId: 7, category: "Coffee" });
+    expect(digestivoMenuParts(entry)).toEqual({ title: "Decaf", sub: "Coffee" });
+  });
+
+  it("takes the button's category, not the catalogue row's own", () => {
+    // A beverage row carries category "coffee"; printing that under the guest's
+    // name is why the pick records the button's label under its own key.
+    const entry = digestivoEntry(
+      { id: 31, name: "Espresso", notes: "Espresso, Banibeans", category: "coffee" },
+      { baseName: "Espresso", variant: "Espresso", optionId: 7, category: "Coffee" });
+    expect(entry.category).toBe("coffee");
+    expect(digestivoMenuParts(entry).sub).toBe("Coffee");
+  });
+
+  it("prints one line when the pick has no subcategory", () => {
+    const searched = digestivoEntry({ id: 5, name: "Grappa Williams", notes: "" });
+    expect(digestivoMenuParts(searched)).toEqual({ title: "Grappa Williams", sub: "" });
+  });
+
+  it("does not print a category that only repeats the name", () => {
+    const entry = digestivoEntry({ name: "Grappa", notes: "", __cocktail: true },
+      { baseName: "Grappa", variant: "Grappa", optionId: 3, category: "Grappa" });
+    expect(digestivoMenuParts(entry)).toEqual({ title: "Grappa", sub: "" });
   });
 });
 

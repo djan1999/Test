@@ -54,10 +54,65 @@ export const isDigestivoAnchor = (course, anchorKeys) => {
     : digestivoAnchorKeys(anchorKeys).has(key);
 };
 
-/** One seat's digestivo picks as display names, rounds collapsed to "×n". */
+/**
+ * The catalogue product behind one stored pick — "" when the button that wrote
+ * it had nothing linked.
+ *
+ * Recorded as `linkedName` at pick time. Entries written before that are read
+ * from what the pick spread in: a catalogue row brings its `id`, so an id means
+ * a product stands behind the pick and `baseName` is that product's name. No id
+ * is the placeholder a button substitutes when it has no link, and there
+ * `baseName` is the category.
+ */
+export const digestivoLinkedName = (entry) => {
+  const explicit = String(entry?.linkedName ?? "").trim();
+  if (explicit) return explicit;
+  return entry?.id != null ? String(entry?.baseName ?? "").trim() : "";
+};
+
+/** The button a pick came from — "" for one reached through the search. */
+export const digestivoCategoryName = (entry) => {
+  const explicit = String(entry?.digestivoCategory ?? "").trim();
+  if (explicit) return explicit;
+  return entry?.id != null ? "" : String(entry?.baseName ?? "").trim();
+};
+
+/**
+ * What the KITCHEN reads for one pick: the linked product, and nothing else.
+ *
+ * The pass pours a product, not a menu heading — "Nestor Lasso Ají Decaf", not
+ * "Coffee (Decaf)". Where the button has nothing linked there is no product to
+ * name, so the subcategory the guest actually chose stands in for it, and the
+ * category only if there is no subcategory either.
+ */
+export const digestivoKitchenName = (entry) =>
+  digestivoLinkedName(entry)
+  || String(entry?.variant ?? "").trim()
+  || digestivoCategoryName(entry)
+  || String(entry?.name ?? "").trim();
+
+/**
+ * What the MENU prints for one pick: the subcategory as the name, its category
+ * underneath as the description — "Decaf" over "Coffee".
+ *
+ * The guest's card names what they chose; the category is the context for it.
+ * A pick with no subcategory (a plain button, or a drink reached through the
+ * search) has only the one line, and a category that would merely repeat the
+ * title is dropped rather than printed twice.
+ */
+export const digestivoMenuParts = (entry) => {
+  const category = digestivoCategoryName(entry);
+  const title = String(entry?.variant ?? "").trim()
+    || digestivoLinkedName(entry)
+    || category
+    || String(entry?.name ?? "").trim();
+  return { title, sub: category.toLowerCase() === title.toLowerCase() ? "" : category };
+};
+
+/** One seat's digestivo picks as the kitchen reads them, rounds as "×n". */
 export const seatDigestivoNames = (seat) =>
   groupDrinks(seat?.digestivos).map(({ item, qty }) =>
-    `${String(item?.name || "").trim()}${qtySuffix(qty)}`.trim()).filter(Boolean);
+    `${digestivoKitchenName(item)}${qtySuffix(qty)}`.trim()).filter(Boolean);
 
 /**
  * Per-seat digestivo orders across a table: [{ seatId, names: [...] }] for the
@@ -251,14 +306,23 @@ export const digestivoNextState = (seat, opt, catalogs = {}) => {
  * the button that wrote it can find its own picks again. Every surface that
  * records a digestivo builds one through here, or they drift.
  */
-export const digestivoEntry = (item, { baseName, variant = null, optionId = null } = {}) => {
+export const digestivoEntry = (item, { baseName, variant = null, optionId = null, category = null } = {}) => {
   const base = String(baseName ?? item?.name ?? "").trim();
   const sub = String(variant ?? "").trim() || null;
+  const cat = String(category ?? "").trim() || null;
+  // A catalogue row brings an id; the placeholder a button substitutes when it
+  // has nothing linked does not. That is what tells the kitchen whether there
+  // is a product to name at all.
+  const product = item?.id != null ? String(item?.name ?? "").trim() : "";
   return {
     ...(item || { notes: "", __cocktail: true }),
     name: digestivoDisplayName(base, sub),
     baseName: base,
     ...(sub ? { variant: sub } : {}),
+    // Prefixed, because a catalogue beverage row carries a `category` of its
+    // own ("coffee", "spirit") and the menu would print that instead.
+    ...(cat ? { digestivoCategory: cat } : {}),
+    ...(product ? { linkedName: product } : {}),
     ...(optionId != null ? { digestivoId: optionId } : {}),
   };
 };
@@ -279,6 +343,7 @@ export const setSeatDigestivo = (seat, opt, resolvedItem, variant, catalogs = {}
     baseName: resolvedItem?.name || opt?.label,
     variant: variant === "on" ? null : variant,
     optionId: opt?.id,
+    category: opt?.label,
   })];
 };
 

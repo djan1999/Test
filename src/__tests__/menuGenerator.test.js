@@ -789,6 +789,29 @@ describe("a drinks block sourced from the digestivo", () => {
     expect(html).toContain("Espresso");
   });
 
+  it("names the subcategory and describes it with its category", () => {
+    // What the guest chose, in the words they chose it in. The catalogue name
+    // is the kitchen's business — the pass pours "Nestor Lasso Ají Decaf".
+    const picked = { digestivos: [{
+      id: 32, name: "Nestor Lasso Ají Decaf (Decaf)", notes: "Filter, BANI BEANS",
+      baseName: "Nestor Lasso Ají Decaf", linkedName: "Nestor Lasso Ají Decaf",
+      variant: "Decaf", digestivoCategory: "Coffee", digestivoId: 7,
+    }] };
+    const html = render(picked, {}, [course], { menuTemplate: template("digestivo") });
+    expect(html).toContain("Decaf");
+    expect(html).toContain("Coffee");
+    expect(html).not.toContain("Nestor Lasso");
+    expect(html).not.toContain("BANI BEANS");
+  });
+
+  it("keeps the ordinary description for a drink reached through the search", () => {
+    // It belongs to no button, so there is no category to describe it with.
+    const searched = { digestivos: [{ id: 5, name: "Grappa Williams", notes: "Capovilla" }] };
+    const html = render(searched, {}, [course], { menuTemplate: template("digestivo") });
+    expect(html).toContain("Grappa Williams");
+    expect(html).toContain("Capovilla");
+  });
+
   it("prints nothing when the guest ordered none — no empty row", () => {
     const html = render({ digestivos: [] }, {}, [course], { menuTemplate: template("digestivo") });
     expect(html).not.toContain("Espresso");

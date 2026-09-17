@@ -11,6 +11,7 @@
 
 import { applyCourseRestriction, resolveSeatRestrictionKeys, optionalPairingEnabled } from "./menuUtils.js";
 import { buildDefaultTemplate, parseWidthPreset } from "./menuTemplateSchema.js";
+import { digestivoMenuParts } from "./digestivo.js";
 
 export const DEFAULT_MENU_RULES = {
   overwriteTitleAndThankYouOnLanguageSwitch: true,
@@ -221,6 +222,18 @@ export function generateMenuHTML({
       return { title, sub };
     }
     return fmtWineParts(item);
+  };
+
+  // A digestivo prints what the guest chose, described by the button it came
+  // from: "Decaf" over "Coffee". The catalogue name is the kitchen's business —
+  // the pass pours "Nestor Lasso Ají Decaf"; the guest ordered a decaf.
+  const fmtDigestivoParts = item => {
+    const parts = digestivoMenuParts(item);
+    if (parts.sub) return parts;
+    // No category to describe it with — a drink reached through the search
+    // belongs to no button — so it keeps the ordinary drink description, in
+    // the menu's language.
+    return { title: parts.title, sub: fmtDrinkParts(item).sub };
   };
 
   const selectedBeer = (() => {
@@ -484,7 +497,7 @@ export function generateMenuHTML({
     // with one block prints the first; the second needs a second block, which
     // is the template saying how many it expects to pour.
     if ((isDigestivo(lb) || isDigestivo(rb)) && lb?.type !== "course" && rb?.type !== "course") {
-      if (dQ.length > 0) rows.push({ type: "course", courseKey: null, left: null, right: fmtDrinkParts(dQ.shift()), rowClass: "", widthPreset: drinkRowWp, gap: consumeGap() });
+      if (dQ.length > 0) rows.push({ type: "course", courseKey: null, left: null, right: fmtDigestivoParts(dQ.shift()), rowClass: "", widthPreset: drinkRowWp, gap: consumeGap() });
       continue;
     }
 
@@ -571,7 +584,7 @@ export function generateMenuHTML({
       // nothing and fell through to the pairing columns, so the block printed
       // the guest's wine pairing or a blank instead of their coffee.
       if (isDigestivo(rb)) {
-        if (dQ.length > 0) { const d = fmtDrinkParts(dQ.shift()); drink = { name: d.title || "", sub: d.sub || "" }; }
+        if (dQ.length > 0) { const d = fmtDigestivoParts(dQ.shift()); drink = { name: d.title || "", sub: d.sub || "" }; }
       }
 
       // by_the_glass or bottle source on a course row — consume from queue
