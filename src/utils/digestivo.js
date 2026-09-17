@@ -132,6 +132,28 @@ export const digestivoVariantFor = (opt, label) => {
 };
 
 /**
+ * One configured button as the service surfaces consume it.
+ *
+ * It lives here, beside the shape it produces, because the caller that built
+ * this inline once stringified each subcategory — `String(v)` on the objects
+ * they had become, so every one collapsed to "[object Object]", the dedupe
+ * kept a single row, and a five-coffee button offered one nonsense option.
+ * Subcategories are handed on untouched; digestivoVariantOptions normalises
+ * them at the point of use and reads both shapes.
+ */
+export const digestivoOptionFromItem = (item) => ({
+  // The configured id travels with the button so a seat's pick can be matched
+  // back to it exactly — surer than the catalogue name match, which a
+  // re-linked product or a renamed subcategory would break.
+  id: item?.id,
+  label: item?.label,
+  searchKey: item?.searchKey || item?.label,
+  linkedKey: item?.linkedKey,
+  type: item?.type || "wine",
+  variants: Array.isArray(item?.variants) ? item.variants : [],
+});
+
+/**
  * The catalogue product behind one digestivo pick.
  *
  * A button WITH subcategories is a grouping, and only the subcategory names a
