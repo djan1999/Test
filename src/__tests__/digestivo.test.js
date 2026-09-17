@@ -3,6 +3,7 @@ import {
   courseAnchorsDigestivo,
   digestivoVariants,
   digestivoVariantOptions,
+  digestivoVariantRows,
   digestivoVariantFor,
   digestivoOptionFromItem,
   resolveDigestivoProduct,
@@ -154,6 +155,31 @@ describe("the category names no drink — its subcategories do", () => {
     expect(digestivoVariantOptions(legacy)[0]).toEqual({ label: "Espresso" });
     // It has no link yet, so it resolves to nothing rather than to a guess.
     expect(resolveDigestivoProduct(legacy, "Espresso", catalogs)).toBeNull();
+  });
+
+  it("hands the editor every row, blank ones included", () => {
+    // The floor's view drops a blank row; a form cannot, or a row could never
+    // be added or renamed — it passes through blank on the way.
+    const mid = { id: 7, label: "Coffee", variants: [
+      { label: "Espresso", type: "coffee" },
+      { label: "", type: "coffee" },
+      { label: "espresso", type: "coffee" },
+    ] };
+    expect(digestivoVariantRows(mid).map(v => v.label)).toEqual(["Espresso", "", "espresso"]);
+    expect(digestivoVariants(mid)).toEqual(["Espresso"]);
+  });
+
+  it("leaves a half-typed label exactly as typed", () => {
+    // Trimming here would eat the space between two words as it is typed.
+    const typing = { id: 7, label: "Coffee", variants: [{ label: "Cafe " }] };
+    expect(digestivoVariantRows(typing)[0].label).toBe("Cafe ");
+    expect(digestivoVariantOptions(typing)[0].label).toBe("Cafe");
+  });
+
+  it("reads legacy string rows for the editor too", () => {
+    const legacy = { id: 7, label: "Coffee", variants: ["Espresso", ""] };
+    expect(digestivoVariantRows(legacy)).toEqual([{ label: "Espresso" }, { label: "" }]);
+    expect(digestivoVariantRows({ id: 7, label: "Grappa" })).toEqual([]);
   });
 
   it("finds a subcategory by label, case and padding forgiven", () => {

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { tokens } from "../../styles/tokens.js";
-import { digestivoVariantOptions } from "../../utils/digestivo.js";
+import { digestivoVariantOptions, digestivoVariantRows } from "../../utils/digestivo.js";
 import { FONT, baseInp } from "./adminStyles.js";
 import { fuzzy, fuzzyDrink } from "../../utils/search.js";
 import { buildBeverageLinkedKey, resolveAperitifFromQuickAccessOption } from "../../utils/quickAccessResolve.js";
@@ -129,6 +129,12 @@ export default function QuickAccessPanel({
   const [editKey,      setEditKey]      = useState("");
   const [editLinkedKey, setEditLinkedKey] = useState(undefined);
   const [editType,     setEditType]     = useState("wine");
+  // REMOVE takes two clicks. It deletes a configured button outright — its
+  // label, its link and every subcategory under it — with no undo, and it sits
+  // one gap away from EDIT, which is the button you press to link a product.
+  // A single mis-tap there costs a whole category and nobody notices until
+  // service. Arming disarms itself, so a stray first tap decays to nothing.
+  const [armedId, setArmedId] = useState(null);
 
   const addItem = () => {
     if (!newLabel.trim()) return;
@@ -171,7 +177,15 @@ export default function QuickAccessPanel({
     onUpdateQuickAccess(quickAccessItems.map(i => i.id === id ? { ...i, enabled: !i.enabled } : i));
   };
 
+  useEffect(() => {
+    if (armedId === null) return undefined;
+    const t = setTimeout(() => setArmedId(null), 4000);
+    return () => clearTimeout(t);
+  }, [armedId]);
+
   const removeItem = (id) => {
+    if (armedId !== id) { setArmedId(id); return; }
+    setArmedId(null);
     onUpdateQuickAccess(quickAccessItems.filter(i => i.id !== id));
   };
 
@@ -183,15 +197,23 @@ export default function QuickAccessPanel({
   };
   // Subcategories are rows of their own now — each links to a product, because
   // the category above them does not name one. A config written before that
-  // stored a bare string per row; digestivoVariantOptions reads both.
-  const variantsOf = (item) => digestivoVariantOptions(item);
+  // stored a bare string per row; digestivoVariantRows reads both.
+  //
+  // The editor reads the RAW rows, not the sanitised ones the floor gets: a row
+  // is blank the instant it is added and blank again halfway through a rename,
+  // and the sanitiser drops blanks. Reading through it meant every new row was
+  // written and then thrown away before the next render — "+ subcategory" did
+  // nothing at all, and clearing a label to retype it deleted the row.
+  const variantsOf = (item) => digestivoVariantRows(item);
   const addVariant    = (item)        => updVariants(item.id, [...variantsOf(item), { label: "", type: "coffee" }]);
   const setVariant    = (item, at, patch) =>
     updVariants(item.id, variantsOf(item).map((x, i) => i === at ? { ...x, ...patch } : x));
   const removeVariant = (item, at)    => updVariants(item.id, variantsOf(item).filter((_, i) => i !== at));
   // One subcategory is enough to make the parent a grouping: its own link stops
   // being read (utils/digestivo resolveDigestivoProduct) so it stops being shown.
-  const isGroup = (item) => showVariants && variantsOf(item).length > 0;
+  // Counted on the sanitised rows, so the panel changes shape when the seat
+  // does — a half-typed row has not made the button a category yet.
+  const isGroup = (item) => showVariants && digestivoVariantOptions(item).length > 0;
 
   const moveItem = (id, dir) => {
     const idx = quickAccessItems.findIndex(i => i.id === id);
@@ -255,9 +277,9 @@ export default function QuickAccessPanel({
                       {" · "}{item.type || "wine"}
                     </>}
                     {showMenuOnly && item.menuOnly && <span style={{ marginLeft: 6, color: tokens.ink[1], fontWeight: 600 }}>menu only</span>}
-                    {showVariants && variantsOf(item).length > 0 && (
+                    {showVariants && digestivoVariantOptions(item).length > 0 && (
                       <span style={{ marginLeft: 6, color: tokens.ink[2] }}>
-                        · {variantsOf(item).length} sub
+                        · {digestivoVariantOptions(item).length} sub
                       </span>
                     )}
                   </div>
@@ -299,11 +321,17 @@ export default function QuickAccessPanel({
                     color: editingId === item.id ? tokens.ink[0] : tokens.ink[3], flexShrink: 0,
                   }}>{editingId === item.id ? "SAVE" : "EDIT"}</button>
 
-                <button type="button" onClick={() => removeItem(item.id)} style={{
-                  background: "none", border: `1px solid ${tokens.red.border}`, borderRadius: 0,
-                  color: tokens.red.text, cursor: "pointer", fontFamily: FONT, fontSize: 9,
-                  letterSpacing: 1, padding: "4px 8px", flexShrink: 0,
-                }}>REMOVE</button>
+                <button
+                  type="button"
+                  onClick={() => removeItem(item.id)}
+                  aria-label={armedId === item.id ? `Confirm remove ${item.label}` : `Remove ${item.label}`}
+                  style={{
+                    background: armedId === item.id ? tokens.red.bg : "none",
+                    border: `1px solid ${tokens.red.border}`, borderRadius: 0,
+                    color: tokens.red.text, cursor: "pointer", fontFamily: FONT, fontSize: 9,
+                    fontWeight: armedId === item.id ? 700 : 400,
+                    letterSpacing: 1, padding: "4px 8px", flexShrink: 0, whiteSpace: "nowrap",
+                  }}>{armedId === item.id ? "SURE?" : "REMOVE"}</button>
               </div>
 
               {showVariants && (

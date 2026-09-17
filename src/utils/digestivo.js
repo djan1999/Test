@@ -94,6 +94,27 @@ export const digestivoCount = (seats = []) =>
 // floor already knows.
 
 /**
+ * The configured subcategories of a button exactly as stored, shape-normalised
+ * and nothing more — every row kept, labels untouched.
+ *
+ * This is the editor's view. The sanitised one below drops blank and duplicate
+ * labels, which is right for the floor and wrong for a form: a row you have
+ * just added is blank, and a label you are retyping passes through blank and
+ * through its neighbour's name on the way. Reading the editor through the
+ * filter is what made "+ subcategory" look like a dead button — the row was
+ * written and then discarded before it could be drawn.
+ */
+export const digestivoVariantRows = (opt) =>
+  (Array.isArray(opt?.variants) ? opt.variants : []).map((v) => (typeof v === "string"
+    ? { label: v }
+    : {
+        label: String(v?.label ?? ""),
+        ...(v?.type ? { type: v.type } : {}),
+        ...(v?.searchKey ? { searchKey: v.searchKey } : {}),
+        ...(v?.linkedKey ? { linkedKey: v.linkedKey } : {}),
+      }));
+
+/**
  * The configured subcategories of a button, cleaned and de-duplicated.
  *
  * Each one carries its OWN catalogue link, because the category does not name
@@ -103,15 +124,8 @@ export const digestivoCount = (seats = []) =>
  */
 export const digestivoVariantOptions = (opt) => {
   const seen = new Set();
-  return (Array.isArray(opt?.variants) ? opt.variants : [])
-    .map((v) => (typeof v === "string"
-      ? { label: v.trim() }
-      : {
-          label: String(v?.label ?? "").trim(),
-          ...(v?.type ? { type: v.type } : {}),
-          ...(v?.searchKey ? { searchKey: v.searchKey } : {}),
-          ...(v?.linkedKey ? { linkedKey: v.linkedKey } : {}),
-        }))
+  return digestivoVariantRows(opt)
+    .map((v) => ({ ...v, label: v.label.trim() }))
     .filter((v) => {
       if (!v.label) return false;
       const key = v.label.toLowerCase();
