@@ -348,9 +348,21 @@ describe("the DIGESTIVO line on the kitchen ticket", () => {
     <KitchenBoard tables={[table(seats)]} menuCourses={menuCourses} upd={vi.fn()} updMany={vi.fn()} />,
   );
 
-  it("prints the chosen subcategory, not just the button name", () => {
-    renderTicket([{ digestivos: [{ name: "Coffee (Espresso)", baseName: "Coffee", variant: "Espresso" }] }]);
-    expect(screen.getByText("P1 Coffee (Espresso)")).toBeTruthy();
+  it("prints the linked product, not the button it was picked from", () => {
+    // The pass pours a product; "Coffee (Espresso)" names nothing on a shelf.
+    renderTicket([{ digestivos: [{
+      id: 31, name: "Espresso (Espresso)", baseName: "Espresso",
+      linkedName: "Espresso", variant: "Espresso", digestivoCategory: "Coffee",
+    }] }]);
+    expect(screen.getByText("P1 Espresso")).toBeTruthy();
+  });
+
+  it("falls back to the subcategory while a button links nothing", () => {
+    renderTicket([{ digestivos: [{
+      name: "Tea (Chamomile)", baseName: "Tea", variant: "Chamomile",
+      digestivoCategory: "Tea", __cocktail: true,
+    }] }]);
+    expect(screen.getByText("P1 Chamomile")).toBeTruthy();
   });
 
   it("prints the ordering chairs and the total when a guest ordered one", () => {
