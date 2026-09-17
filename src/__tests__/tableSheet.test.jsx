@@ -281,6 +281,13 @@ describe("TableSheet — the configured aperitif and digestivo buttons", () => {
   });
 });
 
+it("reports a refused split instead of claiming it succeeded", async () => {
+  setup({ tableGroup: [4, 7] }, { onSplitTable: vi.fn(async () => ({ ok: false, error: new Error("Conflicting guest data") })) });
+  fireEvent.click(screen.getByText("SPLIT T04+T07"));
+  expect(await screen.findByText("Conflicting guest data")).toBeTruthy();
+  expect(screen.queryByText("SPLIT")).toBeNull();
+});
+
 describe("TableSheet — gender beside the position", () => {
   // Gender is the only identity the app records per chair. A position picker
   // without it asks "which position?" about people the server can see and the

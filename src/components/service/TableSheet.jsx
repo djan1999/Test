@@ -515,7 +515,7 @@ export default function TableSheet({
     const label = `T${String(toId).padStart(2, "0")}`;
     if (picker === "join") {
       const r = await onJoinTable(toId);
-      if (r?.ok === false) { flash("JOIN REFUSED"); return; }
+      if (r?.ok === false) { flash(r.error?.message || "JOIN REFUSED"); return; }
       setPicker(null);
       flash(`JOINED — ${label}`);
       return;
@@ -1126,7 +1126,10 @@ export default function TableSheet({
             )}
             {can.splitTable && (
               <button type="button" style={quietButton()}
-                onClick={async () => { await onSplitTable(); flash("SPLIT"); }}
+                onClick={async () => {
+                  const result = await onSplitTable();
+                  flash(result?.ok === false ? (result.error?.message || "SPLIT REFUSED") : "SPLIT");
+                }}
               >SPLIT {group.map(id => `T${String(id).padStart(2, "0")}`).join("+")}</button>
             )}
             {can.ticket && (

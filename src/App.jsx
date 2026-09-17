@@ -3213,6 +3213,10 @@ export default function App() {
     const group = [...new Set([...reservationTableIds(owner.data, owner.table_id).map(Number), to])]
       .sort((a, b) => a - b);
     const nextData = { ...(owner.data || {}), tableGroup: group };
+    const oldGroup = reservationTableIds(owner.data, owner.table_id);
+    if (regroupTableRows(tablesRef.current, oldGroup, group) === tablesRef.current) {
+      return { ok: false, reason: "conflicting-service-data", error: new Error("Tables could not be joined because more than one table holds service data. No guest data was changed.") };
+    }
     const persisted = await persistReservationRow({
       id: owner.id, date: owner.date, table_id: group[0], data: nextData,
     });
@@ -3223,7 +3227,6 @@ export default function App() {
       recordClientDiagnostic("join tables", error);
       return { ok: false, reason: "persist-failed", error };
     }
-    const oldGroup = reservationTableIds(owner.data, owner.table_id);
     oldGroup.filter(id => Number(id) !== group[0]).forEach(id => intentionalBoardBlankRef.current.add(Number(id)));
     setReservations(prev => prev.map(r => r.id === owner.id ? { ...r, table_id: group[0], data: nextData } : r));
     setTables(prev => regroupTableRows(prev, oldGroup, group));
@@ -3247,6 +3250,10 @@ export default function App() {
     const ownerTable = Number(owner?.table_id);
     const keep = group.includes(ownerTable) ? ownerTable : group[0];
     const release = group.filter(id => id !== keep);
+
+    if (regroupTableRows(tablesRef.current, group, [keep]) === tablesRef.current) {
+      return { ok: false, reason: "conflicting-service-data", error: new Error("Tables could not be split because more than one table holds service data. No guest data was changed.") };
+    }
 
     if (owner) {
       const nextData = { ...(owner.data || {}), tableGroup: [] };

@@ -668,11 +668,12 @@ export const regroupTableRows = (tables, oldIds, newIds) => {
   const donor = members.find(t => t.id === before[0] && tableHasServiceContent(t))
     || members.find(t => tableHasServiceContent(t)) || members[0];
   if (!donor) return tables;
-  const merged = mergeTableGroups(members.map(t => ({ ...t, tableGroup: before })))[0];
-  const party = { ...merged, ...donor,
-    seats: merged.seats, kitchenLog: merged.kitchenLog,
-    bottleWines: merged.bottleWines, restrictions: merged.restrictions,
-  };
+  // A display projection drops empty chairs and renumbers the rest. Persisting
+  // it detaches allergies, shares and kitchen snapshots from their guests.
+  // Multiple live owners need explicit reconciliation; never silently combine
+  // two different P1s or erase a secondary party.
+  if (members.some(t => t !== donor && tableHasServiceContent(t))) return tables;
+  const party = { ...donor };
   delete party._groupGuests;
   return tables.map(t => {
     if (t.id === after[0]) return { ...party, id: t.id, tableGroup: after.length > 1 ? after : [] };
