@@ -7,9 +7,9 @@
 // These render the panel controlled, holding the items in state, because the
 // bug lived in the round trip: what the panel wrote came back changed.
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { useState } from "react";
-import { render, fireEvent, screen } from "@testing-library/react";
+import { render, fireEvent, screen, act } from "@testing-library/react";
 import QuickAccessPanel from "../components/admin/QuickAccessPanel.jsx";
 
 const COFFEES = [{ id: 31, name: "Espresso", notes: "Espresso, Banibeans" }];
@@ -110,5 +110,45 @@ describe("what the row is worth to the floor", () => {
 
     expect(subInput(1).value).toBe("Cappuccino");
     expect(screen.queryByLabelText("Coffee subcategory 2")).toBeNull();
+  });
+});
+
+describe("removing a whole button", () => {
+  // Two buttons went missing from a live config — a category and all its
+  // subcategories each, gone in one click of a control sitting a few pixels
+  // from EDIT, with nothing to undo it.
+  it("asks before it deletes", () => {
+    render(<Harness initial={coffee([{ label: "Espresso", type: "coffee" }])} />);
+
+    fireEvent.click(screen.getByLabelText("Remove Coffee"));
+
+    expect(screen.getByLabelText("Confirm remove Coffee")).toBeTruthy();
+    expect(screen.getByLabelText("Coffee subcategory 1")).toBeTruthy();
+  });
+
+  it("deletes on the second click", () => {
+    render(<Harness initial={coffee([{ label: "Espresso", type: "coffee" }])} />);
+
+    fireEvent.click(screen.getByLabelText("Remove Coffee"));
+    fireEvent.click(screen.getByLabelText("Confirm remove Coffee"));
+
+    expect(screen.queryByLabelText("Remove Coffee")).toBeNull();
+    expect(screen.queryByLabelText("Coffee subcategory 1")).toBeNull();
+    expect(screen.getByText("none")).toBeTruthy();
+  });
+
+  it("forgets a stray first click after a few seconds", () => {
+    vi.useFakeTimers();
+    try {
+      render(<Harness initial={coffee([{ label: "Espresso", type: "coffee" }])} />);
+      fireEvent.click(screen.getByLabelText("Remove Coffee"));
+
+      act(() => { vi.advanceTimersByTime(5000); });
+
+      expect(screen.getByLabelText("Remove Coffee")).toBeTruthy();
+      expect(screen.queryByLabelText("Confirm remove Coffee")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

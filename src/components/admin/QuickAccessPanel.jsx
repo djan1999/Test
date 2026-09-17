@@ -129,6 +129,12 @@ export default function QuickAccessPanel({
   const [editKey,      setEditKey]      = useState("");
   const [editLinkedKey, setEditLinkedKey] = useState(undefined);
   const [editType,     setEditType]     = useState("wine");
+  // REMOVE takes two clicks. It deletes a configured button outright — its
+  // label, its link and every subcategory under it — with no undo, and it sits
+  // one gap away from EDIT, which is the button you press to link a product.
+  // A single mis-tap there costs a whole category and nobody notices until
+  // service. Arming disarms itself, so a stray first tap decays to nothing.
+  const [armedId, setArmedId] = useState(null);
 
   const addItem = () => {
     if (!newLabel.trim()) return;
@@ -171,7 +177,15 @@ export default function QuickAccessPanel({
     onUpdateQuickAccess(quickAccessItems.map(i => i.id === id ? { ...i, enabled: !i.enabled } : i));
   };
 
+  useEffect(() => {
+    if (armedId === null) return undefined;
+    const t = setTimeout(() => setArmedId(null), 4000);
+    return () => clearTimeout(t);
+  }, [armedId]);
+
   const removeItem = (id) => {
+    if (armedId !== id) { setArmedId(id); return; }
+    setArmedId(null);
     onUpdateQuickAccess(quickAccessItems.filter(i => i.id !== id));
   };
 
@@ -307,11 +321,17 @@ export default function QuickAccessPanel({
                     color: editingId === item.id ? tokens.ink[0] : tokens.ink[3], flexShrink: 0,
                   }}>{editingId === item.id ? "SAVE" : "EDIT"}</button>
 
-                <button type="button" onClick={() => removeItem(item.id)} style={{
-                  background: "none", border: `1px solid ${tokens.red.border}`, borderRadius: 0,
-                  color: tokens.red.text, cursor: "pointer", fontFamily: FONT, fontSize: 9,
-                  letterSpacing: 1, padding: "4px 8px", flexShrink: 0,
-                }}>REMOVE</button>
+                <button
+                  type="button"
+                  onClick={() => removeItem(item.id)}
+                  aria-label={armedId === item.id ? `Confirm remove ${item.label}` : `Remove ${item.label}`}
+                  style={{
+                    background: armedId === item.id ? tokens.red.bg : "none",
+                    border: `1px solid ${tokens.red.border}`, borderRadius: 0,
+                    color: tokens.red.text, cursor: "pointer", fontFamily: FONT, fontSize: 9,
+                    fontWeight: armedId === item.id ? 700 : 400,
+                    letterSpacing: 1, padding: "4px 8px", flexShrink: 0, whiteSpace: "nowrap",
+                  }}>{armedId === item.id ? "SURE?" : "REMOVE"}</button>
               </div>
 
               {showVariants && (
