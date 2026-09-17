@@ -46,6 +46,13 @@ const WATER_QUICK = ["XC", "XW", "OC", "OW"];
 // the Send delta stay correct.
 export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOpenDetail, onSeat, onUnseat, onAssignTerrace, optionalExtras = [], optionalPairings = [], aperitifOptions, digestivoOptions = [], wines = [], cocktails = [], spirits = [], beers = [], teas = [], coffees = [], onlySeatId = null }) {
     const isSeated = t.active;
+    // The catalogues every quick-access button on this card resolves against —
+    // one binding for the whole card. The aperitif block used to read a
+    // `catalogs` declared inside the DIGESTIVO block below it, which is not in
+    // its scope: every tap on an aperitif button died on that reference before
+    // it could record anything. Nothing rendered wrong, so it looked like a
+    // button that simply did nothing.
+    const catalogs = { wines, cocktails, spirits, beers, teas, coffees };
     // Terrace-flow decoration (derived in App, never persisted on the row):
     // 'terrace' = party outside on t._visit.terraceLabel.
     const visit = t._visit || null;
@@ -605,7 +612,6 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                     {(digestivoOptions || []).length > 0 && sectionBlock("Digestivo", [
                       ...(digestivoOptions || []).map(opt => {
                         const label = opt.label ?? opt;
-                        const catalogs = { wines, cocktails, spirits, beers, teas, coffees };
                         // A configured button SCROLLS its subcategories, the
                         // same gesture as the pairing button one block up:
                         // off → Espresso → Cappuccino → off. With none
