@@ -553,8 +553,8 @@ export const materializeFloorPositions = (table, positionKey) => {
 // frees up. Either way each guest's positional restrictions follow them
 // (swapping only the seat objects left "P2 · GLU" pointing at whoever just
 // moved INTO P2). Dragging from an empty position is a no-op. Extracted pure
-// from App's swapSeats so the floor's drag gesture and the board's SwapPicker
-// exercise one tested transform.
+// from App's swapSeats so the floor's drag gestures exercise one tested
+// transform.
 export const swapSeatData = (t, aId, bId) => {
   const a = Number(aId), b = Number(bId);
   const sA = (t.seats || []).find((s) => Number(s.id) === a);
