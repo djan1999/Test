@@ -491,3 +491,78 @@ describe("app harness — terrace floor view through the real App", () => {
     }, { timeout: 5000 });
   }, 25000);
 });
+
+// ── A swapped guest's allergy, through the real App ───────────────────────────
+//
+// Reported from service: an allergy pinned to a seat, the guests swapped
+// chairs on the DINING map, and the position kept snapping back. The board row
+// moved correctly — but a restriction's position is a BOOKING fact, and the
+// swap never told the reservation, which wins on the next started-table sync.
+// The unit tests cover the transform; only the real App proves the write-back
+// is actually WIRED, so this drives the drag itself and watches the store.
+describe("app harness — a swapped guest's allergy follows them into the BOOKING", () => {
+  beforeEach(() => {
+    resetBackend({ psMode: false });
+  });
+
+  const seedAllergyService = () => {
+    const now = new Date().toISOString();
+    // Gluten pinned to P1. Assigning that position in the sheet routes through
+    // the reservation, so a real board carries it on BOTH sides — which is
+    // exactly the state in which the bug bites.
+    const pinned = [{ note: "gluten", pos: 1 }];
+    seedService({ id: SVC, date: TODAY(), session: "dinner", startedAt: now });
+    seed("service_tables", [{
+      service_id: SVC, table_id: 1, updated_at: now,
+      data: {
+        ...blankTable(1), active: true, arrivedAt: "19:43",
+        resName: "Anna Harness", resTime: "19:30", guests: 2, restrictions: pinned,
+      },
+    }]);
+    seed("reservations", [{
+      id: "res-anna", date: TODAY(), table_id: 1, created_at: now,
+      data: {
+        resName: "Anna Harness", resTime: "19:30", guests: 2, tableGroup: [],
+        service_session: "dinner", restrictions: pinned,
+      },
+    }]);
+    seed("menu_courses", [courseRow(1, "amuse", "Amuse"), courseRow(2, "venison", "Venison")]);
+  };
+
+  it("dragging P1's chair onto P2 moves the allergy on the board AND in the booking", async () => {
+    seedAllergyService();
+    const { container } = render(<App />);
+    await enterService();
+
+    fireEvent.click(screen.getByText("dining room"));
+    const t1 = await waitFor(() => {
+      const g = findSvgTable(container, "T1");
+      if (!g?.querySelector('[data-seat="0"]')) throw new Error("dining T1 not drawn yet");
+      return g;
+    }, { timeout: 5000 });
+
+    // jsdom rects are all-zero; give the map's own svg a 400×368 box so the
+    // drag's pixel→map-unit conversion lands on the chairs (as floorView's
+    // smoke test does). Dining T1 is at (8,8) 12×9: P1 chairs the W edge
+    // (~22,50px), P2 the E edge (~90,50px).
+    const svg = t1.closest("svg");
+    svg.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 368, right: 400, bottom: 368 });
+
+    const seat = t1.querySelector('[data-seat="0"]');
+    fireEvent.pointerDown(seat, { clientX: 22, clientY: 50 });
+    fireEvent.pointerMove(seat, { clientX: 60, clientY: 50 });
+    fireEvent.pointerUp(seat, { clientX: 90, clientY: 50 });
+
+    // The board row follows the guest…
+    await waitFor(() => {
+      expect(rowFor(remoteRows("service_tables"), 1)?.data?.restrictions)
+        .toEqual([{ note: "gluten", pos: 2 }]);
+    }, { timeout: 5000 });
+
+    // …and so does the BOOKING. Without the write-back this stayed at pos 1,
+    // and the next reservation write put the allergy back on the empty chair.
+    await waitFor(() => {
+      expect(resRow("res-anna")?.data?.restrictions).toEqual([{ note: "gluten", pos: 2 }]);
+    }, { timeout: 5000 });
+  }, 25000);
+});

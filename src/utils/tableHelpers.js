@@ -553,8 +553,8 @@ export const materializeFloorPositions = (table, positionKey) => {
 // frees up. Either way each guest's positional restrictions follow them
 // (swapping only the seat objects left "P2 · GLU" pointing at whoever just
 // moved INTO P2). Dragging from an empty position is a no-op. Extracted pure
-// from App's swapSeats so the floor's drag gesture and the board's SwapPicker
-// exercise one tested transform.
+// from App's swapSeats so the floor's drag gestures exercise one tested
+// transform.
 export const swapSeatData = (t, aId, bId) => {
   const a = Number(aId), b = Number(bId);
   const sA = (t.seats || []).find((s) => Number(s.id) === a);
@@ -583,6 +583,36 @@ export const swapSeatData = (t, aId, bId) => {
     restrictions: (t.restrictions || []).map((r) =>
       Number(r.pos) === a ? { ...r, pos: b } : r),
   };
+};
+
+// The whole seat-rearrange transform, one place. A board pick (no floorKey) and
+// a DINING-map drag (`identity`) MOVE GUESTS: P-numbers and restriction
+// positions follow, because the chair IS the kitchen's plate position. A
+// TERRACE drag only reassigns the chair for that map — the aperitif seat must
+// not rewrite the dining plan. Extracted pure from App's swapSeats so the
+// suite exercises the REAL branch choice, not a test-local copy.
+export const applySeatSwap = (table, aId, bId, floorKey = null, opts = {}) => {
+  if (!floorKey) return swapSeatData(table, aId, bId);
+  if (opts.identity) return swapSeatData(materializeFloorPositions(table, floorKey), aId, bId);
+  return moveSeatOnFloor(table, aId, bId, floorKey);
+};
+
+// The restrictions a seat swap must also push onto the BOOKING, or null when
+// there is nothing to push.
+//
+// A restriction's position is a booking fact: assigning it in the sheet goes
+// through updBookingField onto the reservation, and the reservation wins on
+// the next started-table sync — mergeRestrictionPositions keeps the board's
+// position only for an entry the booking left unpinned (pos == null). So a
+// swap that rewrote the board row ALONE was undone by the next reservation
+// write of any kind: the allergy snapped back to the chair the guest had just
+// left, and the kitchen plated it to whoever was sitting there now. The guest
+// moves, so the booking moves with them.
+export const seatSwapBookingRestrictions = (table, aId, bId, floorKey = null, opts = {}) => {
+  if (floorKey && !opts.identity) return null; // terrace: chair assignment only
+  const before = table?.restrictions || [];
+  const after = applySeatSwap(table, aId, bId, floorKey, opts)?.restrictions || [];
+  return JSON.stringify(before) === JSON.stringify(after) ? null : after;
 };
 
 // Remap the ids inside a table's `tableGroup` when its live state moves or

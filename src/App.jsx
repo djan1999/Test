@@ -36,7 +36,7 @@ import {
   repointReservation, moveTableRows, swapTableRows, regroupTableRows, massBlankedIndices,
   tableIsGroupMember,
   applyLayoutSwitchToTables, renameFloorPositionsKey, floorPositionKey,
-  swapSeatData, moveSeatOnFloor, materializeFloorPositions,
+  applySeatSwap, seatSwapBookingRestrictions,
   resolveFieldUpdate,
 } from "./utils/tableHelpers.js";
 import { pickBeveragesForCategory, manualBeverageRows } from "./utils/beverages.js";
@@ -2627,13 +2627,16 @@ export default function App() {
   // every kitchen surface (ticket "→ P4", floor map, print) reads the new
   // chair (per Djan — dragging a restriction on the map must move it in the
   // kitchen too).
+  // The positions a guest-moving swap produces are BOOKING facts, so they go
+  // back through the reservation as well as the board — see
+  // seatSwapBookingRestrictions for why a board-only write was reverted.
   const swapSeats = (tid, aId, bId, floorKey = null, opts = {}) => {
-    setTables(p => p.map(t => {
-      if (t.id !== tid) return t;
-      if (!floorKey) return swapSeatData(t, aId, bId);
-      if (opts.identity) return swapSeatData(materializeFloorPositions(t, floorKey), aId, bId);
-      return moveSeatOnFloor(t, aId, bId, floorKey);
-    }));
+    setTables(p => p.map(t => (t.id === tid ? applySeatSwap(t, aId, bId, floorKey, opts) : t)));
+    // Booking write-back, derived from the ref rather than inside the updater
+    // above — setTables updaters must stay pure (StrictMode runs them twice).
+    const before = tablesRef.current?.find(t => t.id === tid);
+    const moved = before && seatSwapBookingRestrictions(before, aId, bId, floorKey, opts);
+    if (moved) updBookingField(tid, "restrictions", moved);
   };
 
   // SEND SET → KITCHEN: every SET table raises the same kitchen banner the
