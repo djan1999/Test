@@ -20,7 +20,7 @@ import {
   addSeatDigestivo, digestivoEntry, digestivoVariants, resolveDigestivoProduct,
 } from "../../utils/digestivo.js";
 import TablePickerModal from "./TablePickerModal.jsx";
-import ConfirmDialog from "./ConfirmDialog.jsx";
+import ConfirmDialog from "../ui/ConfirmDialog.jsx";
 import BookingEditModal from "./BookingEditModal.jsx";
 
 const FONT = tokens.font;

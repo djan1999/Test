@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { fireEvent, render, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import MenuWorkspace from "../components/menu/MenuWorkspace.jsx";
 
 const COURSES = [
@@ -151,9 +151,29 @@ describe("MenuWorkspace", () => {
     fireEvent.click(getByText("SEAT 2"));
     expect(queryByText("Kefir, no dill — Cucumber, dill")).toBeNull();
 
+    // CLEAR EDITS confirms first — it drops every seat's changes at once.
     fireEvent.click(getByText("CLEAR EDITS"));
+    expect(getByText("[CLEAR EDITS]")).toBeTruthy();
+    expect(queryByText("EDITED — ONE-TIME CHANGES")).toBeTruthy();
+
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByText("CLEAR EDITS"));
     expect(queryByText("EDITED — ONE-TIME CHANGES")).toBeNull();
     expect(queryByText("✎ ONE-TIME EDIT — THIS SEAT ONLY")).toBeNull();
+  });
+
+  it("keeps every one-time edit when the clear is cancelled", () => {
+    const { getByText, queryByText, getByDisplayValue } = renderWorkspace();
+    fireEvent.click(getByText("Novak"));
+    fireEvent.click(getByText("Kefir — Cucumber, dill"));
+    fireEvent.change(getByDisplayValue("Kefir"), { target: { value: "Kefir, no dill" } });
+    fireEvent.click(getByText("SAVE"));
+
+    fireEvent.click(getByText("CLEAR EDITS"));
+    fireEvent.click(getByText("CANCEL"));
+
+    expect(queryByText("alertdialog")).toBeNull();
+    expect(getByText("EDITED — ONE-TIME CHANGES")).toBeTruthy();
+    expect(getByText("Kefir, no dill — Cucumber, dill")).toBeTruthy();
   });
 
   it("feeds one-time edits into the engine's seatOutputOverrides for the printed page", () => {
