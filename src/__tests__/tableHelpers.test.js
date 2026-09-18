@@ -6,6 +6,7 @@ import {
   moveSeatOnFloor, seatFloorPosition, restrictionsAtFloorPositions,
   materializeFloorPositions, applyLayoutSwitchToTables, renameFloorPositionsKey,
   startedTablePatchFromReservation, tableIsGroupMember, moveTableRows, swapTableRows,
+  applySeatSwap, seatSwapBookingRestrictions, floorPositionKey,
 } from "../utils/tableHelpers.js";
 
 describe("startedTablePatchFromReservation (mid-service reservation edits reach the live table)", () => {
@@ -295,6 +296,55 @@ describe("materializeFloorPositions (dining drags renumber for real — the chai
     // the shellfish guest dragged from chair 4 onto chair 1
     expect(next.restrictions).toEqual([{ note: "shellfish", pos: 1 }]);
     expect(next.seats.find((s) => Number(s.id) === 1).water).toBe("OW");
+  });
+});
+
+describe("seatSwapBookingRestrictions (a swapped guest's allergy follows them for good)", () => {
+  // Reported from service: an allergy pinned to a seat, the guests swapped
+  // chairs on the DINING map, and the position kept snapping back. The board
+  // row moved correctly — but the booking still held the old chair, and the
+  // booking wins on the next started-table sync, so the kitchen went on
+  // plating the safe dish to whoever now sat in the old seat.
+  const seated = () => ({
+    id: 4, active: true, arrivedAt: "19:08", resName: "Novak", guests: 3,
+    seats: [{ id: 1 }, { id: 2 }, { id: 3 }],
+    restrictions: [{ note: "gluten", pos: 1 }],
+  });
+  const key = floorPositionKey("dining_a", "T4");
+
+  it("hands back the moved positions so the booking can follow the guest", () => {
+    expect(seatSwapBookingRestrictions(seated(), 1, 3, key, { identity: true }))
+      .toEqual([{ note: "gluten", pos: 3 }]);
+  });
+
+  it("covers the board pick too (no floor key — still a guest move)", () => {
+    expect(seatSwapBookingRestrictions(seated(), 1, 2))
+      .toEqual([{ note: "gluten", pos: 2 }]);
+  });
+
+  it("leaves the booking alone for a TERRACE drag — that only reassigns a chair", () => {
+    expect(seatSwapBookingRestrictions(seated(), 1, 3, key)).toBeNull();
+  });
+
+  it("pushes nothing when the swap moved no positional restriction", () => {
+    const unpinned = { ...seated(), restrictions: [{ note: "gluten", pos: null }] };
+    expect(seatSwapBookingRestrictions(unpinned, 1, 3, key, { identity: true })).toBeNull();
+    expect(seatSwapBookingRestrictions({ ...seated(), restrictions: [] }, 1, 3)).toBeNull();
+  });
+
+  it("the write-back is what makes it stick — without it the booking reverts", () => {
+    // The whole point, end to end: swap, then let the next reservation write
+    // sync the booking down onto the started table.
+    const table = applySeatSwap(seated(), 1, 3, key, { identity: true });
+    expect(table.restrictions).toEqual([{ note: "gluten", pos: 3 }]);
+
+    const staleBooking = { resName: "Novak", guests: 3, restrictions: [{ note: "gluten", pos: 1 }] };
+    expect(startedTablePatchFromReservation(table, staleBooking).restrictions)
+      .toEqual([{ note: "gluten", pos: 1 }]); // the reported bug
+
+    const booking = { ...staleBooking, restrictions: seatSwapBookingRestrictions(seated(), 1, 3, key, { identity: true }) };
+    expect(startedTablePatchFromReservation(table, booking).restrictions)
+      .toEqual([{ note: "gluten", pos: 3 }]); // fixed: both sides agree
   });
 });
 
