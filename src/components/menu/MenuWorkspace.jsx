@@ -1,3 +1,4 @@
+import { useLiveSetting } from "../../hooks/useLiveQuery.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
@@ -6,7 +7,7 @@ import { getAssignedGuestProfile } from "../../utils/menuLayoutProfiles.js";
 import { writeTeamNames, readTeamNames, writeMenuTitle, readMenuTitle, writeThankYouNote, readThankYouNote } from "../../utils/storage.js";
 import { optionalExtrasFromCourses, optionalPairingsFromCourses, resolveSeatRestrictionKeys } from "../../utils/menuUtils.js";
 import { supabase } from "../../lib/supabaseClient.js";
-import { readStateKey, saveStateKey } from "../../lib/stateStore.js";
+import { saveStateKey } from "../../lib/stateStore.js";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { PAIRINGS } from "../../constants/pairings.js";
 import BeverageSearch from "../service/BeverageSearch.jsx";
@@ -236,68 +237,28 @@ export default function MenuWorkspace({
   const [teamNames, setTeamNames] = useState(readTeamNames);
   const [menuTitle, setMenuTitle] = useState(() => readMenuTitle("en") || defaultMenuTitle("en"));
   const [thankYouNote, setThankYouNote] = useState(() => readThankYouNote("en") || defaultThankYou("en"));
-  const genLoaded = useRef(false);
-
-  useEffect(() => {
-    if (!supabase) { genLoaded.current = true; return; }
-    const currentLang = lang;
-    Promise.all([
-      readStateKey("menu_gen_team").catch(() => null),
-      readStateKey("menu_gen_title").catch(() => null),
-      readStateKey("menu_gen_thankyou").catch(() => null),
-    ]).then(([teamState, titleState, thankYouState]) => {
-      if (teamState?.value) setTeamNames(teamState.value);
-
-      // Only apply store values when in the new bilingual { en, si } format.
-      // The legacy { value } format has no language tag — applying it blindly
-      // would overwrite the correct language's localStorage value (e.g. showing
-      // the SI title when opening in EN mode). If the row is still in the old
-      // format, leave the state as-is (already seeded from localStorage in useState).
-      if (titleState && (typeof titleState.en === "string" || typeof titleState.si === "string")) {
-        const val = titleState[currentLang] ?? "";
-        if (val) {
-          writeMenuTitle(currentLang, val); // Hydrate current lang to localStorage so the menuTitle effect reads the correct value
-          setMenuTitle(val);
-        }
-        const otherLang = currentLang === "en" ? "si" : "en";
-        if (titleState[otherLang]) writeMenuTitle(otherLang, titleState[otherLang]);
-      }
-
-      if (thankYouState && (typeof thankYouState.en === "string" || typeof thankYouState.si === "string")) {
-        const val = thankYouState[currentLang] ?? "";
-        if (val) {
-          writeThankYouNote(currentLang, val); // Same fix for thank-you note
-          setThankYouNote(val);
-        }
-        const otherLang = currentLang === "en" ? "si" : "en";
-        if (thankYouState[otherLang]) writeThankYouNote(otherLang, thankYouState[otherLang]);
-      }
-
-      genLoaded.current = true;
-    });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Save team names to localStorage + Supabase when changed
-  useEffect(() => {
-    writeTeamNames(teamNames);
-    if (!genLoaded.current || !supabase) return;
-    saveStateKey("menu_gen_team", { value: teamNames });
-  }, [teamNames]);
-
-  // Save menu title to Supabase when changed — store both languages so switching
-  // lang never clobbers the other language's stored value.
-  // Note: localStorage writes happen directly in onChange and setLanguageWithDefaults
-  // (not here) to avoid a React batching race where lang changes before menuTitle.
-  useEffect(() => {
-    if (!genLoaded.current || !supabase) return;
-    saveStateKey("menu_gen_title", { en: readMenuTitle("en"), si: readMenuTitle("si") });
-  }, [menuTitle]);
-
-  // Save thank-you note to Supabase when changed — same multi-lang approach.
-  useEffect(() => {
-    if (!genLoaded.current || !supabase) return;
-    saveStateKey("menu_gen_thankyou", { en: readThankYouNote("en"), si: readThankYouNote("si") });
-  }, [thankYouNote]);
+  useLiveSetting("menu_gen_team", state => {
+    const value = typeof state?.value === "string" ? state.value : "";
+    setTeamNames(value); writeTeamNames(value);
+  });
+  useLiveSetting("menu_gen_title", state => {
+    // Legacy untagged text cannot safely be assigned to a language.
+    if (state && typeof state.en !== "string" && typeof state.si !== "string") return;
+    for (const language of ["en", "si"]) {
+      const value = state?.[language] ?? defaultMenuTitle(language);
+      writeMenuTitle(language, value);
+      if (language === lang) setMenuTitle(value);
+    }
+  });
+  useLiveSetting("menu_gen_thankyou", state => {
+    // Legacy untagged text cannot safely be assigned to a language.
+    if (state && typeof state.en !== "string" && typeof state.si !== "string") return;
+    for (const language of ["en", "si"]) {
+      const value = state?.[language] ?? defaultThankYou(language);
+      writeThankYouNote(language, value);
+      if (language === lang) setThankYouNote(value);
+    }
+  });
 
   const normalizedMenuRules = normalizeMenuRules(menuRules);
 
@@ -684,17 +645,17 @@ export default function MenuWorkspace({
           <div style={{ flex: "1 1 200px", minWidth: 0 }}>
             <div style={fieldLabel}>MENU TITLE</div>
             <input value={menuTitle}
-              onChange={(e) => { setMenuTitle(e.target.value); writeMenuTitle(lang, e.target.value); }}
+              onChange={(e) => { setMenuTitle(e.target.value); writeMenuTitle(lang, e.target.value); saveStateKey("menu_gen_title", { en: readMenuTitle("en"), si: readMenuTitle("si") }); }}
               style={textInput} />
           </div>
           <div style={{ flex: "1 1 200px", minWidth: 0 }}>
             <div style={fieldLabel}>TEAM</div>
-            <input value={teamNames} onChange={(e) => setTeamNames(e.target.value)} style={textInput} />
+            <input value={teamNames} onChange={(e) => { setTeamNames(e.target.value); writeTeamNames(e.target.value); saveStateKey("menu_gen_team", { value: e.target.value }); }} style={textInput} />
           </div>
           <div style={{ flex: "1 1 200px", minWidth: 0 }}>
             <div style={fieldLabel}>THANK-YOU LINE</div>
             <input value={thankYouNote}
-              onChange={(e) => { setThankYouNote(e.target.value); writeThankYouNote(lang, e.target.value); }}
+              onChange={(e) => { setThankYouNote(e.target.value); writeThankYouNote(lang, e.target.value); saveStateKey("menu_gen_thankyou", { en: readThankYouNote("en"), si: readThankYouNote("si") }); }}
               style={textInput} />
           </div>
         </div>

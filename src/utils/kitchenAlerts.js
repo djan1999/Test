@@ -1,6 +1,8 @@
 import { extraPairingForSeat } from "../constants/pairings.js";
 import { getCourseMod, applyModOverride } from "./menuUtils.js";
 import { seatPourMode } from "./pourMode.js";
+import { groupRestrictionsByGuest } from "./restrictionGroups.js";
+import { restrLabel } from "../constants/dietary.js";
 
 // ── Kitchen "send" deltas ─────────────────────────────────────────────────────
 // Service pings the kitchen as a table's order firms up (pairings, optional
@@ -22,6 +24,9 @@ import { seatPourMode } from "./pourMode.js";
 
 export function kitchenSnapshot(seats = [], optionalExtras = [], optionalPairings = [], restrictions = [], kitchenCourseNotes = {}) {
   const out = {};
+  const seatIds = new Set((seats || []).map(s => s.id));
+  const unassigned = groupRestrictionsByGuest((restrictions || []).filter(r =>
+    r?.note && (r.pos == null || !seatIds.has(r.pos))));
   (seats || []).forEach((s) => {
     // The dietaries pinned to THIS chair. An extra called for a restricted
     // guest must reach the kitchen carrying the dish's modification — the
@@ -44,6 +49,13 @@ export function kitchenSnapshot(seats = [], optionalExtras = [], optionalPairing
           pairing: extraPairingForSeat(s, d, optionalPairings),
           sharedWith: ex?.sharedWith ?? null,
           restriction: mod ? applyModOverride(mod, kitchenCourseNotes?.[d.course?.course_key]) : null,
+          // Warn at dish level without claiming every ordering chair has the
+          // allergy. Orphaned positions are also unresolved, as on the ticket.
+          unassignedRestrictions: unassigned.map(group => {
+            const pendingMod = d.course ? getCourseMod(d.course, group.notes) : null;
+            const label = group.notes.map(restrLabel).join(", ");
+            return pendingMod ? `${label}: ${applyModOverride(pendingMod, kitchenCourseNotes?.[d.course?.course_key])}` : label;
+          }),
         };
       });
     out[s.id] = {
@@ -77,7 +89,8 @@ export function kitchenDelta(current = {}, baseline = {}) {
         || (prev.sharedWith ?? null) !== (e.sharedWith ?? null)
         // An allergy recorded AFTER the dish was sent is exactly the update
         // the kitchen must hear about — the plate may already be on the line.
-        || (prev.restriction ?? null) !== (e.restriction ?? null);
+        || (prev.restriction ?? null) !== (e.restriction ?? null)
+        || JSON.stringify(prev.unassignedRestrictions || []) !== JSON.stringify(e.unassignedRestrictions || []);
     });
     const pairingChanged = (cur.pairing ?? null) !== (base.pairing ?? null)
       || (cur.pairingSharedWith ?? null) !== (base.pairingSharedWith ?? null)

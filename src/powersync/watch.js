@@ -2,6 +2,7 @@
 // path once PowerSync is streaming. HEAVY module: only import it when enabled.
 
 import { getPowerSync } from "./system.js";
+import { registerLiveQuery, invalidateLiveData } from "../lib/liveData.js";
 import {
   readReservations, readServiceTables, readServices, readWines, readBeverages,
   readMenuCourses, readLiveSettings,
@@ -43,19 +44,15 @@ export function startWatches(handlers, range, lifecycle = {}) {
   const bind = (source, triggerSql, reader, handler) => {
     if (!handler) return;
     enabled.add(source);
-    const run = async () => {
-      try {
-        const value = await reader();
-        if (disposed) return;
-        await handler(value);
-        markReady(source);
-      } catch (error) {
-        report(source, "read", error);
-      }
-    };
+    const query = registerLiveQuery({
+      key: source, scope: lifecycle.workspaceId, tables: [source], read: reader, immediate: false,
+      apply: async value => { if (!disposed) { const accepted = await handler(value); markReady(source); return accepted; } },
+      onError: error => report(source, "read", error),
+    });
+    subscriptions.push(() => query.dispose());
     try {
       const subscription = db.watch(triggerSql, [], {
-        onResult: () => { void run(); },
+        onResult: () => invalidateLiveData(source, lifecycle.workspaceId),
         onError: (error) => report(source, "engine", error),
       }, opts);
       subscriptions.push(subscription);
@@ -92,6 +89,9 @@ export function startWatches(handlers, range, lifecycle = {}) {
   bind("menu_courses", "SELECT count(*) AS n FROM menu_courses", readMenuCourses, handlers.onMenuCourses);
   bind("service_settings", "SELECT count(*) AS n, max(updated_at) AS ts FROM service_settings",
     readLiveSettings, handlers.onLiveSettings);
+  // Archive snapshots are read only by mounted archive/history consumers.
+  bind("service_archive", "SELECT count(*) AS n FROM service_archive",
+    async () => null, handlers.onArchiveChanged);
 
   if (enabled.size === 0) lifecycle.onReady?.({ sources: [] });
 

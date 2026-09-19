@@ -42,14 +42,14 @@ const ALLOWLIST = {
     "TABLES.RESERVATIONS.upsert": 1,     // atomic multi-reservation swap fallback
     "TABLES.RESERVATIONS.insert": 1,     // saveRes create (id comes from DB)
     "TABLES.RESERVATIONS.delete": 1,     // deleteReservation fallback
-    "TABLES.RESERVATIONS.select": 1,     // fallback one-shot load
-    "TABLES.MENU_COURSES.select": 1,     // fetchMenuCourses (admin surface)
+    "TABLES.RESERVATIONS, workspaceId.select": 1,     // fallback live reader; pagination pins the workspace
+    "TABLES.MENU_COURSES, ws.select": 1,     // fetchMenuCourses (admin surface)
     "TABLES.MENU_COURSES.upsert": 2,     // saveMenuCourses + legacy-shape retry
     "TABLES.MENU_COURSES.delete": 1,     // saveMenuCourses prune
-    "TABLES.WINES.select": 1,            // fallback one-shot load
+    "TABLES.WINES, ws.select": 1,            // fallback live reader; pagination pins the workspace
     "TABLES.WINES.upsert": 1,            // wine sync batch write
     "TABLES.WINES.delete": 1,            // wine sync prune
-    "TABLES.BEVERAGES.select": 1,        // fallback one-shot load
+    "TABLES.BEVERAGES, ws.select": 1,        // fallback live reader; pagination pins the workspace
     "TABLES.BEVERAGES.insert": 1,        // beverage sync write
     "TABLES.BEVERAGES.delete": 1,        // beverage sync prune
   },
@@ -61,7 +61,7 @@ const ALLOWLIST = {
     "TABLES.SERVICE_ARCHIVE.update": 2,
     "TABLES.SERVICE_ARCHIVE.delete": 1,
     "TABLES.SERVICES.select": 2,         // merged archive read + id-kind probe
-    "TABLES.SERVICE_TABLES.select": 1,   // ended services' board rows
+    "TABLES.SERVICE_TABLES, ws.select": 1,   // paginated ended-service board rows; workspace pinned
     "TABLES.SERVICES.update": 2,         // soft-delete / restore (one + all)
     "TABLES.SERVICES.delete": 1,         // trash purge (RLS: ended+trashed only)
   },
@@ -92,7 +92,8 @@ const ALLOWLIST = {
   },
   "lib/stateStore.js": {
     // IS the service_settings seam — same deal.
-    "TABLES.SERVICE_SETTINGS.select": 2, // exact-key and prefix reads
+    "TABLES.SERVICE_SETTINGS.select": 1, // exact-key read
+    "TABLES.SERVICE_SETTINGS, ws.select": 1, // paginated prefix read pinned to its original workspace
     "TABLES.SERVICE_SETTINGS, workspaceId.upsert": 1, // retained retry pinned to its original workspace
   },
   "lib/scopedDb.js": {

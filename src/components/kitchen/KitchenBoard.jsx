@@ -1582,7 +1582,8 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
         seats.forEach(s => {
           if (Array.isArray(s.extras)) {
             s.extras.forEach(ex => {
-              if (!extrasMap[ex.key]) extrasMap[ex.key] = { name: ex.name, seats: [], anyShared: false };
+              if (!extrasMap[ex.key]) extrasMap[ex.key] = { name: ex.name, seats: [], anyShared: false, unassignedRestrictions: new Set() };
+              (ex.unassignedRestrictions || []).forEach(warning => extrasMap[ex.key].unassignedRestrictions?.add(warning));
               const sw = ex.sharedWith ?? null;
               extrasMap[ex.key].seats.push({ id: s.id, gender: s.gender || null, pairing: ex.pairing, sharedWith: sw, restriction: ex.restriction ?? null });
               if (sw !== null) extrasMap[ex.key].anyShared = true;
@@ -1683,6 +1684,11 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                   <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>
                     {group.name.toUpperCase()}
                   </span>
+                  {group.unassignedRestrictions?.size > 0 && (
+                    <div role="alert" style={{ width: "100%", color: tokens.red.text, fontWeight: 700, fontSize: 11 }}>
+                      Seat assignment needed — {[...group.unassignedRestrictions].join(" · ")}
+                    </div>
+                  )}
                   {group.seats.map(s => (
                     // A restricted seat's call turns the chip red and spells
                     // the modification out — the popup is where the pass

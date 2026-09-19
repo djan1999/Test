@@ -7,9 +7,26 @@ import { PowerSyncDatabase } from "@powersync/web";
 import { AppSchema } from "./AppSchema.js";
 import { SupabaseConnector } from "./SupabaseConnector.js";
 import { supabase } from "../lib/supabaseClient.js";
+import { invalidateLiveData } from "../lib/liveData.js";
 
 let _db = null;
 let _connected = false;
+let _reconnecting = null;
+let _epoch = 0;
+
+// Restart only the transport. SQLite and its durable upload queue stay intact.
+export function reconnectPowerSync() {
+  if (!_connected) return Promise.resolve();
+  if (_reconnecting) return _reconnecting;
+  const epoch = _epoch;
+  const db = getPowerSync();
+  _reconnecting = (async () => {
+    await db.disconnect();
+    if (epoch !== _epoch || !_connected) return;
+    await db.connect(new SupabaseConnector());
+  })().finally(() => { _reconnecting = null; });
+  return _reconnecting;
+}
 
 // The device remembers which Supabase user last synced the local DB. One
 // dbFilename serves whoever is logged in, so when a DIFFERENT account signs in
@@ -113,18 +130,45 @@ export async function connect(onStatus) {
     _connected = true;
     if (typeof window !== "undefined") window.__powerSync = db; // DevTools aid
   }
+  let lastCheckpoint = null;
   const dispose = db.registerListener({
     statusChanged: (status) => {
       const snap = snapshot(status);
       console.info("[PowerSync] status —", JSON.stringify(snap));
       onStatus?.(snap);
+      if (snap.lastSyncedAt && snap.lastSyncedAt !== lastCheckpoint) {
+        lastCheckpoint = snap.lastSyncedAt;
+        void invalidateLiveData();
+      }
     },
   });
   // Emit the current status immediately so callers don't wait for the next change.
   onStatus?.(snapshot(db.currentStatus));
+  let hiddenAt = 0, lastRecovery = 0;
+  const recover = () => {
+    if (document.hidden) { if (!hiddenAt) hiddenAt = Date.now(); return; }
+    if (navigator.onLine === false) return;
+    const woke = hiddenAt && Date.now() - hiddenAt > 30000;
+    hiddenAt = 0;
+    const status = snapshot(db.currentStatus);
+    if (!woke && status.connected && !status.streamError) return;
+    if (Date.now() - lastRecovery < 15000) return;
+    lastRecovery = Date.now();
+    void reconnectPowerSync().catch(error => console.warn("[PowerSync] reconnect failed; retrying", error));
+  };
+  window.addEventListener("online", recover);
+  window.addEventListener("focus", recover);
+  document.addEventListener("visibilitychange", recover);
+  const recoveryTimer = setInterval(recover, 60000);
   return async () => {
+    _epoch += 1;
+    _connected = false;
+    clearInterval(recoveryTimer);
+    window.removeEventListener("online", recover);
+    window.removeEventListener("focus", recover);
+    document.removeEventListener("visibilitychange", recover);
+    try { await _reconnecting; } catch { /* disconnect still needed */ }
     try { dispose?.(); } catch { /* noop */ }
     try { await db.disconnect(); } catch { /* noop */ }
-    _connected = false;
   };
 }

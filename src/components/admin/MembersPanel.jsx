@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useLiveQuery } from "../../hooks/useLiveQuery.js";
+import { invalidateLiveData } from "../../lib/liveData.js";
+import { useState } from "react";
 import { requestWorkspaceMembers } from "../../lib/workspaceMembers.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInp, dangerBtn, primaryBtn, sectionHeader } from "./adminStyles.js";
@@ -17,21 +19,13 @@ export default function MembersPanel({ accessToken, workspaceId, currentUserId }
   const [busyId, setBusyId] = useState(null);
   const [message, setMessage] = useState(null);
 
-  const loadMembers = useCallback(async () => {
-    if (!accessToken || !workspaceId) return;
-    setLoading(true);
-    try {
-      const data = await requestWorkspaceMembers({ accessToken, workspaceId });
-      setMembers(data.members || []);
-      setMessage(null);
-    } catch (error) {
-      setMessage({ type: "error", text: error.message });
-    } finally {
-      setLoading(false);
-    }
-  }, [accessToken, workspaceId]);
+  const loadMembers = () => invalidateLiveData("workspace_members");
+  useLiveQuery("staff-list", () => requestWorkspaceMembers({ accessToken, workspaceId }), data => {
+    setMembers(data.members || []); setMessage(null); setLoading(false);
+  }, { enabled: !!accessToken && !!workspaceId, scope: workspaceId, tables: ["workspace_members"],
+    onError: error => { setMessage({ type: "error", text: error.message }); setLoading(false); },
+  });
 
-  useEffect(() => { loadMembers(); }, [loadMembers]);
 
   const invite = async (event) => {
     event.preventDefault();

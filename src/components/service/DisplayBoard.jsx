@@ -53,6 +53,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
     // it could record anything. Nothing rendered wrong, so it looked like a
     // button that simply did nothing.
     const catalogs = { wines, cocktails, spirits, beers, teas, coffees };
+    const addBottle = (item) => upd?.(t.id, "bottleWines", [...(t.bottleWines || []), { ...item, byGlass: false }]);
     // Terrace-flow decoration (derived in App, never persisted on the row):
     // 'terrace' = party outside on t._visit.terraceLabel.
     const visit = t._visit || null;
@@ -590,6 +591,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                       }),
                       <QuickBeverageSearch
                         key="all-beverage-search"
+                        onAddBottle={addBottle}
                         wines={wines}
                         cocktails={cocktails}
                         spirits={spirits}
@@ -670,6 +672,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                       // button does not need an admin trip mid-service.
                       <QuickBeverageSearch
                         key="all-beverage-digestivo-search"
+                        onAddBottle={addBottle}
                         wines={wines}
                         cocktails={cocktails}
                         spirits={spirits}

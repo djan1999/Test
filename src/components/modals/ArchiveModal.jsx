@@ -1,3 +1,5 @@
+import { useLiveQuery } from "../../hooks/useLiveQuery.js";
+import { invalidateLiveData } from "../../lib/liveData.js";
 import { useEffect, useMemo, useState } from "react";
 import FullModal from "../ui/FullModal.jsx";
 import TableSummaryCard from "./TableSummaryCard.jsx";
@@ -40,25 +42,13 @@ export default function ArchiveModal({
   const [showTrash, setShowTrash] = useState(false);
   const [loadError, setLoadError] = useState("");
 
-  const loadEntries = () => {
-    if (!supabase) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setLoadError("");
-    // fetchArchive reads the on-device SQLite DB when it is primary (instant,
-    // works offline) and falls back to the direct Supabase pair otherwise.
-    fetchArchive()
-      .then(({ active, deleted }) => { setEntries(active); setDeleted(deleted); })
-      .catch((error) => {
-        setEntries([]);
-        setDeleted([]);
-        setLoadError(error?.message || "Archive could not be loaded.");
-      })
-      .finally(() => setLoading(false));
-  };
-  useEffect(loadEntries, []);
+  const loadEntries = () => invalidateLiveData("service_archive");
+  useLiveQuery("archive", fetchArchive, ({ active, deleted }) => {
+    setEntries(active); setDeleted(deleted); setLoadError(""); setLoading(false);
+  }, { tables: ["service_archive", "services", "service_tables"],
+    onError: error => { setLoadError(error?.message || "Archive could not be loaded."); setLoading(false); },
+  });
+  useEffect(() => { if (!supabase) setLoading(false); }, []);
 
   const deleteEntry = async (id) => {
     if (!supabase) return;

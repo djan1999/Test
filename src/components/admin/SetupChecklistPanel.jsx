@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useLiveQuery } from "../../hooks/useLiveQuery.js";
+import { invalidateLiveData } from "../../lib/liveData.js";
+import { useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { FONT } from "./adminStyles.js";
 import { evaluateSetup, STATUS } from "../../lib/setupReadiness.js";
@@ -35,19 +37,13 @@ export default function SetupChecklistPanel({
   const [members, setMembers] = useState(null);
   const [membersError, setMembersError] = useState("");
 
-  const loadMembers = useCallback(async () => {
-    if (!accessToken || !workspaceId) return;
-    try {
-      const data = await requestWorkspaceMembers({ accessToken, workspaceId });
-      setMembers(Array.isArray(data?.members) ? data.members : []);
-      setMembersError("");
-    } catch (error) {
-      // A failed staff read must not blank the other seven steps.
-      setMembersError(error?.message || "The staff list could not be read.");
-    }
-  }, [accessToken, workspaceId]);
+  const loadMembers = () => invalidateLiveData("workspace_members");
+  useLiveQuery("staff-list", () => requestWorkspaceMembers({ accessToken, workspaceId }), data => {
+    setMembers(data.members || []); setMembersError("");
+  }, { enabled: !!accessToken && !!workspaceId, scope: workspaceId, tables: ["workspace_members"],
+    onError: error => { setMembersError(error?.message || "The staff list could not be read."); },
+  });
 
-  useEffect(() => { loadMembers(); }, [loadMembers]);
 
   const { steps, ready, headline, blocking } = evaluateSetup({
     restaurantConfig, floorMaps, menuCourses, members, restrictionsList,

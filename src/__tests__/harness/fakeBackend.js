@@ -1,3 +1,4 @@
+import { invalidateLiveData } from "../../lib/liveData.js";
 // ── In-memory backend for the app-level integration harness ─────────────────
 //
 // Models the app's real storage topology with TWO stores:
@@ -186,6 +187,7 @@ function makeBuilder(store, table) {
     } else throw new Error(`fake builder: unsupported not() op ${op}`);
   });
   b.order = chain((col, opts = {}) => state.orders.push({ col, asc: opts.ascending !== false }));
+  b.range = chain((from, to) => { state.range = [from, to]; });
   b.limit = chain((n) => { state.limitN = n; });
   b.single = chain(() => { state.single = true; });
   b.maybeSingle = chain(() => { state.maybe = true; });
@@ -221,6 +223,7 @@ function makeBuilder(store, table) {
         out = [...out].sort((a, b) => (a[col] < b[col] ? -1 : a[col] > b[col] ? 1 : 0) * (asc ? 1 : -1));
       }
       if (state.limitN != null) out = out.slice(0, state.limitN);
+      if (state.range) out = out.slice(state.range[0], state.range[1] + 1);
       data = clone(out);
     } else if (state.op === "insert") {
       const list = (Array.isArray(state.payload) ? state.payload : [state.payload]).map((r) => ({
@@ -556,7 +559,10 @@ export async function fireWatches() {
   if (handlers.onWines) handlers.onWines(await fakeReads.readWines());
   if (handlers.onBeverages) handlers.onBeverages(await fakeReads.readBeverages());
   if (handlers.onMenuCourses) handlers.onMenuCourses(await fakeReads.readMenuCourses());
-  if (handlers.onLiveSettings) handlers.onLiveSettings(await fakeReads.readLiveSettings());
+  if (handlers.onLiveSettings) {
+    handlers.onLiveSettings(await fakeReads.readLiveSettings());
+    await invalidateLiveData("service_settings", getWorkspaceId());
+  }
 }
 
 // Another device's change arriving through the sync stream: remote → local.
@@ -787,6 +793,7 @@ export const fakeStateStore = {
   // The fake writes synchronously — nothing is ever retained for retry, so
   // dropping pending values is a no-op here.
   dropPendingStateKey: () => {},
+  pendingStateKeys: () => [],
   readStateKey: async (id) => {
     if (isSqlitePrimary()) return fakeReads.readSetting(id);
     return clone(remoteSettingsRow(id)?.state ?? null);

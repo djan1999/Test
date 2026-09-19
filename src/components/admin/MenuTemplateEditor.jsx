@@ -1,3 +1,4 @@
+import { useLiveSetting } from "../../hooks/useLiveQuery.js";
 /**
  * MenuTemplateEditor — three-panel template editor for menu layout v2.
  *
@@ -35,7 +36,7 @@ import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../
 import { generateKitchenTicketHTML } from "../../utils/kitchenTicketGenerator.js";
 import { readMenuTitle, writeMenuTitle, readThankYouNote, writeThankYouNote, readTeamNames, writeTeamNames } from "../../utils/storage.js";
 import { supabase } from "../../lib/supabaseClient.js";
-import { readStateKey, saveStateKey } from "../../lib/stateStore.js";
+import { saveStateKey } from "../../lib/stateStore.js";
 import { LayoutStylesPanel } from "./MenuTemplatePanels.jsx";
 import { PreviewDataPanel } from "./MenuTemplatePreviewParts.jsx";
 import ConfirmDialog from "../ui/ConfirmDialog.jsx";
@@ -792,40 +793,33 @@ export default function MenuTemplateEditor({
     saveStateKey("menu_gen_thankyou", { en: readThankYouNote("en"), si: readThankYouNote("si") });
   };
 
-  // On mount, pull title / thank-you / team names from the store so the editor
-  // shows correct values on a fresh device where localStorage isn't yet populated.
-  // Without this, switching language or any sync call would overwrite the store
-  // with empty strings from localStorage and permanently destroy saved values.
-  useEffect(() => {
-    if (!supabase) return;
-    Promise.all([
-      readStateKey("menu_gen_title").catch(() => null),
-      readStateKey("menu_gen_thankyou").catch(() => null),
-      readStateKey("menu_gen_team").catch(() => null),
-    ]).then(([titleState, thankYouState, teamState]) => {
-      if (titleState && (typeof titleState.en === "string" || typeof titleState.si === "string")) {
-        const val = titleState["en"] ?? "";
-        if (val) { writeMenuTitle("en", val); setMenuTitle(val); }
-        if (titleState["si"]) writeMenuTitle("si", titleState["si"]);
-      }
-      if (thankYouState && (typeof thankYouState.en === "string" || typeof thankYouState.si === "string")) {
-        const val = thankYouState["en"] ?? "";
-        if (val) { writeThankYouNote("en", val); setThankYouNote(val); }
-        if (thankYouState["si"]) writeThankYouNote("si", thankYouState["si"]);
-      }
-      if (teamState?.value) {
-        writeTeamNames(teamState.value);
-        setTeamNames(teamState.value);
-      }
-    });
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useLiveSetting("menu_gen_team", state => {
+    const value = typeof state?.value === "string" ? state.value : "";
+    setTeamNames(value); writeTeamNames(value);
+  });
+  useLiveSetting("menu_gen_title", state => {
+    // Legacy untagged text cannot safely be assigned to a language.
+    if (state && typeof state.en !== "string" && typeof state.si !== "string") return;
+    for (const language of ["en", "si"]) {
+      const value = state?.[language] ?? "";
+      writeMenuTitle(language, value);
+      if (language === previewLang) setMenuTitle(value);
+    }
+  });
+  useLiveSetting("menu_gen_thankyou", state => {
+    // Legacy untagged text cannot safely be assigned to a language.
+    if (state && typeof state.en !== "string" && typeof state.si !== "string") return;
+    for (const language of ["en", "si"]) {
+      const value = state?.[language] ?? "";
+      writeThankYouNote(language, value);
+      if (language === previewLang) setThankYouNote(value);
+    }
+  });
 
   // When language is switched, save current lang to storage then load the next lang
   const handleLangChange = (nextLang) => {
     writeMenuTitle(previewLang, menuTitle);
     writeThankYouNote(previewLang, thankYouNote);
-    syncTitleToStore();
-    syncThankYouToStore();
     setPreviewLang(nextLang);
     setMenuTitle(readMenuTitle(nextLang));
     setThankYouNote(readThankYouNote(nextLang));

@@ -1,3 +1,5 @@
+import { useLiveDataStatus } from "../../hooks/useLiveQuery.js";
+import { invalidateLiveData } from "../../lib/liveData.js";
 import { useEffect, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { FONT } from "./adminStyles.js";
@@ -49,6 +51,8 @@ export default function SystemPanel({
   const [confirmDeleteLayout, setConfirmDeleteLayout] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
   const [resyncState, setResyncState] = useState(null);
+  const [refreshState, setRefreshState] = useState("");
+  const liveData = useLiveDataStatus();
   const [syncMsg, setSyncMsg] = useState("");
   const [syncConfigSaving, setSyncConfigSaving] = useState(false);
   const [diagnostics, setDiagnostics] = useState(() => readClientDiagnostics());
@@ -552,6 +556,20 @@ export default function SystemPanel({
       <div>
         <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 2, color: tokens.ink[4], textTransform: "uppercase", marginBottom: 14 }}>Manual Actions</div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <button type="button" disabled={refreshState === "working"} onClick={async () => {
+            setRefreshState("working");
+            try {
+              if (sqlitePrimary) {
+                const { reconnectPowerSync } = await import("../../powersync/system.js");
+                await reconnectPowerSync();
+              }
+              await invalidateLiveData();
+              setRefreshState("");
+            } catch { setRefreshState("Could not reconnect. Automatic retries remain active."); }
+          }} style={{ fontFamily: FONT, padding: "8px 16px", cursor: "pointer" }}>
+            {refreshState === "working" ? "REFRESHING…" : "REFRESH ALL DATA"}
+          </button>
+          {refreshState && refreshState !== "working" && <span role="alert">{refreshState}</span>}
           {onSyncWines && <button onClick={handleManualSync} disabled={syncResult === "syncing"} style={{
               fontFamily: FONT, fontSize: 9, letterSpacing: 2, padding: "8px 16px",
               border: `1px solid ${syncResult === "ok" ? tokens.green.border : syncResult === "err" ? tokens.red.border : tokens.charcoal.default}`,
@@ -609,6 +627,19 @@ export default function SystemPanel({
             </button>
           )}
         </div>
+      </div>
+
+      <div style={{ fontFamily: FONT, fontSize: 11 }}>
+        Data refresh preserves cached data, queued saves, and unfinished drafts.
+        {liveData.errors.map(row => <div role="alert" key={row.key}>
+          {row.key}: {row.error}. Retrying automatically.
+        </div>)}
+        <details><summary>Data freshness</summary>
+          {liveData.rows.map(row => <div key={row.key}>
+            {row.key}: {row.state === "held" ? "Local draft or save pending" : row.state}
+            {row.updatedAt ? ` · Last read ${new Date(row.updatedAt).toLocaleTimeString()}` : " · Waiting for first read"}
+          </div>)}
+        </details>
       </div>
 
       {/* Logo */}

@@ -4,6 +4,7 @@ export async function requestWorkspaceMembers({ accessToken, workspaceId, method
   const query = upperMethod === "GET" ? `?workspaceId=${encodeURIComponent(workspaceId)}` : "";
   const response = await fetch(`/api/workspace-members${query}`, {
     method: upperMethod,
+    cache: "no-store",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       ...(upperMethod === "GET" ? {} : { "Content-Type": "application/json" }),

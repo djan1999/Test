@@ -1,3 +1,4 @@
+import { readAllRows } from "./lib/readAllRows.js";
 import { useState, useRef, useEffect, useMemo, useCallback, lazy, Suspense } from "react";
 import {
   normalizeCourseCategory, normalizeOptionalKey,
@@ -94,6 +95,8 @@ import { appendServiceEvent, drainServiceEvents, pendingServiceEventCount, count
 import { foldServiceEvents, compareFoldToBoard, describeServiceEvent, serviceNightReport } from "./utils/eventFold.js";
 import { readParityRecord, recordEndOfServiceParity, fileParityVerdict } from "./lib/parityRecord.js";
 import { boardFactsFromDiff, createFactDeduper, seedFactsFromBoard } from "./utils/boardFacts.js";
+import { useLiveQuery, useLiveSetting, useLiveDataStatus } from "./hooks/useLiveQuery.js";
+import { invalidateLiveData, registerLiveQuery } from "./lib/liveData.js";
 import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
 import { useWorkspaceAccess } from "./hooks/useWorkspaceAccess.js";
 import {
@@ -208,10 +211,9 @@ async function withRetry(fn, { attempts = 4, baseMs = 600 } = {}) {
 
 async function fetchMenuCourses() {
   if (!supabase || !getWorkspaceId()) return null;
-  const { data, error } = await scopedFrom(TABLES.MENU_COURSES)
-    .select("*")
-    .order("position", { ascending: true });
-  if (error) throw error;
+  const ws = getWorkspaceId();
+  const data = await readAllRows(() => scopedFrom(TABLES.MENU_COURSES, ws)
+    .select("*").order("position", { ascending: true }));
   return (data || []).map(supabaseRowToCourse);
 }
 
@@ -328,6 +330,8 @@ const writeAccess = () => {
 // synchronously at load so the first queries + namespaced caches are correct.
 // ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
+
+
   const localBev = readLocalBeverages();
   const loadMenuCoursesRef = useRef(null);
   const appIsMobile = useIsMobile(BP.md);
@@ -435,31 +439,6 @@ export default function App() {
       });
       return;
     }
-    if (!workspaceId) return;
-    let cancelled = false;
-    readStateKey(RESTAURANT_CONFIG_KEY)
-      .then((stored) => {
-        if (cancelled) return;
-        const next = sanitizeRestaurantConfig(stored, fallback);
-        setRestaurantConfig(next);
-        setTables((previous) => {
-          const configured = reconcileConfiguredTables(previous, next);
-          prevTablesJsonRef.current = makeTableJsonMap(configured);
-          confirmedTablesJsonRef.current = makeTableJsonMap(configured);
-          return configured;
-        });
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setRestaurantConfig(fallback);
-        setTables((previous) => {
-          const next = reconcileConfiguredTables(previous, fallback);
-          prevTablesJsonRef.current = makeTableJsonMap(next);
-          confirmedTablesJsonRef.current = makeTableJsonMap(next);
-          return next;
-        });
-      });
-    return () => { cancelled = true; };
   }, [workspaceId, currentWorkspace?.name, currentWorkspace?.slug]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The table whose side sheet is open. The board stays mounted behind it —
@@ -2075,15 +2054,19 @@ export default function App() {
     return { ok: true, isActiveSkipped };
   };
 
+  const catalogueWrites = useRef(new Set());
   const saveWines = async (updatedWines) => {
     if (sandboxRef.current) return { ok: true }; // test service: catalog not persisted
+    catalogueWrites.current.add("wines");
+    void invalidateLiveData("wines");
+    try {
     // Copy-on-edit: a human correction to a synced wine flips it to
     // source:'manual' (same key), which the nightly website sync never deletes
     // and never re-inserts over (the sync skips keys that already exist).
     // Without this, any fix to a synced wine was silently undone at 02:00.
     const withSource = stampWineSources(updatedWines, wines);
-    setWines(withSource);
-    if (!supabase) return { ok: true };
+    const accept = () => { setWines(withSource); writeLocalWines(withSource); };
+    if (!supabase) { accept(); return { ok: true }; }
     const BATCH = 200;
     const rows = withSource.map(w => {
       const key = typeof w.id === "string" ? w.id : `manual|legacy_${w.id}`;
@@ -2107,6 +2090,7 @@ export default function App() {
         const { writeWines, deleteWines } = await import("./powersync/writes.js");
         await writeWines(rows);
         await deleteWines(deletedKeys);
+        accept();
         return { ok: true };
       } catch (error) {
         console.error("Wine save error:", error);
@@ -2127,11 +2111,16 @@ export default function App() {
         return { ok: false, error: delErr.message };
       }
     }
+    accept();
     return { ok: true };
+    } finally { catalogueWrites.current.delete("wines"); void invalidateLiveData("wines"); }
   };
 
   const saveBeverages = async ({ cocktails: newC, spirits: newS, beers: newB, teas: newT, coffees: newK }) => {
     if (sandboxRef.current) return { ok: true }; // test service: catalog not persisted
+    catalogueWrites.current.add("beverages");
+    void invalidateLiveData("beverages");
+    try {
     // Only categories whose list actually changed are rewritten (the write is
     // a replace-all within its category), so saving a cocktail edit can't
     // race another device's concurrent beer edit.
@@ -2149,19 +2138,22 @@ export default function App() {
       ...(sameList(newT, teas)      ? [] : [{ category: "tea",      rows: bevRows(newT, "tea") }]),
       ...(sameList(newK, coffees)   ? [] : [{ category: "coffee",   rows: bevRows(newK, "coffee") }]),
     ];
+    const accept = () => {
     setCocktails(newC);
     setSpirits(newS);
     setBeers(newB);
     setTeas(newT);
     setCoffees(newK);
     writeLocalBeverages({ cocktails: newC, spirits: newS, beers: newB, teas: newT, coffees: newK });
-    if (!supabase || changed.length === 0) return { ok: true };
+    };
+    if (!supabase || changed.length === 0) { accept(); return { ok: true }; }
     const categories = changed.map(c => c.category);
     const rows = changed.flatMap(c => c.rows);
     if (sqlitePrimaryRef.current) {
       try {
         const { replaceManualBeverages } = await import("./powersync/writes.js");
         await replaceManualBeverages(rows, categories);
+        accept();
         return { ok: true };
       } catch (error) {
         console.error("Beverage save error:", error);
@@ -2180,7 +2172,9 @@ export default function App() {
         return { ok: false, error: insErr.message };
       }
     }
+    accept();
     return { ok: true };
+    } finally { catalogueWrites.current.delete("beverages"); void invalidateLiveData("beverages"); }
   };
 
   const clearAll = () => {
@@ -2481,9 +2475,7 @@ export default function App() {
     if (supabase && getWorkspaceId()) {
       fetchServicesStore(20).then(rows => adoptServiceRowsRef.current?.(rows)).catch(() => {});
       fetchBoardRows().then(rows => { if (Array.isArray(rows)) adoptRemoteTables(rows); }).catch(() => {});
-      const fsKey = floorStatusKeyFor(serviceIdRef.current);
-      if (fsKey) readStateKey(fsKey).then(st => adoptFloorStatusRef.current?.(st, new Date().toISOString())).catch(() => {});
-      readStateKey(FLOOR_MAPS_KEY).then(st => adoptFloorMapsRef.current?.(st, new Date().toISOString())).catch(() => {});
+      void invalidateLiveData();
       reloadReservationsRef.current?.();
     }
 
@@ -3216,6 +3208,10 @@ export default function App() {
     const group = [...new Set([...reservationTableIds(owner.data, owner.table_id).map(Number), to])]
       .sort((a, b) => a - b);
     const nextData = { ...(owner.data || {}), tableGroup: group };
+    const oldGroup = reservationTableIds(owner.data, owner.table_id);
+    if (regroupTableRows(tablesRef.current, oldGroup, group) === tablesRef.current) {
+      return { ok: false, reason: "conflicting-service-data", error: new Error("Tables could not be joined because more than one table holds service data. No guest data was changed.") };
+    }
     const persisted = await persistReservationRow({
       id: owner.id, date: owner.date, table_id: group[0], data: nextData,
     });
@@ -3226,7 +3222,6 @@ export default function App() {
       recordClientDiagnostic("join tables", error);
       return { ok: false, reason: "persist-failed", error };
     }
-    const oldGroup = reservationTableIds(owner.data, owner.table_id);
     oldGroup.filter(id => Number(id) !== group[0]).forEach(id => intentionalBoardBlankRef.current.add(Number(id)));
     setReservations(prev => prev.map(r => r.id === owner.id ? { ...r, table_id: group[0], data: nextData } : r));
     setTables(prev => regroupTableRows(prev, oldGroup, group));
@@ -3250,6 +3245,10 @@ export default function App() {
     const ownerTable = Number(owner?.table_id);
     const keep = group.includes(ownerTable) ? ownerTable : group[0];
     const release = group.filter(id => id !== keep);
+
+    if (regroupTableRows(tablesRef.current, group, [keep]) === tablesRef.current) {
+      return { ok: false, reason: "conflicting-service-data", error: new Error("Tables could not be split because more than one table holds service data. No guest data was changed.") };
+    }
 
     if (owner) {
       const nextData = { ...(owner.data || {}), tableGroup: [] };
@@ -3411,16 +3410,12 @@ export default function App() {
     // dish and this device kept firing from the stale list all night.
     if (mode === "admin" && nextMode !== "admin" && menuCoursesDirtyRef.current) {
       menuCoursesDirtyRef.current = false;
-      // Re-pull the store's list so the abandoned draft stops painting — the
-      // watches only fire on DATA changes, not on this flag clearing.
-      if (sqlitePrimaryRef.current) {
-        loadPsReads()
-          .then(({ readMenuCourses }) => readMenuCourses())
-          .then(raw => { if (raw?.length) setMenuCourses(raw.map(supabaseRowToCourse)); })
-          .catch(() => {});
-      } else {
-        fetchMenuCourses().then(rows => { if (rows?.length) setMenuCourses(rows); }).catch(() => {});
-      }
+      void invalidateLiveData("menu_courses");
+    }
+    if (mode === "admin" && nextMode !== "admin") {
+      menuRulesDirty.current = false;
+      wineSyncDirty.current = false;
+      void invalidateLiveData("service_settings");
     }
     // Service mode joins the live service (or prompts to start one); other
     // modes just switch.
@@ -3784,26 +3779,13 @@ export default function App() {
   // so we no longer flash the bundled /logo.svg while the network read is in
   // flight. We only fall back to the bundled default when there is genuinely no
   // cached AND no saved logo. Runs per workspace (the logo is workspace-scoped).
-  useEffect(() => {
-    let cancelled = false;
-    const loadDefault = () => {
-      if (readLocalLogo()) return; // a cached logo is already showing — don't override
-      fetch("/logo.svg").then(r => r.text())
-        .then(svg => { if (!cancelled) setLogoDataUri(`data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`); })
-        .catch(() => {});
-    };
-    if (!supabase) { loadDefault(); return () => { cancelled = true; }; }
-    if (!workspaceId || !psResolved) return () => { cancelled = true; }; // wait for the workspace + store to resolve
-    withRetry(() => readStateKey("menu_logo"))
-      .then(state => {
-        if (cancelled) return;
-        const uri = state?.dataUri;
-        if (uri) { setLogoDataUri(uri); writeLocalLogo(uri); }
-        else loadDefault();
-      })
-      .catch(() => loadDefault()); // keep the cached logo on failure
-    return () => { cancelled = true; };
-  }, [workspaceId, psResolved]); // eslint-disable-line react-hooks/exhaustive-deps
+  useLiveQuery("setting:menu_logo", async () => {
+    const state = await readStateKey("menu_logo");
+    return state?.dataUri || new URL("/logo.svg", window.location.href).href;
+  }, uri => {
+    if (pendingStateKeys().includes("menu_logo")) return false;
+    setLogoDataUri(uri); writeLocalLogo(uri);
+  }, { enabled: !!supabase && psResolved, tables: ["service_settings"] });
 
   const saveLogo = async (dataUri) => {
     setLogoDataUri(dataUri);
@@ -3815,17 +3797,17 @@ export default function App() {
     try { localStorage.setItem(workspaceKey(SYNC_CONFIG_KEY), JSON.stringify(wineSyncConfig)); } catch {}
   }, [wineSyncConfig]);
 
-  useEffect(() => {
-    if (!supabase || !psResolved) return;
-    withRetry(() => readStateKey("wine_sync_config"))
-      .then(state => { if (state) setWineSyncConfig(normalizeSyncConfig(state)); })
-      .catch(() => {}); // localStorage-hydrated config stays in place
-  }, [psResolved]); // eslint-disable-line react-hooks/exhaustive-deps
+  const wineSyncDirty = useRef(false);
+  useLiveSetting("wine_sync_config", state => {
+    if (wineSyncDirty.current) return false;
+    setWineSyncConfig(normalizeSyncConfig(state || DEFAULT_SYNC_CONFIG));
+  }, { enabled: !!supabase && psResolved });
 
   const saveWineSyncConfig = async () => {
     const next = normalizeSyncConfig(wineSyncConfig);
     setWineSyncConfig(next);
-    await saveStateKey("wine_sync_config", next);
+    const result = await saveStateKey("wine_sync_config", next);
+    if (result.ok) wineSyncDirty.current = false;
   };
 
   // ── Profile persistence (localStorage + Supabase v2) ─────────────────────
@@ -3846,12 +3828,13 @@ export default function App() {
   // The result is sanitized so assignments never point at deleted/missing
   // profiles; persistence runs fire-and-forget so callers can stay synchronous.
   const updateProfiles = useCallback((mutator) => {
-    setProfilesState(prev => {
-      const draft = typeof mutator === "function" ? mutator(prev) : mutator;
-      const sanitized = sanitizeProfilesPayload(draft);
-      persistProfilesPayload(sanitized);
-      return sanitized;
-    });
+    const prev = profilesStateRef.current;
+    const draft = typeof mutator === "function" ? mutator(prev) : mutator;
+    if (draft === prev) return;
+    const sanitized = sanitizeProfilesPayload(draft);
+    profilesStateRef.current = sanitized;
+    setProfilesState(sanitized);
+    void persistProfilesPayload(sanitized);
   }, [persistProfilesPayload]);
 
   // Active profile selector — drives which template the editor shows.
@@ -3965,81 +3948,35 @@ export default function App() {
   const setShortTicketTemplate= useMemo(() => editProfileField("shortTicketTemplate",null), [editProfileField]);
   const setGlobalLayout       = useMemo(() => editProfileField("layoutStyles",       {}),   [editProfileField]);
 
-  // Initial load from Supabase: prefer v2, fall back to v1, then to the
-  // legacy single-layout pair. The bad flat menu_layouts_v1 payload is
-  // never read here — the row-based menuTemplate is the only system.
+  // Layouts recover through the same lifecycle as other settings. Migration
+  // happens only after successful reads; an outage can never seed defaults.
+  useLiveQuery("setting:menu_layout_profiles_v2", async () => {
+    const v2 = await readStateKey("menu_layout_profiles_v2");
+    if (v2 && Array.isArray(v2.profiles)) return { state: sanitizeProfilesPayload(v2) };
+    const v1 = await readStateKey("menu_layout_profiles_v1");
+    if (v1?.profiles?.length) return { state: sanitizeProfilesPayload(migrateV1ToV2(v1)), migrate: true };
+    const [layout, template] = await Promise.all([
+      readStateKey("menu_layout_global"), readStateKey("menu_layout_v2"),
+    ]);
+    const legacyLayout = layout && typeof layout === "object" ? layout : {};
+    const legacyTemplate = template?.version === 2 && Array.isArray(template.rows) ? template : null;
+    if (legacyTemplate || Object.keys(legacyLayout).length) {
+      return { state: sanitizeProfilesPayload(migrateLegacySingleLayout(legacyLayout, legacyTemplate)), migrate: true };
+    }
+    return { state: sanitizeProfilesPayload({ profiles: [], assignments: {}, activeProfileId: null }) };
+  }, ({ state, migrate }) => {
+    if (pendingStateKeys().includes("menu_layout_profiles_v2")) return false;
+    profilesStateRef.current = state;
+    setProfilesState(previous => JSON.stringify(previous) === JSON.stringify(state) ? previous : state);
+    profilesLoaded.current = true;
+    setProfilesReadStatus("ready");
+    if (migrate) void persistProfilesPayload(state);
+  }, { enabled: !!supabase && psResolved, tables: ["service_settings"],
+    onError: () => setProfilesReadStatus("error"),
+  });
   useEffect(() => {
-    if (!supabase) { profilesLoaded.current = true; setProfilesReadStatus("ready"); return; }
-    if (!psResolved) return;
-    let cancelled = false;
-    // Snapshot what the localStorage-hydrated state looked like at mount.
-    // If the user starts editing before this remote read returns, the JSON
-    // will diverge and we leave their edits alone instead of overwriting.
-    const mountSnapshot = JSON.stringify(profilesStateRef.current);
-    const adoptRemote = (next) => {
-      const current = JSON.stringify(profilesStateRef.current);
-      if (current !== mountSnapshot) return; // user has edited since mount; don't clobber
-      setProfilesState(next);
-    };
-    (async () => {
-      try {
-        // Throw on Supabase errors so a transient/permission failure lands in
-        // catch and is treated as "error" — NOT as "empty". maybeSingle()
-        // returns {data:null,error:null} for a genuinely empty row, so the
-        // empty path below only runs when the read truly succeeded. Retried with
-        // backoff so a flaky network self-heals instead of needing a manual
-        // refresh to pull the saved menu layouts.
-        const v2 = await withRetry(() => readStateKey("menu_layout_profiles_v2"));
-        if (v2 && Array.isArray(v2.profiles) && v2.profiles.length > 0) {
-          if (cancelled) return;
-          adoptRemote(sanitizeProfilesPayload(v2));
-          profilesLoaded.current = true;
-          setProfilesReadStatus("ready");
-          return;
-        }
-        const v1State = await readStateKey("menu_layout_profiles_v1");
-        if (v1State?.profiles?.length) {
-          if (cancelled) return;
-          const migrated = sanitizeProfilesPayload(migrateV1ToV2(v1State));
-          adoptRemote(migrated);
-          persistProfilesPayload(migrated);
-          profilesLoaded.current = true;
-          setProfilesReadStatus("ready");
-          return;
-        }
-        const [legacyLayoutState, legacyTemplateState] = await Promise.all([
-          readStateKey("menu_layout_global"),
-          readStateKey("menu_layout_v2"),
-        ]);
-        const legacyLayout = (legacyLayoutState && typeof legacyLayoutState === "object") ? legacyLayoutState : {};
-        const legacyTemplate = (legacyTemplateState?.version === 2 && Array.isArray(legacyTemplateState.rows)) ? legacyTemplateState : null;
-        if (legacyTemplate || Object.keys(legacyLayout).length > 0) {
-          if (cancelled) return;
-          const migrated = sanitizeProfilesPayload(migrateLegacySingleLayout(legacyLayout, legacyTemplate));
-          adoptRemote(migrated);
-          persistProfilesPayload(migrated);
-          profilesLoaded.current = true;
-          setProfilesReadStatus("ready");
-          return;
-        }
-        // Every read succeeded and returned nothing — genuinely first run.
-        // Safe to seed defaults (handled by the effect below).
-        if (cancelled) return;
-        profilesLoaded.current = true;
-        setProfilesReadStatus("ready");
-      } catch (e) {
-        // Remote read failed. Do NOT unlock seeding — seeding+persisting
-        // defaults here is what previously clobbered a saved layout when the
-        // read merely hiccupped. Keep any localStorage-hydrated profiles in
-        // memory and leave persistence untouched until a later successful read.
-        if (cancelled) return;
-        setProfilesReadStatus("error");
-        // eslint-disable-next-line no-console
-        console.error("Profile load failed — skipping default seeding so the saved layout is not overwritten:", e);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [persistProfilesPayload, psResolved]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!supabase) { profilesLoaded.current = true; setProfilesReadStatus("ready"); }
+  }, []);
 
   // Seed defaults once menuCourses are loaded and no profiles exist yet.
   // Gated on a *successful* remote read ("ready"): never seeds on "loading" or
@@ -4059,41 +3996,14 @@ export default function App() {
   // setRestrictionsCache mirrors the live list into the dietary.js module so
   // every existing importer (RESTRICTIONS / DIETARY_KEYS / restrLabel) sees
   // the current values without prop drilling.
-  useEffect(() => {
-    if (!supabase || !workspaceId || !psResolved) return;
-    let cancelled = false;
-
-    // Instant paint from cache + mirror restrictions into the dietary module so
-    // every importer sees the cached values immediately.
-    const cachedR = readLocalRestrictions();
-    if (cachedR && cachedR.length) { setRestrictionsList(cachedR); setRestrictionsCache(cachedR); }
-    const cachedN = readLocalCourseNotes();
-    if (cachedN) setCourseQuickNotes(cachedN);
-
-    (async () => {
-      try {
-        const [rState, nState] = await withRetry(() => Promise.all([
-          readStateKey("restrictions"),
-          readStateKey("course_quick_notes"),
-        ]));
-        if (cancelled) return;
-        const stored = rState?.restrictions;
-        if (Array.isArray(stored) && stored.length > 0) {
-          setRestrictionsList(stored);
-          setRestrictionsCache(stored);
-          writeLocalRestrictions(stored);
-        }
-        if (nState && typeof nState === "object") {
-          setCourseQuickNotes(nState);
-          writeLocalCourseNotes(nState);
-        }
-      } catch (e) {
-        // Keep the cached restrictions/notes already on screen.
-        console.warn("Restrictions/notes load failed — keeping cached values:", e);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [workspaceId, psResolved]); // eslint-disable-line react-hooks/exhaustive-deps
+  useLiveSetting("restrictions", state => {
+    const list = Array.isArray(state?.restrictions) ? state.restrictions : DEFAULT_RESTRICTIONS;
+    setRestrictionsList(list); setRestrictionsCache(list); writeLocalRestrictions(list);
+  }, { enabled: !!supabase && psResolved });
+  useLiveSetting("course_quick_notes", state => {
+    const notes = state && typeof state === "object" ? state : {};
+    setCourseQuickNotes(notes); writeLocalCourseNotes(notes);
+  }, { enabled: !!supabase && psResolved });
 
   const saveRestrictions = useCallback(async (next) => {
     const list = Array.isArray(next) ? next : [];
@@ -4105,18 +4015,9 @@ export default function App() {
 
   // ── Kitchen ticket order: the expediter's drag order, shared + persistent ──
   const [kitchenTicketOrder, setKitchenTicketOrder] = useState(null);
-  useEffect(() => {
-    if (!supabase || !workspaceId || !psResolved) return;
-    let cancelled = false;
-    readStateKey("kitchen_ticket_order")
-      .then((state) => {
-        if (cancelled) return;
-        const ids = state?.ids;
-        if (Array.isArray(ids)) setKitchenTicketOrder(ids.map(Number).filter(Number.isFinite));
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [workspaceId, psResolved]); // eslint-disable-line react-hooks/exhaustive-deps
+  useLiveSetting("kitchen_ticket_order", state => {
+    setKitchenTicketOrder(Array.isArray(state?.ids) ? state.ids.map(Number).filter(Number.isFinite) : null);
+  }, { enabled: !!supabase && psResolved });
 
   const saveKitchenTicketOrder = useCallback(async (ids) => {
     const clean = (Array.isArray(ids) ? ids : []).map(Number).filter(Number.isFinite);
@@ -4139,19 +4040,14 @@ export default function App() {
     try { localStorage.setItem(workspaceKey("milka_menu_rules"), JSON.stringify(menuRules)); } catch {}
   }, [menuRules]);
 
-  useEffect(() => {
-    if (!supabase || !psResolved) return;
-    withRetry(() => readStateKey("menu_gen_rules"))
-      .then(state => {
-        if (state && typeof state === "object") {
-          setMenuRules(normalizeMenuRules(state));
-          try { localStorage.setItem(workspaceKey("milka_menu_rules"), JSON.stringify(state)); } catch {}
-        }
-      })
-      .catch(() => {}); // localStorage-hydrated rules stay in place
-  }, [psResolved]); // eslint-disable-line react-hooks/exhaustive-deps
+  const menuRulesDirty = useRef(false);
+  useLiveSetting("menu_gen_rules", state => {
+    if (menuRulesDirty.current) return false;
+    setMenuRules(normalizeMenuRules(state || DEFAULT_MENU_RULES));
+  }, { enabled: !!supabase && psResolved });
 
   const updateMenuRules = (nextRules) => {
+    menuRulesDirty.current = true;
     if (typeof nextRules === "function") {
       setMenuRules(prev => normalizeMenuRules(nextRules(prev)));
       return;
@@ -4170,6 +4066,7 @@ export default function App() {
       }
     }
     setMenuRulesSaving(false);
+    menuRulesDirty.current = false;
     setMenuRulesSaved(true);
     setTimeout(() => setMenuRulesSaved(false), 2500);
   };
@@ -4180,32 +4077,6 @@ export default function App() {
   // when primary, scopedFrom fallback otherwise) — queue-safe offline, same
   // as every other settings blob. Terrace occupancy itself is derived from
   // reservations; only the map definitions and SET markers persist here.
-  useEffect(() => {
-    // workspaceId is part of the gate (and deps): keyed on psResolved alone
-    // this ran before the workspace was applied on a fresh login, read null
-    // and never retried — maps and strips silently stayed at defaults.
-    // serviceId is a dep too: SET strips live under a per-service key, so a
-    // service switch re-reads the (new, usually empty) strip blob.
-    if (!supabase || !workspaceId || !psResolved) return;
-    const fsKey = floorStatusKeyFor(serviceId);
-    withRetry(() => Promise.all([
-      readStateKey(FLOOR_MAPS_KEY),
-      fsKey ? readStateKey(fsKey) : Promise.resolve(null),
-    ]))
-      .then(([fm, fs]) => {
-        const maps = fm ? sanitizeFloorMaps(fm) : floorMapsState;
-        if (fm) setFloorMapsState(maps);
-        // sanitize drops legacy DIRTY values (feature removed); prune heals
-        // strips already orphaned in the store by an old map edit — ADOPT
-        // only, never written back at boot (a loading device must not write).
-        setFloorStatusState(pruneFloorStatus(fs, maps));
-        // The strip-follows-courseReady watcher may hold clears queued from
-        // before this blob arrived — it can trust local state from here on.
-        floorStatusHydratedRef.current = true;
-      })
-      .catch(() => {});
-  }, [workspaceId, psResolved, serviceId]); // eslint-disable-line react-hooks/exhaustive-deps
-
   // Always-current mirrors of the two floor blobs + the time of this device's
   // last local write. Two reasons: (1) writers used to compute the next blob
   // from the RENDER-scope value — two taps in the same render window (or a
@@ -4310,17 +4181,28 @@ export default function App() {
   const adoptFloorMapsRef = useRef(null);
   adoptFloorMapsRef.current = adoptFloorMaps;
 
+  useLiveSetting(FLOOR_MAPS_KEY, state => {
+    adoptFloorMapsRef.current?.(state || sanitizeFloorMaps(null));
+  }, { enabled: !!supabase && psResolved });
+  useLiveSetting(floorStatusKeyFor(serviceId) || "floor_status:none", state => {
+    adoptFloorStatusRef.current?.(state || {});
+    floorStatusHydratedRef.current = true;
+  }, { enabled: !!supabase && psResolved && !!serviceId });
+  useLiveSetting(RESTAURANT_CONFIG_KEY, state => {
+    adoptRestaurantConfiguration(state || makeDefaultRestaurantConfig({
+      name: currentWorkspace?.name || APP_NAME, subtitle: APP_SUBTITLE,
+      features: fallbackFeaturesForWorkspace(currentWorkspace, DEFAULT_RESTAURANT_CONFIG.features),
+    }));
+  }, { enabled: !!supabase && psResolved });
+
   // ── Quick Access persistence ──────────────────────────────────────────────
   useEffect(() => {
     try { localStorage.setItem(workspaceKey("milka_quick_access"), JSON.stringify(quickAccessItems)); } catch {}
   }, [quickAccessItems]);
 
-  useEffect(() => {
-    if (!supabase || !psResolved) return;
-    withRetry(() => readStateKey("quick_access"))
-      .then(state => { if (state?.items?.length) setQuickAccessItems(state.items); })
-      .catch(() => {}); // localStorage-hydrated quick access stays in place
-  }, [psResolved]); // eslint-disable-line react-hooks/exhaustive-deps
+  useLiveSetting("quick_access", state => {
+    setQuickAccessItems(Array.isArray(state?.items) ? state.items : DEFAULT_QUICK_ACCESS_ITEMS);
+  }, { enabled: !!supabase && psResolved });
 
   const updateQuickAccess = (items) => {
     setQuickAccessItems(items);
@@ -4332,12 +4214,9 @@ export default function App() {
     try { localStorage.setItem(workspaceKey("milka_digestivo_access"), JSON.stringify(digestivoItems)); } catch {}
   }, [digestivoItems]);
 
-  useEffect(() => {
-    if (!supabase || !psResolved) return;
-    withRetry(() => readStateKey("digestivo_access"))
-      .then(state => { if (Array.isArray(state?.items)) setDigestivoItems(state.items); })
-      .catch(() => {}); // localStorage-hydrated digestivo list stays in place
-  }, [psResolved]); // eslint-disable-line react-hooks/exhaustive-deps
+  useLiveSetting("digestivo_access", state => {
+    setDigestivoItems(Array.isArray(state?.items) ? state.items : []);
+  }, { enabled: !!supabase && psResolved });
 
   const updateDigestivoAccess = (items) => {
     setDigestivoItems(items);
@@ -4408,59 +4287,28 @@ export default function App() {
     if (!supabase || !workspaceId || !psResolved || sqlitePrimary) return;
     let isMounted = true;
 
-    const loadRemoteTables = async () => {
-      // Service-scoped: only the current namespace's rows exist for this
-      // board. No live service → an EMPTY board is the truth (still counts
-      // as loaded, or the reconcile/saves would stay locked between services).
-      const svcId = serviceIdRef.current;
-      let data = [];
-      if (svcId) {
-        const result = await scopedFrom(TABLES.SERVICE_TABLES)
-          .select("service_id, table_id, data, updated_at")
-          .eq("service_id", svcId)
-          .order("table_id", { ascending: true });
-        if (!isMounted) return;
-        if (result.error) {
-          // Do NOT mark the board as loaded: without the source of truth,
-          // reconcile/saves stay disabled. The poll and the visibilitychange
-          // refetch keep retrying and flip the gate on the first success.
-          setSyncStatus("sync-error");
-          noteSyncError("board load (fallback)", result.error);
-          return;
-        }
-        data = result.data || [];
-      }
-      if (!isMounted) return;
-      // The service switched while this read was in flight — the effect's
-      // re-run (serviceId is a dep) owns the new namespace's load.
-      if (String(svcId ?? "") !== String(serviceIdRef.current ?? "")) return;
-
-      if (Array.isArray(data) && data.length > 0) adoptRemoteTables(data);
-
-      setSyncStatus("live");
-      // Board truth is in: unlock the reconciliation effect and table saves,
-      // and signal the reconcile effect to run against the fresh data. This
-      // read came from the SERVER, so it is authoritative for its namespace —
-      // stamp WHICH one it served (the reconcile/autosave gate compares it).
-      boardLoadedForRef.current = boardScopeKey();
-      setRemoteBoardLoaded(true);
-      setBoardSyncTick(t => t + 1);
-    };
-
-    loadRemoteTables();
-    fallbackBoardReloadRef.current = loadRemoteTables;
-
-    const pollInterval = setInterval(() => { if (isMounted) loadRemoteTables(); }, 60000);
-    const refetchOnWake = () => { if (!document.hidden && isMounted) loadRemoteTables(); };
-    document.addEventListener("visibilitychange", refetchOnWake);
-    window.addEventListener("online", refetchOnWake);
-
+    const query = registerLiveQuery({ key: "service_tables", scope: workspaceId, tables: ["service_tables"],
+      read: async () => {
+        const svcId = serviceIdRef.current;
+        if (!svcId) return { svcId, rows: [] };
+        const { data, error } = await scopedFrom(TABLES.SERVICE_TABLES)
+          .select("service_id, table_id, data, updated_at").eq("service_id", svcId).order("table_id");
+        if (error) throw error;
+        return { svcId, rows: data || [] };
+      },
+      apply: ({ svcId, rows }) => {
+        if (!isMounted || sandboxRef.current || getWorkspaceId() !== workspaceId
+          || String(svcId ?? "") !== String(serviceIdRef.current ?? "")) return false;
+        adoptRemoteTables(rows);
+        setSyncStatus("live");
+        boardLoadedForRef.current = boardScopeKey();
+        setRemoteBoardLoaded(true); setBoardSyncTick(t => t + 1);
+      },
+      onError: error => { setSyncStatus("sync-error"); noteSyncError("board load (fallback)", error); },
+    });
+    fallbackBoardReloadRef.current = query.refresh;
     return () => {
-      isMounted = false;
-      fallbackBoardReloadRef.current = null;
-      clearInterval(pollInterval);
-      document.removeEventListener("visibilitychange", refetchOnWake);
-      window.removeEventListener("online", refetchOnWake);
+      isMounted = false; query.dispose(); fallbackBoardReloadRef.current = null;
     };
     // serviceId is a dep: adopting a service (boot, join, start) re-runs the
     // one-shot load so the new namespace's rows paint without waiting for a
@@ -4652,11 +4500,13 @@ export default function App() {
             setReservationsLoaded(true);
           },
           onWines: (rows) => {
+            if (catalogueWrites.current.has("wines")) return false;
             if (cancelled || (!rows.length && !powerSyncStatus?.hasSynced)) return;
             setWines(rows);
             writeLocalWines(rows);
           },
           onBeverages: (data) => {
+            if (catalogueWrites.current.has("beverages")) return false;
             if (cancelled || (!data.length && !powerSyncStatus?.hasSynced)) return;
             const c = pickBeveragesForCategory(data, "cocktail");
             const s = pickBeveragesForCategory(data, "spirit");
@@ -4675,8 +4525,8 @@ export default function App() {
             const courses = rows.map(supabaseRowToCourse);
             writeLocalMenuCourses(courses);
             // Never clobber an admin draft in progress (see menuCoursesDirtyRef).
-            if (menuCoursesDirtyRef.current) return;
-            setMenuCourses(courses);
+            if (menuCoursesDirtyRef.current) return false;
+            setMenuCourses(previous => JSON.stringify(previous) === JSON.stringify(courses) ? previous : courses);
           },
           onServices: (rows) => {
             // Shared service lifecycle: a service started/ended on another
@@ -4684,22 +4534,11 @@ export default function App() {
             if (cancelled) return;
             adoptServiceRowsRef.current?.(rows);
           },
-          onLiveSettings: (rows) => {
-            if (cancelled) return;
-            for (const row of rows) {
-              if (row.id === "kitchen_ticket_order") {
-                const ids = row.state?.ids;
-                if (Array.isArray(ids)) setKitchenTicketOrder(ids.map(Number).filter(Number.isFinite));
-              } else if (row.id === floorStatusKeyFor(serviceIdRef.current)) {
-                adoptFloorStatusRef.current?.(row.state, row.updated_at);
-              } else if (row.id === FLOOR_MAPS_KEY) {
-                adoptFloorMapsRef.current?.(row.state, row.updated_at);
-              } else if (row.id === RESTAURANT_CONFIG_KEY) {
-                adoptRestaurantConfiguration(row.state);
-              }
-            }
-          },
+          onArchiveChanged: () => {},
+          onLiveSettings: () => {}, // settings consumers share the watch invalidation
+
         }, range, {
+          workspaceId,
           getServiceId: () => serviceIdRef.current,
           onError: reportWatchFailure,
           onReady: () => {
@@ -4728,84 +4567,43 @@ export default function App() {
   // lists right after a website scrape. Without the explicit post-sync refresh
   // the synced cocktails only appeared whenever an update happened to land, so
   // a sync could report "N cocktails" yet leave the UI showing the old list.
-  const loadBeverages = useCallback(async () => {
-    if (!supabase || !getWorkspaceId()) return;
-    try {
-      const data = await withRetry(async () => {
-        const { data, error } = await scopedFrom(TABLES.BEVERAGES)
-          .select("id, category, name, notes, position, source")
-          .order("position", { ascending: true });
-        if (error) throw error;
-        return data || [];
-      });
-      const c = pickBeveragesForCategory(data, "cocktail");
-      const s = pickBeveragesForCategory(data, "spirit");
-      const b = pickBeveragesForCategory(data, "beer");
-      const tea = pickBeveragesForCategory(data, "tea");
-      const cof = pickBeveragesForCategory(data, "coffee");
-      setCocktails(c);
-      setSpirits(s);
-      setBeers(b);
-      setTeas(tea);
-      setCoffees(cof);
-      writeLocalBeverages({ cocktails: c, spirits: s, beers: b, teas: tea, coffees: cof });
-    } catch (e) {
-      // Keep the cached beverages already on screen rather than blanking them.
-      console.warn("Beverages load failed — keeping cached list:", e);
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const fallbackReadsEnabled = !!supabase && !!workspaceId && psResolved && !sqlitePrimary;
+  useLiveQuery("beverages", async () => {
+    const ws = getWorkspaceId();
+    const data = await readAllRows(() => scopedFrom(TABLES.BEVERAGES, ws)
+      .select("id, category, name, notes, position, source").order("position").order("id"));
+    return data || [];
+  }, data => {
+    if (catalogueWrites.current.has("beverages")) return false;
+    const c = pickBeveragesForCategory(data, "cocktail");
+    const s = pickBeveragesForCategory(data, "spirit");
+    const b = pickBeveragesForCategory(data, "beer");
+    const tea = pickBeveragesForCategory(data, "tea");
+    const cof = pickBeveragesForCategory(data, "coffee");
+    setCocktails(c); setSpirits(s); setBeers(b); setTeas(tea); setCoffees(cof);
+    writeLocalBeverages({ cocktails: c, spirits: s, beers: b, teas: tea, coffees: cof });
+  }, { enabled: fallbackReadsEnabled, tables: ["beverages"] });
+  const loadBeverages = useCallback(() => invalidateLiveData("beverages"), []);
 
-  useEffect(() => {
-    if (!supabase || !workspaceId) return;
-    // Instant paint from this workspace's cache (covers a workspace that
-    // resolves asynchronously after mount).
-    const cached = readLocalBeverages();
-    if (cached) {
-      if (Array.isArray(cached.cocktails)) setCocktails(cached.cocktails);
-      if (Array.isArray(cached.spirits))   setSpirits(cached.spirits);
-      if (Array.isArray(cached.beers))     setBeers(cached.beers);
-      if (Array.isArray(cached.teas))      setTeas(cached.teas);
-      if (Array.isArray(cached.coffees))   setCoffees(cached.coffees);
-    }
-    if (!psResolved || sqlitePrimary) return; // primary: the watches own the list
-    loadBeverages();
-  }, [loadBeverages, workspaceId, psResolved, sqlitePrimary]);
+  useLiveQuery("wines", async () => {
+    const ws = getWorkspaceId();
+    const data = await readAllRows(() => scopedFrom(TABLES.WINES, ws)
+      .select("key, name, wine_name, producer, vintage, region, country, by_glass, source").order("name").order("key"));
+    return (data || []).map(r => ({
+      id: r.key, name: r.wine_name || r.name,
+      producer: r.producer || "", vintage: r.vintage || "",
+      region: r.region || "", country: r.country || "",
+      byGlass: r.by_glass ?? false, source: r.source || "sync",
+    }));
+  }, rows => {
+    if (catalogueWrites.current.has("wines")) return false;
+    setWines(rows); writeLocalWines(rows);
+  },
+  { enabled: fallbackReadsEnabled, tables: ["wines"] });
+  const loadWines = useCallback(() => invalidateLiveData("wines"), []);
 
-  // ── Wines: fallback direct-Supabase loader ───────────────────────────────────
-  const loadWines = useCallback(async () => {
-    if (!supabase || !getWorkspaceId()) return;
-    try {
-      const data = await withRetry(async () => {
-        const { data, error } = await scopedFrom(TABLES.WINES)
-          .select("key, name, wine_name, producer, vintage, region, country, by_glass, source")
-          .order("name", { ascending: true });
-        if (error) throw error;
-        return data || [];
-      });
-      const mapped = data.map(r => ({
-        id: r.key, name: r.wine_name || r.name,
-        producer: r.producer || "", vintage: r.vintage || "",
-        region: r.region || "", country: r.country || "",
-        byGlass: r.by_glass ?? false,
-        source: r.source || "sync",
-      }));
-      setWines(mapped);
-      writeLocalWines(mapped);
-    } catch (e) {
-      // Keep the cached wines already on screen rather than blanking them.
-      console.warn("Wines load failed — keeping cached list:", e);
-    }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!supabase || !workspaceId) return;
-    // Instant paint from this workspace's cache (covers a workspace that
-    // resolves asynchronously after mount).
-    const cachedWines = readLocalWines();
-    if (cachedWines && cachedWines.length) setWines(cachedWines);
-    if (!psResolved || sqlitePrimary) return; // primary: the watches own the list
-    loadWines();
-  }, [loadWines, workspaceId, psResolved, sqlitePrimary]);
+  useLiveQuery("services", () => fetchServicesStore(20), rows => adoptServiceRowsRef.current?.(rows),
+    { enabled: fallbackReadsEnabled, tables: ["services"] });
 
   // ── Service date + reservations ──────────────────────────────────────────────
   // The cached planner paints instantly; the store refresh (SQLite watch when
@@ -4870,27 +4668,25 @@ export default function App() {
     // catch-up re-runs it as the authoritative read — a FULL REPLACE, so
     // rows deleted while the socket was dead disappear here too (a merge
     // would resurrect them).
+    let query;
     if (!sqlitePrimary) {
-      const loadPlanner = () => {
-        const past   = new Date(); past.setDate(past.getDate() - 7);
-        const future = new Date(); future.setDate(future.getDate() + 30);
-        withRetry(async () => {
-          const { data, error } = await scopedFrom(TABLES.RESERVATIONS).select("*")
-            .gte("date", toLocalDateISO(past))
-            .lte("date", toLocalDateISO(future))
-            .order("date").order("created_at");
-          if (error) throw error;
+      query = registerLiveQuery({ key: "reservations", scope: workspaceId, tables: ["reservations"],
+        read: async () => {
+          const past = new Date(); past.setDate(past.getDate() - 7);
+          const future = new Date(); future.setDate(future.getDate() + 30);
+          const data = await readAllRows(() => scopedFrom(TABLES.RESERVATIONS, workspaceId).select("*")
+            .gte("date", toLocalDateISO(past)).lte("date", toLocalDateISO(future))
+            .order("date").order("created_at").order("id"));
           return data || [];
-        })
-          .then(data => { if (mounted && !sandboxRef.current) setReservations(data); })
-          .catch(e => { console.warn("Reservations load failed — keeping cached list:", e); })
-          .finally(() => { if (mounted) setReservationsLoaded(true); });
-      };
-      reloadReservationsRef.current = loadPlanner;
-      loadPlanner();
+        },
+        apply: data => {
+          if (!mounted || sandboxRef.current || getWorkspaceId() !== workspaceId) return false;
+          setReservations(data); setReservationsLoaded(true);
+        },
+      });
+      reloadReservationsRef.current = query.refresh;
     }
-
-    return () => { mounted = false; reloadReservationsRef.current = null; };
+    return () => { mounted = false; query?.dispose(); reloadReservationsRef.current = null; };
   }, [workspaceId, psResolved, sqlitePrimary]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep the reservations cache in step with live state (initial load, realtime
@@ -4929,34 +4725,13 @@ export default function App() {
   }, [supabase, serviceId, serviceDate, serviceDateChosenOn, mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Menu courses: cached device copy paints instantly; the store refreshes ──
-  useEffect(() => {
-    let mounted = true;
-
-    // Instant paint from this workspace's cache (covers the case where the
-    // workspace resolves asynchronously after mount, so the init-time hydration
-    // read the wrong/empty namespace).
-    const cached = readLocalMenuCourses();
-    if (cached && cached.length) setMenuCourses(cached);
-
-    const loadCourses = async () => {
-      try {
-        const courses = await withRetry(() => fetchMenuCourses());
-        if (!mounted || !courses) return;
-        writeLocalMenuCourses(courses); // keep the device cache warm for next launch
-        // Never clobber an admin draft in progress (see menuCoursesDirtyRef).
-        if (menuCoursesDirtyRef.current) return;
-        setMenuCourses(courses);
-      } catch (error) {
-        // Keep the cached courses on screen rather than blanking the menu/board.
-        console.warn("Menu courses fetch failed — keeping cached list:", error);
-      }
-    };
-
-    loadMenuCoursesRef.current = loadCourses;
-    if (psResolved && !sqlitePrimary) loadCourses(); // primary: the watches own the list
-
-    return () => { mounted = false; };
-  }, [workspaceId, psResolved, sqlitePrimary]); // eslint-disable-line react-hooks/exhaustive-deps
+  useLiveQuery("menu_courses", () => fetchMenuCourses(), courses => {
+    if (!courses) throw new Error("Menu courses could not be loaded");
+    writeLocalMenuCourses(courses);
+    if (menuCoursesDirtyRef.current) return false;
+    setMenuCourses(previous => JSON.stringify(previous) === JSON.stringify(courses) ? previous : courses);
+  }, { enabled: fallbackReadsEnabled, tables: ["menu_courses"] });
+  loadMenuCoursesRef.current = () => invalidateLiveData("menu_courses");
 
   // ── Fallback realtime safety net (Supabase channels) ────────────────────────
   // The direct-Supabase fallback serves a PowerSync outage or a deployment
@@ -5034,15 +4809,7 @@ export default function App() {
     channelName: `milka-services-${workspaceId}`,
     filter: wsFilter,
     table: TABLES.SERVICES,
-    onChange: () => {
-      fetchServicesStore(20).then(rows => adoptServiceRowsRef.current?.(rows)).catch(() => {});
-    },
-    // Reconnect catch-up: a service started/ended while this socket was dead
-    // must apply on rejoin (the old display waking into an already-ended
-    // service, most of all).
-    onResubscribe: () => {
-      fetchServicesStore(20).then(rows => adoptServiceRowsRef.current?.(rows)).catch(() => {});
-    },
+    onChange: () => {},
     enabled: fallbackRealtime,
   });
 
@@ -5054,38 +4821,7 @@ export default function App() {
     channelName: `milka-settings-live-${workspaceId}`,
     filter: wsFilter,
     table: TABLES.SERVICE_SETTINGS,
-    onChange: (payload) => {
-      const id = payload.new?.id;
-      if (id === "kitchen_ticket_order") {
-        const ids = payload.new?.state?.ids;
-        if (Array.isArray(ids)) setKitchenTicketOrder(ids.map(Number).filter(Number.isFinite));
-      } else if (id && id === floorStatusKeyFor(serviceIdRef.current)) {
-        adoptFloorStatusRef.current?.(payload.new?.state, payload.new?.updated_at);
-      } else if (id === FLOOR_MAPS_KEY) {
-        adoptFloorMapsRef.current?.(payload.new?.state, payload.new?.updated_at);
-      } else if (id === RESTAURANT_CONFIG_KEY) {
-        adoptRestaurantConfiguration(payload.new?.state);
-      }
-    },
-    // Reconnect catch-up: re-read the owned live keys.
-    onResubscribe: () => {
-      readStateKey("kitchen_ticket_order").then(state => {
-        const ids = state?.ids;
-        if (Array.isArray(ids)) setKitchenTicketOrder(ids.map(Number).filter(Number.isFinite));
-      }).catch(() => {});
-      const fsKey = floorStatusKeyFor(serviceIdRef.current);
-      if (fsKey) {
-        readStateKey(fsKey).then(state => {
-          adoptFloorStatusRef.current?.(state, new Date().toISOString());
-        }).catch(() => {});
-      }
-      readStateKey(FLOOR_MAPS_KEY).then(state => {
-        adoptFloorMapsRef.current?.(state, new Date().toISOString());
-      }).catch(() => {});
-      readStateKey(RESTAURANT_CONFIG_KEY).then(state => {
-        adoptRestaurantConfiguration(state);
-      }).catch(() => {});
-    },
+    onChange: () => {}, // useRealtimeTable invalidates every registered settings reader
     enabled: fallbackRealtime,
   });
 
@@ -5119,28 +4855,26 @@ export default function App() {
     enabled: fallbackRealtime,
   });
 
+  useRealtimeTable({
+    supabase, channelName: `milka-archive-${workspaceId}`, filter: wsFilter,
+    table: TABLES.SERVICE_ARCHIVE, onChange: () => {}, enabled: fallbackRealtime,
+  });
+
   // ── Historical fire cadence (archive-seeded) ───────────────────────────────
-  // Loaded once per session when a live mode starts: recent archives yield
+  // Refreshed while a live mode is open: recent archives yield
   // per-menu-type course rhythms so estimateNextFire() has a "history" basis
   // before tonight's room has produced any gaps of its own.
   const [historyGapsByMenu, setHistoryGapsByMenu] = useState(null);
-  useEffect(() => {
-    if (!supabase || !workspaceId || historyGapsByMenu) return;
-    if (mode !== "service" && mode !== "display" && mode !== "kitchen") return;
-    let cancelled = false;
-    // The archive seam merges ended services with legacy snapshots, so the
-    // cadence history keeps learning from every filed night.
-    import("./lib/archiveStore.js")
-      .then(({ fetchArchive }) => fetchArchive())
-      .then(({ active }) => {
-        if (cancelled) return;
-        setHistoryGapsByMenu(historyGapsByMenuType((active || []).slice(0, 10), {
-          menuCourses: menuCoursesRef.current || [],
-        }));
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [mode, workspaceId, historyGapsByMenu]); // eslint-disable-line react-hooks/exhaustive-deps
+  useLiveQuery("service-history", async () => {
+    const { fetchArchive } = await import("./lib/archiveStore.js");
+    return fetchArchive();
+  }, ({ active }) => {
+    setHistoryGapsByMenu(historyGapsByMenuType((active || []).slice(0, 10), {
+      menuCourses: menuCoursesRef.current || [],
+    }));
+  }, { enabled: !!supabase && ["service", "display", "kitchen"].includes(mode),
+    tables: ["service_archive", "services", "service_tables", "menu_courses"],
+  });
 
   // Only count primary tables in groups (secondaries have same guest count stamped on them)
   const isPrimary = t => !t.tableGroup?.length || t.id === Math.min(...t.tableGroup);
@@ -5148,8 +4882,12 @@ export default function App() {
   const seated   = active.reduce((a, t) => a + t.guests, 0);
   const reserved = tables.filter(t => !t.active && (t.resName || t.resTime)).filter(isPrimary).length;
 
-  const syncLabel = syncStatus === "live" ? "SYNC" : syncStatus === "local-only" ? "LOCAL" : syncStatus === "connecting" ? "LINK" : "ERROR";
-  const syncLive  = syncStatus === "live";
+  const liveDataStatus = useLiveDataStatus(workspaceId);
+  const displayedSyncStatus = liveDataStatus.errors.length ? "sync-error"
+    : syncStatus === "live" && (liveDataStatus.loading || powerSyncStatus?.uploading
+      || powerSyncStatus?.downloading || (sqlitePrimary && !powerSyncStatus?.hasSynced)) ? "connecting" : syncStatus;
+  const syncLabel = displayedSyncStatus === "live" ? "SYNC" : displayedSyncStatus === "local-only" ? "LOCAL" : displayedSyncStatus === "connecting" ? "LINK" : "ERROR";
+  const syncLive  = displayedSyncStatus === "live";
 
   const hProps = {
     appName: effectiveAppName,
@@ -5417,7 +5155,7 @@ export default function App() {
       >
         <DeviceHealthCard
           powerSyncStatus={powerSyncStatus}
-          syncStatus={syncStatus}
+          syncStatus={displayedSyncStatus}
           serviceActive={Boolean(serviceDate)}
           diagnostics={readClientDiagnostics()}
           buildId={typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "dev"}
@@ -5665,7 +5403,7 @@ export default function App() {
         onUpdateWines={saveWines}
         onSaveBeverages={saveBeverages}
         onSyncWines={canRunCatalogSync ? syncWines : undefined}
-        syncStatus={syncStatus}
+        syncStatus={displayedSyncStatus}
         powerSync={powerSyncStatus}
         sqlitePrimary={sqlitePrimary}
         lastSyncError={lastSyncError}
@@ -5688,7 +5426,7 @@ export default function App() {
         shortMenuTemplate={shortMenuTemplate}
         onUpdateShortMenuTemplate={setShortMenuTemplate}
         wineSyncConfig={wineSyncConfig}
-        onUpdateWineSyncConfig={setWineSyncConfig}
+        onUpdateWineSyncConfig={next => { wineSyncDirty.current = true; setWineSyncConfig(next); }}
         onSaveWineSyncConfig={saveWineSyncConfig}
         quickAccessItems={quickAccessItems}
         onUpdateQuickAccess={updateQuickAccess}

@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useSyncedDraft } from "../../hooks/useSyncedDraft.js";
+import DraftConflict from "./DraftConflict.jsx";
+import { useState } from "react";
 import { sanitizeRestaurantConfig } from "../../config/restaurantConfig.js";
 import { tokens } from "../../styles/tokens.js";
 import { baseInput } from "../../styles/mixins.js";
@@ -14,15 +16,11 @@ const labelStyle = {
 };
 
 export default function RestaurantConfigPanel({ config, onSave }) {
-  const [draft, setDraft] = useState(() => sanitizeRestaurantConfig(config));
+  const [draft, setDraft, draftConflict, reloadDraft] = useSyncedDraft(sanitizeRestaurantConfig(config));
   const [status, setStatus] = useState(null);
   const [message, setMessage] = useState("");
 
-  useEffect(() => {
-    setDraft(sanitizeRestaurantConfig(config));
-    setStatus(null);
-    setMessage("");
-  }, [config]);
+
 
   const updateTable = (index, patch) => {
     setDraft((previous) => ({
@@ -54,6 +52,7 @@ export default function RestaurantConfigPanel({ config, onSave }) {
   };
 
   const save = async () => {
+    if (draftConflict) return;
     setStatus("saving");
     setMessage("");
     const clean = sanitizeRestaurantConfig(draft, config);
@@ -70,6 +69,7 @@ export default function RestaurantConfigPanel({ config, onSave }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+      {draftConflict && <DraftConflict onReload={reloadDraft} />}
       <div>
         <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: 2, color: tokens.ink[0], textTransform: "uppercase", marginBottom: 8 }}>
           Restaurant setup
