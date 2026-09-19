@@ -1,3 +1,5 @@
+import { invalidateLiveData } from "./liveData.js";
+import { readAllRows } from "./readAllRows.js";
 // Shared archive store seam for the archive surfaces (ArchiveModal, admin
 // ArchivePanel, GuestMemory): reads and mutations go to the on-device SQLite
 // DB when it is primary (instant, works offline; uploads ride the connector
@@ -29,12 +31,15 @@ export async function fetchArchive() {
     scopedFrom(TABLES.SERVICES).select("*").eq("status", "ended").order("ended_at", { ascending: false }).limit(90),
   ]);
   if (active.error) throw active.error;
-  const services = ended.error ? [] : (ended.data || []);
+  if (trash.error) throw trash.error;
+  if (ended.error) throw ended.error;
+  const services = ended.data || [];
   let rowsByService = new Map();
   if (services.length > 0) {
-    const { data: tableRows } = await scopedFrom(TABLES.SERVICE_TABLES)
+    const ws = getWorkspaceId();
+    const tableRows = await readAllRows(() => scopedFrom(TABLES.SERVICE_TABLES, ws)
       .select("service_id, table_id, data, updated_at")
-      .in("service_id", services.map((row) => row.id));
+      .in("service_id", services.map((row) => row.id)).order("service_id").order("table_id"));
     rowsByService = new Map();
     for (const row of tableRows || []) {
       const key = String(row.service_id);
@@ -45,7 +50,7 @@ export async function fetchArchive() {
   return mergeArchiveEntries({
     serviceEntries: services.map((row) => archiveEntryFromService(row, rowsByService.get(String(row.id)) || [])),
     legacyActive: active.data || [],
-    legacyDeleted: trash.error ? [] : (trash.data || []),
+    legacyDeleted: trash.data || [],
   });
 }
 
@@ -55,6 +60,7 @@ const attempt = async (run) => {
   if (isSandbox()) return { ok: true };
   try {
     await run();
+    void invalidateLiveData("service_archive");
     return { ok: true };
   } catch (error) {
     return { ok: false, error };

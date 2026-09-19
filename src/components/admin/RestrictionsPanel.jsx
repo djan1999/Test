@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useSyncedDraft } from "../../hooks/useSyncedDraft.js";
+import DraftConflict from "./DraftConflict.jsx";
+import { useMemo, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { FONT, baseInp, saveBtn, dangerBtn, primaryBtn } from "./adminStyles.js";
 import { DEFAULT_RESTRICTIONS, RESTRICTION_GROUPS } from "../../constants/dietary.js";
@@ -32,16 +34,14 @@ function uniqueKey(base, taken) {
 }
 
 export default function RestrictionsPanel({ restrictions = [], onSave }) {
-  const [draft, setDraft] = useState(() => restrictions.map(r => ({ ...r })));
+  const [draft, setDraft, draftConflict, reloadDraft] = useSyncedDraft(restrictions.map(r => ({ ...r })));
   const [status, setStatus] = useState("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [newLabel, setNewLabel] = useState("");
   const [newEmoji, setNewEmoji] = useState("");
   const [newGroup, setNewGroup] = useState("dietary");
 
-  useEffect(() => {
-    setDraft(restrictions.map(r => ({ ...r })));
-  }, [restrictions]);
+
 
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(restrictions), [draft, restrictions]);
 
@@ -70,6 +70,7 @@ export default function RestrictionsPanel({ restrictions = [], onSave }) {
   // console, so nobody editing restrictions could say what went wrong. Report
   // the message, and never let a rejection strand the button on "SAVING…".
   const save = async () => {
+    if (draftConflict) return;
     setStatus("saving");
     setErrorMsg("");
     try {
@@ -103,6 +104,7 @@ export default function RestrictionsPanel({ restrictions = [], onSave }) {
 
   return (
     <div style={{ fontFamily: FONT }}>
+      {draftConflict && <DraftConflict onReload={reloadDraft} />}
       <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], background: tokens.ink.bg, padding: "10px 12px", marginBottom: 14, lineHeight: 1.5 }}>
         Add, rename, or remove the dietary restrictions staff can apply to reservations.
         Removing a restriction is allowed — existing reservations that still reference it will display the raw key on tickets.

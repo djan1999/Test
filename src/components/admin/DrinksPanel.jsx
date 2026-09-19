@@ -1,3 +1,4 @@
+import { useSyncedList } from "../../hooks/useSyncedList.js";
 import { useState, useRef, useCallback } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { FONT, baseInp, fieldLabel, primaryBtn } from "./adminStyles.js";
@@ -52,7 +53,7 @@ export default function DrinksPanel({
   const [glassOnly, setGlassOnly] = useState(false);
 
   // Local state for editing
-  const [localWines, setLocalWines] = useState(wines.map(w => ({ ...w })));
+  const [localWines, setLocalWines, conflictWines, resetWines] = useSyncedList(wines);
   const [newWine, setNewWine] = useState({ name: "", producer: "", vintage: "", region: "", byGlass: false });
   const addWine = () => {
     if (!newWine.name.trim()) return;
@@ -63,35 +64,37 @@ export default function DrinksPanel({
   const removeWine = id       => setLocalWines(l => l.filter(w => w.id !== id));
   const updWine    = (id,f,v) => setLocalWines(l => l.map(w => w.id === id ? { ...w, [f]: v } : w));
 
-  const [localCocktails, setLocalCocktails] = useState(cocktails.map(c => ({ ...c })));
+  const [localCocktails, setLocalCocktails, conflictCocktails, resetCocktails] = useSyncedList(cocktails);
   const [newCocktail, setNewCocktail] = useState({ name: "", notes: "" });
   const nextCocktailId = useRef(Math.max(...cocktails.map(c => c.id), 0) + 1);
 
-  const [localSpirits, setLocalSpirits] = useState(spirits.map(s => ({ ...s })));
+  const [localSpirits, setLocalSpirits, conflictSpirits, resetSpirits] = useSyncedList(spirits);
   const [newSpirit, setNewSpirit] = useState({ name: "", notes: "" });
   const nextSpiritId = useRef(Math.max(...spirits.map(s => s.id), 0) + 1);
 
-  const [localBeers, setLocalBeers] = useState(beers.map(b => ({ ...b })));
+  const [localBeers, setLocalBeers, conflictBeers, resetBeers] = useSyncedList(beers);
   const [newBeer, setNewBeer] = useState({ name: "", notes: "" });
   const nextBeerId = useRef(Math.max(...beers.map(b => b.id), 0) + 1);
 
   // Tea and coffee are ordinary catalogue categories, edited exactly like the
   // three above. They exist so a digestivo button can point at a real product
   // rather than guess one from its label.
-  const [localTeas, setLocalTeas] = useState(teas.map(x => ({ ...x })));
+  const [localTeas, setLocalTeas, conflictTeas, resetTeas] = useSyncedList(teas);
   const [newTea, setNewTea] = useState({ name: "", notes: "" });
   const nextTeaId = useRef(Math.max(...teas.map(x => x.id), 0) + 1);
 
-  const [localCoffees, setLocalCoffees] = useState(coffees.map(x => ({ ...x })));
+  const [localCoffees, setLocalCoffees, conflictCoffees, resetCoffees] = useSyncedList(coffees);
   const [newCoffee, setNewCoffee] = useState({ name: "", notes: "" });
   const nextCoffeeId = useRef(Math.max(...coffees.map(x => x.id), 0) + 1);
 
+  const hasConflict = conflictWines || conflictCocktails || conflictSpirits || conflictBeers || conflictTeas || conflictCoffees;
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const handleSaveDrinks = useCallback(async () => {
     if (savingRef.current) return;
+    if (hasConflict) { setSaveError("Another device changed an item you are editing. Review your draft, then reload the latest catalogue before saving."); return; }
     savingRef.current = true;
     setSaving(true);
     setSaved(false);
@@ -118,7 +121,7 @@ export default function DrinksPanel({
       savingRef.current = false;
       setSaving(false);
     }
-  }, [localWines, localCocktails, localSpirits, localBeers, localTeas, localCoffees,
+  }, [hasConflict, localWines, localCocktails, localSpirits, localBeers, localTeas, localCoffees,
       onUpdateWines, onSaveBeverages]);
 
   const tabBtn = t => ({
@@ -132,6 +135,13 @@ export default function DrinksPanel({
 
   return (
     <div>
+      {hasConflict && <div role="alert" style={{ marginBottom: 12 }}>
+        Another device changed an item in your draft. Saving is paused to protect both edits.
+        <button onClick={() => {
+          if (!window.confirm("Discard this drink draft and load the latest catalogue?")) return;
+          resetWines(); resetCocktails(); resetSpirits(); resetBeers(); resetTeas(); resetCoffees(); setSaveError("");
+        }}>Reload latest catalogue</button>
+      </div>}
       <div style={{ display: "flex", flexWrap: "wrap", marginBottom: 8 }}>
         {["wines", "cocktails", "spirits", "beers", "tea", "coffee"].map(t => (
           <button key={t} style={tabBtn(t)} onClick={() => setDrinkTab(t)}>{t.toUpperCase()}</button>

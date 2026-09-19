@@ -1,3 +1,5 @@
+import { useSyncedDraft } from "../../hooks/useSyncedDraft.js";
+import DraftConflict from "./DraftConflict.jsx";
 import { useEffect, useMemo, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { FONT, baseInp, saveBtn, dangerBtn, primaryBtn } from "./adminStyles.js";
@@ -11,14 +13,12 @@ export default function QuickNotesPanel({ menuCourses = [], quickNotes = {}, onS
     [menuCourses]
   );
 
-  const [draft, setDraft] = useState(() => normalize(quickNotes));
+  const [draft, setDraft, draftConflict, reloadDraft] = useSyncedDraft(normalize(quickNotes));
   const [activeCourseKey, setActiveCourseKey] = useState(() => courseKeyOf(courses[0] || {}));
   const [newPreset, setNewPreset] = useState("");
   const [status, setStatus] = useState("idle");
 
-  useEffect(() => {
-    setDraft(normalize(quickNotes));
-  }, [quickNotes]);
+
 
   useEffect(() => {
     if (!activeCourseKey && courses.length > 0) {
@@ -57,6 +57,7 @@ export default function QuickNotesPanel({ menuCourses = [], quickNotes = {}, onS
   };
 
   const save = async () => {
+    if (draftConflict) return;
     setStatus("saving");
     const clean = {};
     Object.entries(draft).forEach(([k, list]) => {
@@ -74,6 +75,7 @@ export default function QuickNotesPanel({ menuCourses = [], quickNotes = {}, onS
 
   return (
     <div style={{ fontFamily: FONT }}>
+      {draftConflict && <DraftConflict onReload={reloadDraft} />}
       <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], background: tokens.ink.bg, padding: "10px 12px", marginBottom: 14, lineHeight: 1.5 }}>
         Pick a course on the left, then add the notes you write most often
         (e.g. "no croutons", "extra sauce"). Staff can apply them as chips on

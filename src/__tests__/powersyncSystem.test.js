@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
 // powersync/system.js account-switch guard: one on-device DB file serves
 // whoever is logged in, so connecting as a DIFFERENT Supabase user than the
@@ -34,10 +34,16 @@ vi.mock("../lib/supabaseClient.js", () => ({
 }));
 
 // Fresh module (and its _db/_connected singletons) per test.
+const cleanups = [];
 const loadSystem = async () => {
   vi.resetModules();
-  return import("../powersync/system.js");
+  const system = await import("../powersync/system.js");
+  return { ...system, connect: async (...args) => {
+    const cleanup = await system.connect(...args); cleanups.push(cleanup); return cleanup;
+  } };
 };
+
+afterEach(async () => { for (const cleanup of cleanups.splice(0)) await cleanup(); vi.useRealTimers(); });
 
 beforeEach(() => {
   h.userId = "user-a";
@@ -78,5 +84,27 @@ describe("powersync/system — account-switch clears the on-device DB", () => {
     await clearLocalAndResync();
     expect(h.clears).toBe(1);
     expect(h.connects).toBe(2);
+  });
+});
+
+
+describe("non-destructive sync recovery", () => {
+  it("reconnects without clearing SQLite or queued writes and coalesces calls", async () => {
+    const { connect, reconnectPowerSync } = await loadSystem();
+    await connect();
+    await Promise.all([reconnectPowerSync(), reconnectPowerSync()]);
+    expect(h.connects).toBe(2); expect(h.clears).toBe(0);
+  });
+  it("recovers a disconnected stream on network return", async () => {
+    vi.useFakeTimers();
+    const { connect } = await loadSystem(); await connect();
+    window.dispatchEvent(new Event("online")); await vi.advanceTimersByTimeAsync(0);
+    expect(h.connects).toBe(2); expect(h.clears).toBe(0);
+  });
+  it("does not restart the stream after its owning session closes", async () => {
+    vi.useFakeTimers();
+    const { connect } = await loadSystem(); const cleanup = await connect();
+    await cleanup(); window.dispatchEvent(new Event("online")); await vi.advanceTimersByTimeAsync(60000);
+    expect(h.connects).toBe(1);
   });
 });

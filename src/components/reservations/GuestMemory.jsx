@@ -1,3 +1,4 @@
+import { useLiveQuery } from "../../hooks/useLiveQuery.js";
 import { useEffect, useMemo, useState } from "react";
 import { supabase, getWorkspaceId } from "../../lib/supabaseClient.js";
 import { fetchArchive } from "../../lib/archiveStore.js";
@@ -6,14 +7,9 @@ import { tokens } from "../../styles/tokens.js";
 
 const FONT = tokens.font;
 
-// Recent archives, fetched once and shared across form opens (5 min TTL) —
-// typing a guest name must not hammer Supabase with snapshot downloads.
-// Keyed by WORKSPACE: the cache outlives a workspace switch (module scope),
-// and serving one workspace's archived guests while typing in another leaked
-// guest names, restrictions and visit history across tenants on any account
-// that can see both (e.g. the real restaurant + Demo).
+// Cached paint is scoped to the restaurant. Mounted readers revalidate on
+// events and wake; typing a name only changes the local history filter.
 let archiveCache = { at: 0, ws: null, entries: null, promise: null };
-const CACHE_TTL_MS = 5 * 60 * 1000;
 const ARCHIVE_LIMIT = 20;
 
 const cachedEntries = () =>
@@ -24,27 +20,6 @@ async function fetchRecentArchives() {
   // service_archive snapshots on both storage paths, newest first.
   const { active } = await fetchArchive();
   return active.slice(0, ARCHIVE_LIMIT).map(({ date, label, state }) => ({ date, label, state }));
-}
-
-function loadRecentArchives() {
-  const ws = getWorkspaceId();
-  const sameWs = archiveCache.ws === ws;
-  const fresh = sameWs && archiveCache.entries && Date.now() - archiveCache.at < CACHE_TTL_MS;
-  if (fresh) return Promise.resolve(archiveCache.entries);
-  if (sameWs && archiveCache.promise) return archiveCache.promise;
-  const promise = fetchRecentArchives()
-    .then((rows) => {
-      archiveCache = { at: Date.now(), ws, entries: rows, promise: null };
-      return rows;
-    })
-    .catch(() => {
-      if (archiveCache.ws === ws) archiveCache.promise = null;
-      return cachedEntries() || [];
-    });
-  // A workspace switch invalidates the old entries immediately — never serve
-  // them while the new workspace's fetch is in flight.
-  archiveCache = { at: 0, ws, entries: sameWs ? archiveCache.entries : null, promise };
-  return promise;
 }
 
 /**
@@ -64,12 +39,10 @@ export default function GuestMemory({ name }) {
     return () => clearTimeout(id);
   }, [name]);
 
-  useEffect(() => {
-    if (!supabase || !query || entries) return undefined;
-    let cancelled = false;
-    loadRecentArchives().then(list => { if (!cancelled) setEntries(list); });
-    return () => { cancelled = true; };
-  }, [query, entries]);
+  useLiveQuery("guest-history", fetchRecentArchives, list => {
+    archiveCache = { ws: getWorkspaceId(), entries: list };
+    setEntries(list);
+  }, { enabled: !!supabase && !!query, tables: ["service_archive", "services", "service_tables"] });
 
   const visits = useMemo(
     () => (query && entries ? findGuestHistory(query, entries, { limit: 3 }) : []),

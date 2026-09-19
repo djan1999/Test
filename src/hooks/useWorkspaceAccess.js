@@ -1,3 +1,4 @@
+import { registerLiveQuery } from "../lib/liveData.js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   TABLES,
@@ -48,8 +49,11 @@ export function useWorkspaceAccess({ onWorkspaceApply } = {}) {
   const [workspaces, setWorkspaces] = useState([]);
   const [workspacesResolved, setWorkspacesResolved] = useState(false);
 
+  const appliedWorkspace = useRef(undefined);
   const applyWorkspace = useCallback((id) => {
     const nextId = id || null;
+    if (appliedWorkspace.current === nextId) return;
+    appliedWorkspace.current = nextId;
     setScopedWorkspaceId(nextId);
     setWorkspaceId(nextId);
     onWorkspaceApplyRef.current?.(nextId);
@@ -127,8 +131,9 @@ export function useWorkspaceAccess({ onWorkspaceApply } = {}) {
     }
     let active = true;
     setWorkspacesResolved(false);
-    (async () => {
-      try {
+    const query = registerLiveQuery({ key: "workspace-access", scope: `user:${session.user.id}`,
+      tables: ["workspaces", WORKSPACE_MEMBERS_TABLE],
+      read: async () => {
         const [workspaceResult, membershipResult] = await Promise.all([
           withRetry(async () => {
             const result = await supabase.from("workspaces").select("id, name, kind, slug")
@@ -147,6 +152,9 @@ export function useWorkspaceAccess({ onWorkspaceApply } = {}) {
             return result;
           }),
         ]);
+        return { workspaceResult, membershipResult };
+      },
+      apply: ({ workspaceResult, membershipResult }) => {
         if (!active) return;
         const roleByWorkspace = new Map(
           (membershipResult.data || []).map((row) => [row.workspace_id, normalizeWorkspaceRole(row.role)]),
@@ -160,13 +168,11 @@ export function useWorkspaceAccess({ onWorkspaceApply } = {}) {
         if (persisted && list.some((workspace) => workspace.id === persisted)) applyWorkspace(persisted);
         else if (list.length === 1) applyWorkspace(list[0].id);
         else applyWorkspace(null);
-      } catch (error) {
-        if (active) console.warn("Workspace resolution failed:", error);
-      } finally {
-        if (active) setWorkspacesResolved(true);
-      }
-    })();
-    return () => { active = false; };
+        setWorkspacesResolved(true);
+      },
+      onError: error => { console.warn("Workspace resolution failed:", error); setWorkspacesResolved(true); },
+    });
+    return () => { active = false; query.dispose(); };
   }, [session?.user?.id, applyWorkspace]);
 
   const refreshOwnMembership = useCallback(async () => {

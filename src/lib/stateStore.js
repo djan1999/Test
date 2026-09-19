@@ -1,3 +1,4 @@
+import { readAllRows } from "./readAllRows.js";
 // Shared service_settings key/value store seam: one read + one write helper
 // that pick the on-device SQLite DB when it is primary (see
 // powersync/primary.js) and fall back to a direct Supabase call otherwise.
@@ -12,6 +13,7 @@ import { isSandbox } from "./sandbox.js";
 import { saveServiceSettingWithCas } from "./serviceSettingCas.js";
 import { isMergeableSettingKey } from "../utils/foldSettingState.js";
 import { recordClientDiagnostic } from "./clientDiagnostics.js";
+import { invalidateLiveData } from "./liveData.js";
 
 // → the state object, or null when the row doesn't exist. Throws on real
 // read failures (callers that seed defaults on "empty" rely on the
@@ -139,6 +141,7 @@ async function flushStateKey(id, workspaceId = getWorkspaceId()) {
       const saved = await writeStateKeyOnce(id, value.state, value.ancestor, workspaceId);
       // Only clear if nothing newer arrived while this write was in flight.
       if (q.latest === value) { q.latest = undefined; q.attempts = 0; q.retainedAt = null; }
+      invalidateLiveData("service_settings", workspaceId);
       return { ok: true, ...saved };
     } catch (error) {
       console.error(`Settings save failed (${id}):`, error);
@@ -168,6 +171,7 @@ export async function saveStateKey(id, state, { ancestor = null } = {}) {
   // optimistic one would make the three-way fold mistake the first tap for
   // already-saved data and drop it after a failed attempt.
   q.latest = { state, ancestor: q.latest?.ancestor ?? ancestor };
+  invalidateLiveData("service_settings", workspaceId);
   q.retainedAt = Date.now(); // fresh value → fresh replay-age budget
   // A newer value supersedes any scheduled retry of the older one.
   if (q.retryTimer) { clearTimeout(q.retryTimer); q.retryTimer = null; }
@@ -222,8 +226,7 @@ export async function readStatePrefix(prefix) {
     const { readSettingsPrefix } = await import("../powersync/reads.js");
     return readSettingsPrefix(prefix);
   }
-  const { data, error } = await scopedFrom(TABLES.SERVICE_SETTINGS)
-    .select("id,state,updated_at").like("id", `${prefix}%`).order("id");
-  if (error) throw error;
-  return data || [];
+  const ws = getWorkspaceId();
+  return readAllRows(() => scopedFrom(TABLES.SERVICE_SETTINGS, ws)
+    .select("id,state,updated_at").like("id", `${prefix}%`).order("id"));
 }

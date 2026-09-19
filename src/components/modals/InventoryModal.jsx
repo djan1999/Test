@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { TABLES, supabase, getWorkspaceId } from "../../lib/supabaseClient.js";
-import { readStateKey, readStatePrefix, saveStateKey } from "../../lib/stateStore.js";
-import { isSqlitePrimary } from "../../powersync/primary.js";
+import { useLiveQuery } from "../../hooks/useLiveQuery.js";
+import { useRef, useState } from "react";
+import { supabase } from "../../lib/supabaseClient.js";
+import { readStateKey, readStatePrefix, saveStateKey, pendingStateKeys } from "../../lib/stateStore.js";
 import { workspaceKey } from "../../utils/storage.js";
 import { COUNTRY_NAMES, stripCountryFromRegion, inferCountryFromRegion } from "../../constants/countries.js";
 import { tokens } from "../../styles/tokens.js";
@@ -38,7 +38,7 @@ export default function InventoryModal({ wines, onClose }) {
   const mySettingsId = `${INV_SETTINGS_PREFIX}${myId.current}`;
   const localCountsKey = workspaceKey(INV_LS_KEY);
   const stRef = useRef(null);
-  const saveTimer = useRef(null);
+  const inventoryHydrated = useRef(false);
   const [syncSt, setSyncSt] = useState("loading");
   const [search, setSearch] = useState("");
 
@@ -81,26 +81,23 @@ export default function InventoryModal({ wines, onClose }) {
   const flushToStore = async (state) => {
     // The local-SQLite path works offline (the write uploads later); only the
     // direct-Supabase fallback needs the network right now.
-    if (!supabase || (!isSqlitePrimary() && !navigator.onLine)) { setSyncSt("offline"); return; }
+    if (!supabase) { setSyncSt("offline"); return; }
     const mine = state?.d?.[myId.current] || { label: "This device", counts: {} };
     const { ok } = await saveStateKey(mySettingsId, mine);
     setSyncSt(ok ? "synced" : "error");
   };
 
   const applyUpdate = (updater) => {
-    setFullState((prev) => {
-      const prevMy = prev.d[myId.current]?.counts || {};
-      const nextMy = typeof updater === "function" ? updater(prevMy) : updater;
-      try { localStorage.setItem(localCountsKey, JSON.stringify(nextMy)); } catch {}
-      const next = { d: { ...prev.d, [myId.current]: { ...prev.d[myId.current], counts: nextMy } } };
-      stRef.current = next;
-      if (supabase) {
-        clearTimeout(saveTimer.current);
-        setSyncSt((st) => (st === "offline" ? "offline" : "saving"));
-        saveTimer.current = setTimeout(() => flushToStore(stRef.current), 1500);
-      }
-      return next;
-    });
+    const prev = stRef.current;
+    const prevMy = prev.d[myId.current]?.counts || {};
+    const nextMy = typeof updater === "function" ? updater(prevMy) : updater;
+    try { localStorage.setItem(localCountsKey, JSON.stringify(nextMy)); } catch {}
+    const next = { d: { ...prev.d, [myId.current]: { ...prev.d[myId.current], counts: nextMy } } };
+    stRef.current = next;
+    setFullState(next);
+    setSyncSt("saving");
+    // Queue immediately: closing the modal must not cancel somebody's count.
+    void flushToStore(next);
   };
 
   const inc = (id) => applyUpdate((c) => {
@@ -128,93 +125,32 @@ export default function InventoryModal({ wines, onClose }) {
     if (window.confirm("Clear YOUR counts on this device? Other devices are not affected.")) applyUpdate({});
   };
 
-  useEffect(() => {
-    if (!supabase) { setSyncSt(navigator.onLine ? "synced" : "offline"); return; }
-    Promise.all([
-      readStatePrefix(INV_SETTINGS_PREFIX).catch(() => []),
-      readStateKey(LEGACY_INV_SETTINGS_ID).catch(() => null),
-    ]).then(([deviceRows, legacyState]) => {
-        const remoteD = { ...(legacyState?.d || {}) };
-        for (const row of deviceRows) {
-          const did = String(row.id || "").slice(INV_SETTINGS_PREFIX.length);
-          if (did) remoteD[did] = row.state || {};
-        }
-        const myRemote = remoteD[myId.current];
-        const myLabel = myRemote?.label || `Device ${Object.keys(remoteD).length + 1}`;
-        const myLocalCounts = (() => { try { return JSON.parse(localStorage.getItem(localCountsKey) || "{}"); } catch { return {}; } })();
-        const baseCounts = myRemote?.counts || {};
-        const mergedMyCounts = { ...baseCounts };
-        Object.entries(myLocalCounts).forEach(([id, n]) => { if (n > 0) mergedMyCounts[id] = n; });
-        const fullD = { ...remoteD, [myId.current]: { label: myLabel, counts: mergedMyCounts } };
-        const next = { d: fullD };
-        stRef.current = next;
-        setFullState(next);
-        try { localStorage.setItem(localCountsKey, JSON.stringify(mergedMyCounts)); } catch {}
-        if (!myRemote?.label || Object.keys(myLocalCounts).length > 0) flushToStore(next);
-        setSyncSt(navigator.onLine ? "synced" : "offline");
-      });
-  }, []);
-
-  // Don't let a pending debounced save fire after the modal unmounts.
-  useEffect(() => () => clearTimeout(saveTimer.current), []);
-
-  useEffect(() => {
-    const goOnline = () => {
-      setSyncSt("saving");
-      clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(() => flushToStore(stRef.current), 500);
-    };
-    const goOffline = () => { clearTimeout(saveTimer.current); setSyncSt("offline"); };
-    window.addEventListener("online", goOnline);
-    window.addEventListener("offline", goOffline);
-    return () => {
-      window.removeEventListener("online", goOnline);
-      window.removeEventListener("offline", goOffline);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!supabase) return undefined;
-    let disposed = false;
-    let cleanup = () => {};
-    const reloadOthers = async () => {
-      const rows = await readStatePrefix(INV_SETTINGS_PREFIX).catch(() => []);
-      if (disposed) return;
-      const remote = {};
-      for (const row of rows) {
-        const did = String(row.id || "").slice(INV_SETTINGS_PREFIX.length);
-        if (did) remote[did] = row.state || {};
-      }
-      setFullState((prev) => ({ d: { ...remote, [myId.current]: prev.d[myId.current] } }));
-    };
-    if (isSqlitePrimary()) {
-      import("../../powersync/system.js").then(({ getPowerSync }) => {
-        if (disposed) return;
-        const controller = new AbortController();
-        getPowerSync().watch(
-          "SELECT count(*) AS n, max(updated_at) AS ts FROM service_settings WHERE workspace_id = ? AND id LIKE ?",
-          [getWorkspaceId(), `${getWorkspaceId()}|${INV_SETTINGS_PREFIX}%`],
-          { onResult: reloadOthers, onError: () => setSyncSt("error") },
-          { signal: controller.signal },
-        );
-        cleanup = () => controller.abort();
-      });
-    } else {
-      const ch = supabase.channel(`milka-inventory-${getWorkspaceId()}`)
-        .on("postgres_changes", {
-          event: "*",
-          schema: "public",
-          table: TABLES.SERVICE_SETTINGS,
-          filter: `workspace_id=eq.${getWorkspaceId()}`,
-        }, (payload) => {
-          const id = payload.new?.id || payload.old?.id || "";
-          if (String(id).startsWith(INV_SETTINGS_PREFIX)) reloadOthers();
-        })
-        .subscribe();
-      cleanup = () => supabase.removeChannel(ch);
+  useLiveQuery("inventory", () => Promise.all([
+    readStatePrefix(INV_SETTINGS_PREFIX), readStateKey(LEGACY_INV_SETTINGS_ID),
+  ]), ([deviceRows, legacyState]) => {
+    const remote = { ...(legacyState?.d || {}) };
+    for (const row of deviceRows) {
+      const did = String(row.id || "").slice(INV_SETTINGS_PREFIX.length);
+      if (did) remote[did] = row.state || {};
     }
-    return () => { disposed = true; cleanup(); };
-  }, []);
+    let mine = stRef.current.d[myId.current];
+    let recoverLocal = false;
+    if (!inventoryHydrated.current) {
+      const saved = remote[myId.current];
+      const local = localStorage.getItem(localCountsKey);
+      // A locally saved zero or cleared count is intentional too.
+      mine = { label: saved?.label || `Device ${Object.keys(remote).length + 1}`,
+        counts: local != null ? mine.counts : (saved?.counts || {}),
+      };
+      recoverLocal = local != null && JSON.stringify(mine.counts) !== JSON.stringify(saved?.counts || {});
+      inventoryHydrated.current = true;
+    }
+    const next = { d: { ...remote, [myId.current]: mine } };
+    stRef.current = next;
+    setFullState(next);
+    if (recoverLocal) void flushToStore(next);
+    else if (!pendingStateKeys().includes(mySettingsId)) setSyncSt(navigator.onLine ? "synced" : "offline");
+  }, { tables: ["service_settings"], onError: () => setSyncSt("error") });
 
   const q = search.trim().toLowerCase();
   const filtered = q

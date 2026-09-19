@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { invalidateLiveData } from "../lib/liveData.js";
 
 // Realtime table subscription that heals itself. A Supabase channel can quietly
 // die when the device sleeps, the tab is backgrounded, or the network blips —
@@ -62,7 +63,10 @@ export function useRealtimeTable({
       const mine = supabase
         .channel(channelName)
         .on("postgres_changes", binding, (payload) => {
-          if (!cancelled && mine === channel) onChangeRef.current?.(payload);
+          if (!cancelled && mine === channel) {
+            onChangeRef.current?.(payload);
+            invalidateLiveData(table);
+          }
         });
       channel = mine;
       mine.subscribe((status) => {
@@ -76,6 +80,8 @@ export function useRealtimeTable({
           // Any join after the first happened because the previous socket
           // died — reconcile what the dead socket missed.
           if (everSubscribed) onResubscribeRef.current?.();
+          // Also close the initial load → subscription gap.
+          invalidateLiveData(table);
           everSubscribed = true;
         } else if (
           status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED"

@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useLiveQuery } from "../../hooks/useLiveQuery.js";
+import { invalidateLiveData } from "../../lib/liveData.js";
+import { useState } from "react";
 import { fetchAuditLog } from "../../lib/auditStore.js";
 import { tokens } from "../../styles/tokens.js";
 import { primaryBtn, sectionHeader } from "./adminStyles.js";
@@ -23,19 +25,13 @@ export default function AuditLogPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError("");
-    try {
-      setEntries(await fetchAuditLog(200));
-    } catch (queryError) {
-      setError(queryError?.message || "Could not load the audit trail.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const load = () => invalidateLiveData("audit_log");
+  useLiveQuery("audit-log", () => fetchAuditLog(200), rows => {
+    setEntries(rows); setError(""); setLoading(false);
+  }, { tables: ["audit_log", "workspace_members", "service_settings", "menu_courses", "wines", "beverages"],
+    onError: error => { setError(error?.message || "Could not load the audit trail."); setLoading(false); },
+  });
 
-  useEffect(() => { load(); }, [load]);
 
   return (
     <section>
