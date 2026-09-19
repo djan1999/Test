@@ -6,6 +6,7 @@ import { FONT } from "./adminStyles.js";
 import { isUpdateReady, onUpdateReady, applyUpdate } from "../../lib/swUpdate.js";
 import { clearClientDiagnostics, readClientDiagnostics } from "../../lib/clientDiagnostics.js";
 import DeviceHealthCard from "../ui/DeviceHealthCard.jsx";
+import ConfirmDialog from "../ui/ConfirmDialog.jsx";
 
 // Baked in at build time (vite define) — "which version is this tablet
 // actually running" must be answerable from a phone screenshot.
@@ -45,6 +46,9 @@ export default function SystemPanel({
   const safeProfiles = Array.isArray(layoutProfiles) ? layoutProfiles : [];
   const safeWineSyncConfig = wineSyncConfig || { wineCountries: [], beveragePages: [] };
   const [debugOpen, setDebugOpen] = useState(false);
+  // DELETE LAYOUT drops a whole print layout — template, spacing and fonts —
+  // and persists straight away, so it is gated behind a confirm.
+  const [confirmDeleteLayout, setConfirmDeleteLayout] = useState(false);
   const [syncResult, setSyncResult] = useState(null);
   const [resyncState, setResyncState] = useState(null);
   const [refreshState, setRefreshState] = useState("");
@@ -691,7 +695,7 @@ export default function SystemPanel({
             </select>
             <button onClick={() => onCreateLayoutProfile?.()} style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: `1px solid ${tokens.charcoal.default}`, borderRadius: 0, cursor: "pointer", background: tokens.neutral[0], color: tokens.ink[0] }}>NEW BLANK LAYOUT</button>
             <button
-              onClick={() => activeProfile && onDeleteLayoutProfile?.(activeProfile.id)}
+              onClick={() => activeProfile && setConfirmDeleteLayout(true)}
               disabled={safeProfiles.length <= 1}
               style={{ fontFamily: FONT, fontSize: 9, letterSpacing: 1, padding: "6px 12px", border: `1px solid ${tokens.red.border}`, borderRadius: 0, cursor: safeProfiles.length <= 1 ? "not-allowed" : "pointer", background: tokens.neutral[0], color: tokens.red.text, opacity: safeProfiles.length <= 1 ? 0.6 : 1 }}
             >
@@ -783,6 +787,22 @@ export default function SystemPanel({
           </div>
         )}
       </div>
+
+      {confirmDeleteLayout && activeProfile && (
+        <ConfirmDialog
+          danger
+          label="[DELETE LAYOUT]"
+          confirmLabel="DELETE LAYOUT"
+          body={`Deleting "${activeProfile.name}" removes that print layout for good: its row template, `
+            + "the dishes placed in it, and its spacing and font settings all go with it."}
+          reassurance="Your courses and your other layouts are untouched. There is no undo for the deleted layout itself."
+          onCancel={() => setConfirmDeleteLayout(false)}
+          onConfirm={() => {
+            setConfirmDeleteLayout(false);
+            onDeleteLayoutProfile?.(activeProfile.id);
+          }}
+        />
+      )}
     </div>
   );
 }

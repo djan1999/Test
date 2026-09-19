@@ -39,6 +39,7 @@ import { supabase } from "../../lib/supabaseClient.js";
 import { saveStateKey } from "../../lib/stateStore.js";
 import { LayoutStylesPanel } from "./MenuTemplatePanels.jsx";
 import { PreviewDataPanel } from "./MenuTemplatePreviewParts.jsx";
+import ConfirmDialog from "../ui/ConfirmDialog.jsx";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -770,6 +771,10 @@ export default function MenuTemplateEditor({
   const [previewMenuType, setPreviewMenuType]   = useState("");
   // Which template is being edited: false = LONG (menuTemplate), true = SHORT (shortMenuTemplate).
   const [editingShort,    setEditingShort]      = useState(false);
+  // Set while the rebuild confirm is open. REBUILD loads a blank default over
+  // the saved template and auto-persists, so it is gated behind a confirm
+  // whenever there is work to lose.
+  const [confirmRebuild,  setConfirmRebuild]    = useState(false);
 
   // ── Menu title / thank-you note / team names — shared localStorage with the menu workspace ──
   const [menuTitle,    setMenuTitle]    = useState(() => readMenuTitle("en"));
@@ -1119,7 +1124,19 @@ export default function MenuTemplateEditor({
     ? activeRows.find(r => r.id === selectedCell.rowId)?.[selectedCell.side] ?? null
     : null;
 
-  const rebuild = () => {
+  // What a rebuild would destroy, counted off the template actually on screen.
+  // The numbers go in the confirm body: "23 rows" means nothing to an owner,
+  // "19 dishes you placed" is the thing they would have to re-pick by hand.
+  const filledCourseSlots = activeRows.reduce((total, row) => (
+    total
+    + (row?.left?.type === "course" && row.left.courseKey ? 1 : 0)
+    + (row?.right?.type === "course" && row.right.courseKey ? 1 : 0)
+  ), 0);
+  // Nothing on the canvas → nothing to lose → no confirm. This keeps the
+  // empty-state "Generate Default Template" button a single tap.
+  const rebuildIsDestructive = activeRows.length > 0;
+
+  const applyRebuild = () => {
     if (editingTicketLayout) {
       if (editingShort) {
         onUpdateShortTicketTemplate?.(buildDefaultTicketTemplate());
@@ -1138,6 +1155,30 @@ export default function MenuTemplateEditor({
     }
     setSelectedCell(null);
   };
+
+  const rebuild = () => {
+    if (rebuildIsDestructive) { setConfirmRebuild(true); return; }
+    applyRebuild();
+  };
+
+  const targetLabel = editingTicketLayout
+    ? (editingShort ? "short kitchen ticket" : "kitchen ticket")
+    : (editingShort ? "SHORT menu" : "LONG menu");
+  const rebuildConfirmBody = editingTicketLayout
+    ? `Resetting the ${targetLabel} layout replaces all ${activeRows.length} `
+      + `row${activeRows.length === 1 ? "" : "s"} with the default layout. Your block choices and `
+      + "field settings on this layout are discarded."
+    : `Resetting the ${targetLabel} replaces all ${activeRows.length} `
+      + `row${activeRows.length === 1 ? "" : "s"} with an EMPTY default layout — it does not fill `
+      + `the layout in from your courses. ${filledCourseSlots > 0
+          ? `The ${filledCourseSlots} dish${filledCourseSlots === 1 ? "" : "es"} you placed `
+            + `${filledCourseSlots === 1 ? "is" : "are"} cleared and must be picked again by hand, `
+            + "along with your"
+          : "Your"} spacing, fonts and per-block settings.`;
+  const rebuildConfirmReassurance = editingTicketLayout
+    ? "Only this ticket layout changes. Your courses and menu templates are untouched."
+    : `Your courses themselves are untouched, and the ${editingShort ? "Long" : "Short"} menu is `
+      + "left exactly as it is. This profile's saved layout is overwritten immediately.";
 
   const activeRow = activeRowId ? activeRows.find(r => r.id === activeRowId) : null;
 
@@ -1292,9 +1333,9 @@ export default function MenuTemplateEditor({
             title={editingTicketLayout
               ? "Reset ticket layout to default"
               : (editingShort
-                  ? "Load the default SHORT layout — section gaps and empty course slots to fill in (leaves the Long menu untouched)"
-                  : "Load the default LONG layout — all section gaps and empty course slots to fill in (leaves the Short menu untouched)")}
-          >↺ {editingTicketLayout ? "RESET TICKET LAYOUT" : (editingShort ? "REBUILD SHORT FROM COURSES" : "REBUILD LONG FROM COURSES")}</button>
+                  ? "Load the default SHORT layout — section gaps and EMPTY course slots you fill in by hand (leaves the Long menu untouched)"
+                  : "Load the default LONG layout — all section gaps and EMPTY course slots you fill in by hand (leaves the Short menu untouched)")}
+          >↺ {editingTicketLayout ? "RESET TICKET LAYOUT" : (editingShort ? "RESET SHORT TO BLANK LAYOUT" : "RESET LONG TO BLANK LAYOUT")}</button>
           )}
 
           {/* Spacing settings moved to the SPACING SETTINGS panel above the 3-panel area */}
@@ -1481,6 +1522,20 @@ export default function MenuTemplateEditor({
           menuCourses={menuCourses}
           blockMeta={editingTicketLayout ? KT_BLOCK_META : BLOCK_META}
           blockGroups={editingTicketLayout ? KT_BLOCK_GROUPS : BLOCK_GROUPS}
+        />
+      )}
+      {/* Rebuild guard. REBUILD reads like it fills the layout in from the
+          courses; it does the opposite — a blank scaffold with every dish
+          slot emptied, written straight through to the store. */}
+      {confirmRebuild && (
+        <ConfirmDialog
+          danger
+          label={editingTicketLayout ? "[RESET TICKET LAYOUT]" : "[RESET TO BLANK LAYOUT]"}
+          confirmLabel={editingTicketLayout ? "RESET LAYOUT" : "RESET TO BLANK"}
+          body={rebuildConfirmBody}
+          reassurance={rebuildConfirmReassurance}
+          onCancel={() => setConfirmRebuild(false)}
+          onConfirm={() => { setConfirmRebuild(false); applyRebuild(); }}
         />
       )}
       </div>{/* end three-panel */}

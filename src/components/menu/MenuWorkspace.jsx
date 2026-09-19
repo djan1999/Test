@@ -11,6 +11,7 @@ import { saveStateKey } from "../../lib/stateStore.js";
 import { BEV_TYPES } from "../../constants/beverageTypes.js";
 import { PAIRINGS } from "../../constants/pairings.js";
 import BeverageSearch from "../service/BeverageSearch.jsx";
+import ConfirmDialog from "../ui/ConfirmDialog.jsx";
 import { resolveAperitifFromQuickAccessOption } from "../../utils/quickAccessResolve.js";
 import { addOne, groupDrinks, removeAll, removeOne } from "../../utils/drinkQuantities.js";
 import { combineMenuPages } from "../../utils/printAllPages.js";
@@ -186,6 +187,7 @@ export default function MenuWorkspace({
   // seatOutputOverrides. Never persisted; wiped by CLEAR EDITS and consumed
   // (cleared for the seat) by printing that seat.
   const [seatEdits, setSeatEdits] = useState({});
+  const [confirmClearEdits, setConfirmClearEdits] = useState(false);
   const [openCourse, setOpenCourse] = useState(null);
   const [draft, setDraft] = useState({ name: "", sub: "", drinkName: "", drinkSub: "" });
   const [drinksOpen, setDrinksOpen] = useState(false);
@@ -391,6 +393,10 @@ export default function MenuWorkspace({
   const previewHtml = activeSeat ? htmlFor(activeSeat) : "";
 
   const hasEdits = Object.values(seatEdits).some((m) => Object.keys(m || {}).length > 0);
+  // CLEAR EDITS drops every one-time change on every seat at once, and the
+  // waiter has to re-enter each from memory — so it states the count first.
+  const editedSeatCount = Object.values(seatEdits)
+    .filter((m) => Object.keys(m || {}).length > 0).length;
 
   const saveEdit = (seatId, card) => {
     setSeatEdits((prev) => {
@@ -619,7 +625,7 @@ export default function MenuWorkspace({
                 border: `${rule.hairline} solid ${signal.warn}`, color: signal.warn,
                 background: neutral[0],
               }}>EDITED — ONE-TIME CHANGES</span>
-              <button onClick={() => { setSeatEdits({}); setOpenCourse(null); flash("ONE-TIME EDITS CLEARED"); }}
+              <button onClick={() => setConfirmClearEdits(true)}
                 style={button()}>CLEAR EDITS</button>
             </>
           )}
@@ -1183,6 +1189,25 @@ export default function MenuWorkspace({
             zIndex: 50,
           }}
         >{toast}</div>
+      )}
+
+      {confirmClearEdits && hasEdits && (
+        <ConfirmDialog
+          danger
+          label="[CLEAR EDITS]"
+          confirmLabel="CLEAR EDITS"
+          body={`Clearing drops every one-time change on ${editedSeatCount === 1
+            ? "the edited seat"
+            : `all ${editedSeatCount} edited seats`}: renamed dishes, swapped drinks and their subtitles all go back to the printed menu.`}
+          reassurance="Nothing already printed changes, and the menu itself is untouched. The edits themselves cannot be brought back."
+          onCancel={() => setConfirmClearEdits(false)}
+          onConfirm={() => {
+            setConfirmClearEdits(false);
+            setSeatEdits({});
+            setOpenCourse(null);
+            flash("ONE-TIME EDITS CLEARED");
+          }}
+        />
       )}
     </div>
   );
