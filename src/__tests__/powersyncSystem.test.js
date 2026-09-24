@@ -11,6 +11,7 @@ const h = vi.hoisted(() => ({
   userId: "user-a",
   clears: 0,
   connects: 0,
+  listener: null,
 }));
 
 vi.mock("@powersync/web", () => ({
@@ -19,12 +20,14 @@ vi.mock("@powersync/web", () => ({
     async connect() { h.connects += 1; }
     async disconnect() {}
     async disconnectAndClear() { h.clears += 1; }
-    registerListener() { return () => {}; }
+    registerListener(listener) { h.listener = listener; return () => {}; }
   },
   column: { text: "text", integer: "integer" },
   Schema: class { constructor(tables) { this.tables = tables; } },
   Table: class { constructor(cols, opts) { this.cols = cols; this.opts = opts; } },
 }));
+
+vi.mock("../lib/liveData.js", () => ({ invalidateLiveData: vi.fn(async () => {}) }));
 
 vi.mock("../lib/supabaseClient.js", () => ({
   supabase: {
@@ -106,5 +109,19 @@ describe("non-destructive sync recovery", () => {
     const { connect } = await loadSystem(); const cleanup = await connect();
     await cleanup(); window.dispatchEvent(new Event("online")); await vi.advanceTimersByTimeAsync(60000);
     expect(h.connects).toBe(1);
+  });
+});
+
+describe("checkpoint invalidation", () => {
+  it("re-reads every reader once per (re)connect, not on every other device's write", async () => {
+    const { connect } = await loadSystem();
+    const { invalidateLiveData } = await import("../lib/liveData.js");
+    invalidateLiveData.mockClear();
+    await connect();
+    const emit = (connected, lastSyncedAt) => h.listener.statusChanged({ connected, lastSyncedAt });
+    emit(true, 1000); emit(true, 2000); emit(true, 3000);
+    expect(invalidateLiveData).toHaveBeenCalledTimes(1);
+    emit(false, 3000); emit(true, 4000);
+    expect(invalidateLiveData).toHaveBeenCalledTimes(2);
   });
 });

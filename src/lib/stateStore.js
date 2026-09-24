@@ -141,7 +141,7 @@ async function flushStateKey(id, workspaceId = getWorkspaceId()) {
       const saved = await writeStateKeyOnce(id, value.state, value.ancestor, workspaceId);
       // Only clear if nothing newer arrived while this write was in flight.
       if (q.latest === value) { q.latest = undefined; q.attempts = 0; q.retainedAt = null; }
-      invalidateLiveData("service_settings", workspaceId);
+      invalidateLiveData("service_settings", workspaceId, { passive: true });
       return { ok: true, ...saved };
     } catch (error) {
       console.error(`Settings save failed (${id}):`, error);
@@ -171,7 +171,7 @@ export async function saveStateKey(id, state, { ancestor = null } = {}) {
   // optimistic one would make the three-way fold mistake the first tap for
   // already-saved data and drop it after a failed attempt.
   q.latest = { state, ancestor: q.latest?.ancestor ?? ancestor };
-  invalidateLiveData("service_settings", workspaceId);
+  invalidateLiveData("service_settings", workspaceId, { passive: true });
   q.retainedAt = Date.now(); // fresh value → fresh replay-age budget
   // A newer value supersedes any scheduled retry of the older one.
   if (q.retryTimer) { clearTimeout(q.retryTimer); q.retryTimer = null; }

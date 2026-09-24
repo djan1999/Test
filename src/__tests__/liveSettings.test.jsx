@@ -10,7 +10,7 @@ vi.mock("../lib/stateStore.js", () => ({
 }));
 vi.mock("../lib/sandbox.js", () => ({ isSandbox: () => false }));
 import { useLiveSetting } from "../hooks/useLiveQuery.js";
-import { invalidateLiveData } from "../lib/liveData.js";
+import { invalidateLiveData, BACKGROUND_DELAY_MS } from "../lib/liveData.js";
 
 function useItems() {
   const [items, setItems] = useState(["cached"]);
@@ -45,5 +45,45 @@ describe("shared settings consumers", () => {
     h.fail = false; h.state = { items: ["remote menu"] };
     window.dispatchEvent(new Event("focus")); await act(() => vi.advanceTimersByTimeAsync(250));
     expect(result.current).toEqual(["remote menu"]);
+  });
+
+  it("paints a live-service setting at once; config waits and coalesces", async () => {
+    const reads = { live: 0, config: 0 };
+    const useLane = (lane) => {
+      const [items, setItems] = useState(null);
+      useLiveSetting(lane === "live" ? "floor_status_v2:1" : "quick_access", state => {
+        reads[lane] += 1; setItems(state?.items);
+      }, { lane: lane === "live" ? "live" : "background" });
+      return items;
+    };
+    const live = renderHook(() => useLane("live")), config = renderHook(() => useLane("config"));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    h.state = { items: ["table 4 SET"] };
+    // A burst of taps from another device during service.
+    await act(async () => { for (let i = 0; i < 5; i += 1) await invalidateLiveData("service_settings", null, { passive: true }); });
+    expect(live.result.current).toEqual(["table 4 SET"]);
+    expect(config.result.current).toEqual(["aperitif"]);
+    await act(() => vi.advanceTimersByTimeAsync(BACKGROUND_DELAY_MS));
+    expect(config.result.current).toEqual(["table 4 SET"]);
+    expect(reads.config).toBe(2); // initial + one coalesced catch-up
+  });
+  it("does not re-adopt (re-render) a setting that did not change", async () => {
+    const apply = vi.fn();
+    renderHook(() => useLiveSetting("quick_access", apply));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    await act(() => invalidateLiveData("service_settings"));
+    await act(() => invalidateLiveData("service_settings"));
+    expect(apply).toHaveBeenCalledTimes(1);
+    h.state = { items: ["changed"] }; await act(() => invalidateLiveData("service_settings"));
+    expect(apply).toHaveBeenCalledTimes(2);
+  });
+  it("re-adopts after a held read once the pending save clears", async () => {
+    const apply = vi.fn();
+    h.pending = ["quick_access"];
+    renderHook(() => useLiveSetting("quick_access", apply));
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(apply).not.toHaveBeenCalled();
+    h.pending = []; await act(() => invalidateLiveData("service_settings"));
+    expect(apply).toHaveBeenCalledWith({ items: ["aperitif"] });
   });
 });

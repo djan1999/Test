@@ -131,7 +131,7 @@ export function useWorkspaceAccess({ onWorkspaceApply } = {}) {
     }
     let active = true;
     setWorkspacesResolved(false);
-    const query = registerLiveQuery({ key: "workspace-access", scope: `user:${session.user.id}`,
+    const query = registerLiveQuery({ key: "workspace-access", scope: `user:${session.user.id}`, lane: "background",
       tables: ["workspaces", WORKSPACE_MEMBERS_TABLE],
       read: async () => {
         const [workspaceResult, membershipResult] = await Promise.all([

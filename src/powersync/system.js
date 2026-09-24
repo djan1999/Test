@@ -130,15 +130,20 @@ export async function connect(onStatus) {
     _connected = true;
     if (typeof window !== "undefined") window.__powerSync = db; // DevTools aid
   }
-  let lastCheckpoint = null;
+  // Catch-up after the stream (re)connects: the first checkpoint on a fresh
+  // stream invalidates every reader. Later checkpoints do not — each one is
+  // another device's write, the table watches already deliver it, and
+  // re-reading every catalogue/archive per tap made live service lag.
+  let caughtUp = false;
   const dispose = db.registerListener({
     statusChanged: (status) => {
       const snap = snapshot(status);
       console.info("[PowerSync] status —", JSON.stringify(snap));
       onStatus?.(snap);
-      if (snap.lastSyncedAt && snap.lastSyncedAt !== lastCheckpoint) {
-        lastCheckpoint = snap.lastSyncedAt;
-        void invalidateLiveData();
+      if (!snap.connected) caughtUp = false;
+      else if (snap.lastSyncedAt && !caughtUp) {
+        caughtUp = true;
+        void invalidateLiveData(null, null, { passive: true });
       }
     },
   });
