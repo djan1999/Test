@@ -68,6 +68,26 @@ describe("KitchenAlertOverlay — a flood of alerts stays confirmable", () => {
     expect(getByText("P1 · NO HAZELNUT OIL")).toBeInTheDocument();
   });
 
+  it("a SET for a course a guest's dietary changes shows the modification per chair", () => {
+    const alert = {
+      tableId: 6,
+      alert: {
+        timestamp: Date.now(),
+        seats: [],
+        course: { index: 5, name: "Squash", restrictions: [{ pos: 2, mod: "POTATO CRACKLINGS" }], unassignedRestrictions: [] },
+      },
+    };
+    const { getByText } = render(<KitchenAlertOverlay alerts={[alert]} onConfirm={vi.fn()} />);
+    expect(getByText("RESTRICTION")).toBeInTheDocument();
+    expect(getByText("P2 · POTATO CRACKLINGS")).toBeInTheDocument();
+  });
+
+  it("never prints the guest's name on the popup (GDPR — the pass faces the room)", () => {
+    const { queryByText, getByText } = render(<KitchenAlertOverlay alerts={[alertFor(4)]} onConfirm={vi.fn()} />);
+    expect(getByText("T4")).toBeInTheDocument();
+    expect(queryByText(/GUEST 4/)).toBeNull();
+  });
+
   it("each card's CONFIRM clears its own table", () => {
     const onConfirm = vi.fn();
     const { getAllByText } = render(

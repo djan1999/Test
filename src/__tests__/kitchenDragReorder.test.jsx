@@ -82,7 +82,7 @@ describe("kitchen board — a lifted card leaves its slot alone", () => {
       <SortableBanner table={upcomingTable} isDragging anyDragging />,
       [upcomingTable.id]
     );
-    expect(screen.getByText(/KOVAC/)).toBeInTheDocument();
+    expect(screen.getByText("20:00")).toBeInTheDocument();
     const inner = container.firstChild.firstChild;
     expect(inner.style.visibility).toBe("hidden");
     expect(container.firstChild.style.outline).toContain("dashed");

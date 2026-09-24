@@ -55,7 +55,9 @@ describe("KitchenBoard — archived-ticket recovery strip", () => {
     );
     // hidden from the grid, present in the collapsed strip
     fireEvent.click(screen.getByText(/ARCHIVED \(1\)/));
-    expect(screen.getByText("NOVAK")).toBeTruthy();
+    expect(screen.getByText("T01")).toBeTruthy();
+    // no guest name on the kitchen screen (GDPR — it faces the dining room)
+    expect(screen.queryByText("NOVAK")).toBeNull();
     fireEvent.click(screen.getByText("RESTORE"));
     expect(upd).toHaveBeenCalledWith(1, "kitchenArchived", false);
   });
@@ -163,8 +165,10 @@ describe("KitchenBoard — upcoming reservation banners", () => {
         updMany={vi.fn()}
       />
     );
-    const early = screen.getByText("EARLY");
-    const late = screen.getByText("LATE");
+    // guest names never print on the kitchen board (GDPR) — order by time
+    expect(screen.queryByText("EARLY")).toBeNull();
+    const early = screen.getByText("18:30");
+    const late = screen.getByText("21:00");
     // EARLY (18:30) must render before LATE (21:00) in document order.
     expect(early.compareDocumentPosition(late) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });

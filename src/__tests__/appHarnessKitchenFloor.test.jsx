@@ -86,7 +86,7 @@ const seedLiveService = ({ annaExtra = {} } = {}) => {
 
 const enterKitchen = async () => {
   fireEvent.click(await screen.findByText("[Kitchen]", {}, { timeout: 5000 }));
-  await screen.findByText(/Anna Harness/, {}, { timeout: 5000 }); // T01's ticket
+  await screen.findAllByText("19:30", {}, { timeout: 5000 }); // T01's ticket — by time: kitchen tickets never print guest names (GDPR)
 };
 
 const enterService = async () => {
@@ -157,7 +157,8 @@ describe("app harness — kitchen board through the real App", () => {
     await enterKitchen();
 
     // Bruno (20:15, table 2) is booked but not seated — banner only.
-    await screen.findByText("Bruno Harness", {}, { timeout: 5000 });
+    await screen.findByText("20:15", {}, { timeout: 5000 });
+    expect(screen.queryByText(/Bruno Harness/)).toBeNull(); // no guest names on the kitchen screen (GDPR)
     expect(screen.getByText("20:15")).toBeTruthy();
     // Anna's seated ticket carries the courses; Bruno's banner must not.
     expect(courseCells("Amuse")).toHaveLength(1);
@@ -205,7 +206,7 @@ describe("app harness — kitchen board through the real App", () => {
     // Wifi dies. The kitchen seats Bruno from the banner sheet — instant
     // locally, every upload attempt fails.
     backend.failRemoteWrites = true;
-    fireEvent.click(await screen.findByText("Bruno Harness", {}, { timeout: 5000 }));
+    fireEvent.click(await screen.findByText("20:15", {}, { timeout: 5000 }));
     fireEvent.click(await screen.findByText("SEAT TABLE", {}, { timeout: 5000 }));
     await waitFor(() => expect(courseCells("Amuse")).toHaveLength(2), { timeout: 5000 });
     await new Promise((r) => setTimeout(r, 3600)); // retries exhausted, write pending
@@ -230,7 +231,7 @@ describe("app harness — kitchen board through the real App", () => {
       expect(typeof rows[0].data.arrivedAt).toBe("string"); // one device's minute won
     }, { timeout: 6000 });
     // The kitchen still shows exactly one Bruno ticket, courses intact.
-    expect(screen.getAllByText("Bruno Harness")).toHaveLength(1);
+    expect(screen.getAllByText("20:15")).toHaveLength(1);
     expect(courseCells("Amuse")).toHaveLength(2);
   }, 30000);
 
@@ -242,7 +243,7 @@ describe("app harness — kitchen board through the real App", () => {
     render(<App />);
     await enterKitchen();
 
-    fireEvent.click(await screen.findByText("Bruno Harness", {}, { timeout: 5000 }));
+    fireEvent.click(await screen.findByText("20:15", {}, { timeout: 5000 }));
     // The sheet is deliberately single-action: SEAT TABLE and nothing else.
     const seatBtn = await screen.findByText("SEAT TABLE", {}, { timeout: 5000 });
     expect(screen.queryByText("Slow")).toBeNull(); // no pace / extras / dietaries
@@ -308,7 +309,7 @@ describe("app harness — kitchen board through the real App", () => {
     ]);
     render(<App />);
     fireEvent.click(await screen.findByText("[Kitchen]", {}, { timeout: 5000 }));
-    await screen.findByText(/Bruno Harness/, {}, { timeout: 5000 }); // terrace ticket
+    await screen.findByText("20:15", {}, { timeout: 5000 }); // terrace ticket
 
     fireEvent.click(await screen.findByText("Crayfish", {}, { timeout: 5000 }));
     // The fire runs the MOVE: the party is seated inside and the terrace
@@ -351,7 +352,7 @@ describe("app harness — kitchen board through the real App", () => {
     ]);
     render(<App />);
     fireEvent.click(await screen.findByText("[Kitchen]", {}, { timeout: 5000 }));
-    await screen.findByText(/Bruno Harness/, {}, { timeout: 5000 });
+    await screen.findByText("20:15", {}, { timeout: 5000 });
 
     fireEvent.click(await screen.findByText("Crayfish", {}, { timeout: 5000 }));
     // The fire lands on the ticket…

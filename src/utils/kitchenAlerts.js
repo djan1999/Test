@@ -72,6 +72,36 @@ export function kitchenSnapshot(seats = [], optionalExtras = [], optionalPairing
   return out;
 }
 
+// ── SET course restrictions ──────────────────────────────────────────────────
+// A SET popup names the course the table is ready for. When a guest's dietary
+// changes that plate, the popup must say so, per chair — the same way a called
+// beetroot does ("P2 · POTATO CRACKLINGS") — because the popup is where the
+// pass starts the course. Derived exactly as the ticket row derives it
+// (getCourseMod + the per-table text override), and gated by the kitchen
+// layout's showRestrictions switch like the ticket is.
+//   → { restrictions: [{ pos, mod }], unassignedRestrictions: [string] }
+export function setCourseRestrictions(visibleCourse, seats = [], restrictions = [], kitchenCourseNotes = {}) {
+  const empty = { restrictions: [], unassignedRestrictions: [] };
+  const raw = visibleCourse?.rawCourse;
+  if (!raw) return empty;
+  if (visibleCourse.kitchenItem && visibleCourse.kitchenItem.showRestrictions === false) return empty;
+  const kcNote = kitchenCourseNotes?.[raw.course_key || visibleCourse.key];
+  const seatIds = new Set((seats || []).map(s => s.id));
+  const out = [];
+  [...(seats || [])].sort((a, b) => Number(a.id) - Number(b.id)).forEach((s) => {
+    const keys = (restrictions || []).filter(r => r && r.note && r.pos === s.id).map(r => r.note);
+    const mod = keys.length ? getCourseMod(raw, keys) : null;
+    if (mod) out.push({ pos: s.id, mod: applyModOverride(mod, kcNote) });
+  });
+  const unassigned = groupRestrictionsByGuest((restrictions || []).filter(r =>
+    r?.note && (r.pos == null || !seatIds.has(r.pos))));
+  const unassignedRestrictions = unassigned.map((group) => {
+    const mod = getCourseMod(raw, group.notes);
+    return mod ? `${group.notes.map(restrLabel).join(", ")}: ${applyModOverride(mod, kcNote)}` : null;
+  }).filter(Boolean);
+  return { restrictions: out, unassignedRestrictions };
+}
+
 // Overlay-format seats containing ONLY what changed since `baseline`: a seat
 // appears only if its pairing changed or it gained/changed an extra; its
 // `pairing` is omitted (null) unless it changed, and `extras` is limited to the
