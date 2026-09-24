@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { kitchenSnapshot, kitchenDelta, hasKitchenUpdate, mergeKitchenAlert } from "../utils/kitchenAlerts.js";
+import { kitchenSnapshot, kitchenDelta, hasKitchenUpdate, mergeKitchenAlert, setCourseRestrictions } from "../utils/kitchenAlerts.js";
 
 // Minimal optional-extra defs (beetroot, cheese) and a passthrough pairing fn
 const EXTRAS = [
@@ -254,5 +254,48 @@ describe("mergeKitchenAlert", () => {
     expect(Array.isArray(s2.extras)).toBe(true);
     expect(s2.extras.map((e) => e.key).sort()).toEqual(["beetroot", "cheese"]);
     expect(s2.beet).toBeUndefined(); // translated, not duplicated
+  });
+});
+
+describe("setCourseRestrictions — a SET popup names the dietaries that change the course", () => {
+  const SQUASH = { course_key: "squash", menu: { name: "Squash", sub: "" }, restrictions: { veg_note: "potato cracklings" } };
+  const visible = { key: "squash", index: 5, name: "Squash", rawCourse: SQUASH };
+  const seats = [seat(1), seat(2), seat(3)];
+
+  it("lists the modification per chair, in seat order", () => {
+    const out = setCourseRestrictions(visible, seats, [{ pos: 2, note: "veg" }]);
+    expect(out.restrictions).toHaveLength(1);
+    expect(out.restrictions[0].pos).toBe(2);
+    expect(out.restrictions[0].mod.toLowerCase()).toContain("potato cracklings");
+    expect(out.unassignedRestrictions).toEqual([]);
+  });
+
+  it("ignores dietaries the course has no variant for", () => {
+    expect(setCourseRestrictions(visible, seats, [{ pos: 1, note: "nut" }]).restrictions).toEqual([]);
+  });
+
+  it("applies the per-table text override, as the ticket does", () => {
+    const base = setCourseRestrictions(visible, seats, [{ pos: 2, note: "veg" }]).restrictions[0].mod;
+    const out = setCourseRestrictions(visible, seats, [{ pos: 2, note: "veg" }],
+      { squash: { modOverrides: { [base]: "CRACKLINGS, NO BUTTER" } } });
+    expect(out.restrictions[0].mod).toBe("CRACKLINGS, NO BUTTER");
+  });
+
+  it("flags an unassigned dietary instead of pinning it to a chair", () => {
+    const out = setCourseRestrictions(visible, seats, [{ pos: null, note: "veg" }]);
+    expect(out.restrictions).toEqual([]);
+    expect(out.unassignedRestrictions).toHaveLength(1);
+    expect(out.unassignedRestrictions[0]).toMatch(/Vegetarian: /);
+  });
+
+  it("respects a kitchen layout that hides restrictions on the course", () => {
+    const hidden = { ...visible, kitchenItem: { showRestrictions: false } };
+    expect(setCourseRestrictions(hidden, seats, [{ pos: 2, note: "veg" }]).restrictions).toEqual([]);
+  });
+
+  it("survives a Send merging into the pending SET alert", () => {
+    const course = { key: "squash", index: 5, name: "Squash", restrictions: [{ pos: 2, mod: "POTATO CRACKLINGS" }], unassignedRestrictions: [] };
+    const merged = mergeKitchenAlert({ timestamp: "t0", seats: [], confirmed: false, course }, { timestamp: "t1", seats: [], confirmed: false });
+    expect(merged.course.restrictions).toEqual(course.restrictions);
   });
 });

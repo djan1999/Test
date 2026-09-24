@@ -67,7 +67,7 @@ import {
   closeVisit as closeVisitData,
 } from "./utils/terraceFlow.js";
 import { getVisibleCoursesForTable, getCourseProgressState, isStaleCourseReady } from "./utils/courseProgress.js";
-import { mergeKitchenAlert } from "./utils/kitchenAlerts.js";
+import { mergeKitchenAlert, setCourseRestrictions } from "./utils/kitchenAlerts.js";
 import { useIsMobile, BP } from "./hooks/useIsMobile.js";
 import { useFullscreenBoost } from "./hooks/useIsFullscreen.js";
 import { useModalEscape } from "./hooks/useModalEscape.js";
@@ -2666,7 +2666,9 @@ export default function App() {
           tableName: t.resName || null,
           seats: [],
           confirmed: false,
-          course: ready,
+          // the popup's course carries the dietaries that change THIS plate,
+          // per chair; courseReady (the ticket banner) stays the bare course
+          course: { ...ready, ...setCourseRestrictions(nextFire, t.seats || [], t.restrictions || [], t.kitchenCourseNotes || {}) },
         }),
         // a SET to an archived ticket proves it's still live — bring it back
         // next to its alert (Archive mis-taps)

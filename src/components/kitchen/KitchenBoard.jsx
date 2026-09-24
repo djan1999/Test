@@ -646,7 +646,9 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
         </span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 5, flexWrap: dz.nameWrap, overflow: "hidden" }}>
-            {table.resName && <span style={{ fontFamily: FONT, fontSize: dz.nameFont, fontWeight: 700, color: tokens.ink[0], overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{table.resName}</span>}
+            {/* No guest name on kitchen tickets (GDPR, per Djan): the pass
+                screen faces the dining room. The name stays on reservations
+                and the service board, where only staff read it. */}
             {table.menuType && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 600, letterSpacing: "0.08em", padding: dz.badgePad, borderRadius: 0, background: tokens.ink[5], color: tokens.ink[3], flexShrink: 0 }}>{isShort ? "SHORT" : "LONG"}</span>}
             <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 600, letterSpacing: "0.08em", padding: dz.badgePad, borderRadius: 0, background: table.lang === "si" ? tokens.red.bg : tokens.green.bg, color: table.lang === "si" ? tokens.red.text : tokens.green.text, border: "1px solid", borderColor: table.lang === "si" ? tokens.red.border : tokens.green.border, flexShrink: 0 }}>{table.lang === "si" ? "SI" : "EN"}</span>
             {/* Pace badge — on compact boards pace is SET from the quick-access
@@ -1624,7 +1626,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
             }}>
               <div>
                 <span style={{ fontFamily: FONT, fontSize: "14px", fontWeight: 700, letterSpacing: "0.10em", textTransform: "uppercase", color: tokens.ink[0] }}>
-                  T{tableId}{alert.tableName ? ` — ${alert.tableName}` : ""}
+                  T{tableId}
                 </span>
               </div>
               <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[3], letterSpacing: "0.10em" }}>{timeStr}</span>
@@ -1642,6 +1644,24 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                   }}>
                     C{String(alert.course.index).padStart(2, "0")} · {alert.course.name}
                   </span>
+                </div>
+              )}
+              {/* Dietaries that change the SET course, per chair — read like a
+                  called beetroot: "P2 · POTATO CRACKLINGS" in a red chip. */}
+              {alert.course && (alert.course.restrictions?.length > 0 || alert.course.unassignedRestrictions?.length > 0) && (
+                <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>RESTRICTION</span>
+                  {alert.course.unassignedRestrictions?.length > 0 && (
+                    <div role="alert" style={{ width: "100%", color: tokens.red.text, fontWeight: 700, fontSize: 11 }}>
+                      Seat assignment needed — {alert.course.unassignedRestrictions.join(" · ")}
+                    </div>
+                  )}
+                  {(alert.course.restrictions || []).map(r => (
+                    <span key={r.pos} style={{
+                      fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, fontWeight: 700,
+                      background: tokens.red.bg, border: `1px solid ${tokens.red.border}`, color: tokens.red.text,
+                    }}>P{r.pos} · {r.mod}</span>
+                  ))}
                 </div>
               )}
               {pairSeats.length > 0 && (() => {
@@ -1752,7 +1772,6 @@ export function UpcomingBanner({ table: t, compact = false }) {
       </div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
         {t.menuType && <span style={{ fontFamily: FONT, fontSize: 8, fontWeight: 600, letterSpacing: "0.08em", padding: "0 3px", background: tokens.ink[5], color: tokens.ink[3], flexShrink: 0 }}>{isShort ? "SHORT" : "LONG"}</span>}
-        {t.resName && <span style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3], overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{t.resName}</span>}
         {t.guestType === "hotel" && <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.ink[3], letterSpacing: "0.06em", flexShrink: 0 }}>{rooms.length ? `#${rooms.join(", ")}` : "Hotel"}</span>}
         {t.birthday && <span style={{ fontSize: 10, flexShrink: 0 }}>🎂</span>}
       </div>
@@ -1942,7 +1961,6 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
           <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: tokens.ink[1] }}>
             T{String(t.id).padStart(2, "0")}
           </span>
-          {t.resName && <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3] }}>{t.resName}</span>}
           <span style={{ flex: 1 }} />
           {upd && (
             <button
@@ -2108,9 +2126,6 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
             </span>
             {seatTarget.resTime && (
               <span style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: tokens.ink[1] }}>{seatTarget.resTime}</span>
-            )}
-            {seatTarget.resName && (
-              <span style={{ fontFamily: FONT, fontSize: 11, color: tokens.ink[3], overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 }}>{seatTarget.resName}</span>
             )}
             <span style={{ flex: 1 }} />
             <span style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: tokens.ink[0] }}>
