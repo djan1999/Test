@@ -41,7 +41,7 @@ function ensureLifecycle() {
 }
 
 export function registerLiveQuery({ key, scope, tables = [], read, apply, onError, immediate = true, timeoutMs = 20000 }) {
-  let disposed = false, running = null, wanted = 0, retryTimer = null, attempts = 0;
+  let disposed = false, running = null, wanted = 0, retryTimer = null, attempts = 0, discarded = 0;
   const q = { key, scope, tables, status: { state: "loading", updatedAt: null, error: null }, refresh: null };
   const setStatus = (patch) => { if (!disposed) { q.status = { ...q.status, ...patch }; notify(); } };
   const run = async () => {
@@ -55,7 +55,13 @@ export function registerLiveQuery({ key, scope, tables = [], read, apply, onErro
           new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error(`${key} refresh timed out`)), timeoutMs); }),
         ]);
         if (disposed) return;
-        if (mine !== wanted) continue; // a newer notification superseded this read
+        // A newer notification superseded this read: re-read once rather than
+        // paint it. Only once — during service notifications arrive faster than
+        // a read completes, and discarding every superseded read starved the
+        // board for seconds. Reads are serial per query, so a completed read is
+        // never older than what is already painted.
+        if (mine !== wanted && discarded++ < 1) continue;
+        discarded = 0;
         const accepted = await apply(value);
         attempts = 0;
         setStatus({ state: accepted === false ? "held" : "ready", updatedAt: Date.now(), error: null });

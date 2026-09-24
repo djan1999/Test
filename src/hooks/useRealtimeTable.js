@@ -31,6 +31,9 @@ export function useRealtimeTable({
   filter,
   onStatus,
   onResubscribe,
+  // false when onChange applies the event's row itself: a full re-read per
+  // event would duplicate that work on every tap.
+  invalidateOnChange = true,
 }) {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -38,6 +41,8 @@ export function useRealtimeTable({
   onStatusRef.current = onStatus;
   const onResubscribeRef = useRef(onResubscribe);
   onResubscribeRef.current = onResubscribe;
+  const invalidateOnChangeRef = useRef(invalidateOnChange);
+  invalidateOnChangeRef.current = invalidateOnChange;
 
   useEffect(() => {
     if (!enabled || !supabase || !channelName || !table) return;
@@ -65,7 +70,7 @@ export function useRealtimeTable({
         .on("postgres_changes", binding, (payload) => {
           if (!cancelled && mine === channel) {
             onChangeRef.current?.(payload);
-            invalidateLiveData(table);
+            if (invalidateOnChangeRef.current) invalidateLiveData(table);
           }
         });
       channel = mine;

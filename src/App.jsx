@@ -4775,6 +4775,7 @@ export default function App() {
     // dead were never delivered — re-read the whole board (adoptive: folds
     // around any unsaved local edits, so it can't clobber in-flight work).
     onResubscribe: () => { fallbackBoardReloadRef.current?.(); },
+    invalidateOnChange: false,
     enabled: fallbackRealtime,
   });
 
@@ -4798,6 +4799,7 @@ export default function App() {
     // reconciles DELETIONS missed while offline — merging events back in
     // would leave ghost reservations no device can explain.
     onResubscribe: () => { reloadReservationsRef.current?.(); },
+    invalidateOnChange: false,
     enabled: fallbackRealtime,
   });
 
@@ -4873,7 +4875,9 @@ export default function App() {
       menuCourses: menuCoursesRef.current || [],
     }));
   }, { enabled: !!supabase && ["service", "display", "kitchen"].includes(mode),
-    tables: ["service_archive", "services", "service_tables", "menu_courses"],
+    // Not service_tables: history is ENDED services, and a live board tap
+    // must not re-read the whole archive on every device.
+    tables: ["service_archive", "services", "menu_courses"],
   });
 
   // Only count primary tables in groups (secondaries have same guest count stamped on them)

@@ -20,6 +20,16 @@ describe("shared data recovery", () => {
     expect(apply).toHaveBeenCalledTimes(1);
     expect(apply).toHaveBeenCalledWith(["new menu"]);
   });
+  it("still paints while notifications keep outpacing reads", async () => {
+    // Service: another device taps faster than one read completes. The board
+    // must not wait for a quiet gap before anything lands.
+    let n = 0; const apply = vi.fn();
+    register({ read: async () => { if (++n < 20) invalidateLiveData("menu_courses", "a"); return n; }, apply });
+    await vi.advanceTimersByTimeAsync(0);
+    // Before: nothing painted until read 20, when the taps stopped.
+    expect(apply.mock.calls[0][0]).toBe(2);
+    expect(apply).toHaveBeenLastCalledWith(20);
+  });
   it("retains the last good snapshot on failure and retries without a reset", async () => {
     const apply = vi.fn(); const read = vi.fn().mockResolvedValueOnce(["cached"])
       .mockRejectedValueOnce(new Error("offline")).mockResolvedValue(["caught up"]);
