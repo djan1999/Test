@@ -143,7 +143,7 @@ export async function connect(onStatus) {
       if (!snap.connected) caughtUp = false;
       else if (snap.lastSyncedAt && !caughtUp) {
         caughtUp = true;
-        void invalidateLiveData();
+        void invalidateLiveData(null, null, { passive: true });
       }
     },
   });

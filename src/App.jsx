@@ -95,7 +95,7 @@ import { appendServiceEvent, drainServiceEvents, pendingServiceEventCount, count
 import { foldServiceEvents, compareFoldToBoard, describeServiceEvent, serviceNightReport } from "./utils/eventFold.js";
 import { readParityRecord, recordEndOfServiceParity, fileParityVerdict } from "./lib/parityRecord.js";
 import { boardFactsFromDiff, createFactDeduper, seedFactsFromBoard } from "./utils/boardFacts.js";
-import { useLiveQuery, useLiveSetting, useLiveDataStatus } from "./hooks/useLiveQuery.js";
+import { useLiveQuery, useLiveSetting, useLiveDataSummary } from "./hooks/useLiveQuery.js";
 import { invalidateLiveData, registerLiveQuery } from "./lib/liveData.js";
 import { useRealtimeTable } from "./hooks/useRealtimeTable.js";
 import { useWorkspaceAccess } from "./hooks/useWorkspaceAccess.js";
@@ -4017,7 +4017,7 @@ export default function App() {
   const [kitchenTicketOrder, setKitchenTicketOrder] = useState(null);
   useLiveSetting("kitchen_ticket_order", state => {
     setKitchenTicketOrder(Array.isArray(state?.ids) ? state.ids.map(Number).filter(Number.isFinite) : null);
-  }, { enabled: !!supabase && psResolved });
+  }, { enabled: !!supabase && psResolved, lane: "live" });
 
   const saveKitchenTicketOrder = useCallback(async (ids) => {
     const clean = (Array.isArray(ids) ? ids : []).map(Number).filter(Number.isFinite);
@@ -4187,7 +4187,7 @@ export default function App() {
   useLiveSetting(floorStatusKeyFor(serviceId) || "floor_status:none", state => {
     adoptFloorStatusRef.current?.(state || {});
     floorStatusHydratedRef.current = true;
-  }, { enabled: !!supabase && psResolved && !!serviceId });
+  }, { enabled: !!supabase && psResolved && !!serviceId, lane: "live" });
   useLiveSetting(RESTAURANT_CONFIG_KEY, state => {
     adoptRestaurantConfiguration(state || makeDefaultRestaurantConfig({
       name: currentWorkspace?.name || APP_NAME, subtitle: APP_SUBTITLE,
@@ -4603,7 +4603,7 @@ export default function App() {
   const loadWines = useCallback(() => invalidateLiveData("wines"), []);
 
   useLiveQuery("services", () => fetchServicesStore(20), rows => adoptServiceRowsRef.current?.(rows),
-    { enabled: fallbackReadsEnabled, tables: ["services"] });
+    { enabled: fallbackReadsEnabled, tables: ["services"], lane: "live" });
 
   // ── Service date + reservations ──────────────────────────────────────────────
   // The cached planner paints instantly; the store refresh (SQLite watch when
@@ -4823,7 +4823,19 @@ export default function App() {
     channelName: `milka-settings-live-${workspaceId}`,
     filter: wsFilter,
     table: TABLES.SERVICE_SETTINGS,
-    onChange: () => {}, // useRealtimeTable invalidates every registered settings reader
+    // Live-service keys paint straight from the event, as the board does;
+    // useRealtimeTable also invalidates every settings reader (config ones
+    // on the background lane).
+    onChange: (payload) => {
+      const id = payload.new?.id;
+      if (!id || pendingStateKeys().includes(id)) return;
+      if (id === "kitchen_ticket_order") {
+        const ids = payload.new?.state?.ids;
+        if (Array.isArray(ids)) setKitchenTicketOrder(ids.map(Number).filter(Number.isFinite));
+      } else if (id === floorStatusKeyFor(serviceIdRef.current)) {
+        adoptFloorStatusRef.current?.(payload.new?.state, payload.new?.updated_at);
+      }
+    },
     enabled: fallbackRealtime,
   });
 
@@ -4886,8 +4898,8 @@ export default function App() {
   const seated   = active.reduce((a, t) => a + t.guests, 0);
   const reserved = tables.filter(t => !t.active && (t.resName || t.resTime)).filter(isPrimary).length;
 
-  const liveDataStatus = useLiveDataStatus(workspaceId);
-  const displayedSyncStatus = liveDataStatus.errors.length ? "sync-error"
+  const liveDataStatus = useLiveDataSummary(workspaceId);
+  const displayedSyncStatus = liveDataStatus.errors ? "sync-error"
     : syncStatus === "live" && (liveDataStatus.loading || powerSyncStatus?.uploading
       || powerSyncStatus?.downloading || (sqlitePrimary && !powerSyncStatus?.hasSynced)) ? "connecting" : syncStatus;
   const syncLabel = displayedSyncStatus === "live" ? "SYNC" : displayedSyncStatus === "local-only" ? "LOCAL" : displayedSyncStatus === "connecting" ? "LINK" : "ERROR";

@@ -70,7 +70,7 @@ export function useRealtimeTable({
         .on("postgres_changes", binding, (payload) => {
           if (!cancelled && mine === channel) {
             onChangeRef.current?.(payload);
-            if (invalidateOnChangeRef.current) invalidateLiveData(table);
+            if (invalidateOnChangeRef.current) invalidateLiveData(table, null, { passive: true });
           }
         });
       channel = mine;
@@ -86,7 +86,7 @@ export function useRealtimeTable({
           // died — reconcile what the dead socket missed.
           if (everSubscribed) onResubscribeRef.current?.();
           // Also close the initial load → subscription gap.
-          invalidateLiveData(table);
+          invalidateLiveData(table, null, { passive: true });
           everSubscribed = true;
         } else if (
           status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED"

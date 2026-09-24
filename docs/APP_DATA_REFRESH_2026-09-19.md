@@ -64,3 +64,29 @@ This addresses refresh and adoption. Existing whole-setting last-writer-wins
 storage and multi-request fallback catalogue writes are not converted into
 server-side transactions by this change. Actual cross-device latency still
 depends on network connectivity and the deployed PowerSync/realtime configuration.
+
+## Follow-up: live-service latency (2026-09-24)
+
+After rollout, a table seated on one device took 10–20 s to reach the kitchen
+display (previously 1–2 s). Every tap caused a storm of re-reads and re-renders.
+
+- **Two lanes.** `registerLiveQuery({ lane })` is `"live"` or `"background"`.
+  Live readers (board, floor SET status, kitchen ticket order, services,
+  reservations) re-read the moment a change lands. Background readers
+  (catalogues, menu courses, layouts, logo, config, archives, audit, staff,
+  inventory, workspace access) coalesce *passive* notifications (another
+  device's write, a sync checkpoint, the 60 s sweep) into one read
+  `BACKGROUND_DELAY_MS` (5 s) later. First loads and explicit refreshes
+  (reload buttons, wake, REFRESH ALL DATA) are never deferred.
+  `useLiveQuery`/`useLiveSetting` default to background; pass `lane: "live"`
+  for anything that changes during service.
+- **Checkpoints.** Only the first PowerSync checkpoint after a (re)connect
+  invalidates every reader; the table watches deliver the rest.
+- **No starvation.** A read superseded by a newer notification is discarded at
+  most once in a row, then painted.
+- **No redundant adoption.** `useLiveQuery` skips applying a result identical to
+  the last one it applied, and the app root subscribes only to a two-fact sync
+  summary instead of every reader's state.
+- **History.** The service-history reader no longer follows `service_tables`.
+- **Fallback path.** Board, reservation, floor-status and kitchen-order realtime
+  events paint straight from the event payload.

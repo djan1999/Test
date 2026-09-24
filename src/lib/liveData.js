@@ -11,10 +11,21 @@ const notify = () => {
 export const subscribeLiveStatus = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 export const getLiveStatus = () => snapshot;
 
-export function invalidateLiveData(table = null, scope = null) {
+// Two lanes. "live" readers (the board, floor SET status, kitchen order, the
+// service itself) re-read the moment a change lands. "background" readers
+// (catalogues, layouts, config, archives) coalesce passive notifications —
+// another device's write, a sync checkpoint, a periodic sweep — into one read
+// a few seconds later, so a tap during service never queues behind them.
+// Explicit refreshes (a reload button, wake, REFRESH ALL DATA) stay immediate.
+export const BACKGROUND_DELAY_MS = 5000;
+
+export function invalidateLiveData(table = null, scope = null, { passive = false } = {}) {
   const pending = [];
   for (const q of queries) {
-    if ((scope == null || q.scope === scope) && (!table || q.tables.includes(table))) pending.push(q.refresh());
+    if ((scope == null || q.scope === scope) && (!table || q.tables.includes(table))) {
+      if (passive && q.lane === "background") q.defer();
+      else pending.push(q.refresh());
+    }
   }
   return Promise.all(pending);
 }
@@ -27,7 +38,7 @@ function ensureLifecycle() {
     clearTimeout(wakeTimer);
     wakeTimer = setTimeout(() => invalidateLiveData(), 250);
   };
-  const interval = setInterval(() => { if (!document.hidden) invalidateLiveData(); }, 60000);
+  const interval = setInterval(() => { if (!document.hidden) invalidateLiveData(null, null, { passive: true }); }, 60000);
   window.addEventListener("online", wake);
   window.addEventListener("focus", wake);
   document.addEventListener("visibilitychange", wake);
@@ -40,9 +51,9 @@ function ensureLifecycle() {
   };
 }
 
-export function registerLiveQuery({ key, scope, tables = [], read, apply, onError, immediate = true, timeoutMs = 20000 }) {
-  let disposed = false, running = null, wanted = 0, retryTimer = null, attempts = 0, discarded = 0;
-  const q = { key, scope, tables, status: { state: "loading", updatedAt: null, error: null }, refresh: null };
+export function registerLiveQuery({ key, scope, tables = [], read, apply, onError, immediate = true, timeoutMs = 20000, lane = "live" }) {
+  let disposed = false, running = null, wanted = 0, retryTimer = null, attempts = 0, discarded = 0, deferTimer = null;
+  const q = { key, scope, tables, lane, status: { state: "loading", updatedAt: null, error: null }, refresh: null, defer: null };
   const setStatus = (patch) => { if (!disposed) { q.status = { ...q.status, ...patch }; notify(); } };
   const run = async () => {
     while (!disposed) {
@@ -75,10 +86,18 @@ export function registerLiveQuery({ key, scope, tables = [], read, apply, onErro
       if (mine === wanted) return;
     }
   };
+  let requested = false;
+  q.defer = () => {
+    if (disposed || deferTimer) return;
+    if (!requested) { void q.refresh(); return; } // the first load never waits
+    deferTimer = setTimeout(() => q.refresh(), BACKGROUND_DELAY_MS);
+  };
   q.refresh = () => {
     if (disposed) return Promise.resolve();
+    requested = true;
     wanted += 1;
     clearTimeout(retryTimer);
+    clearTimeout(deferTimer); deferTimer = null;
     if (!running) running = run().finally(() => { running = null; });
     return running;
   };
@@ -87,7 +106,7 @@ export function registerLiveQuery({ key, scope, tables = [], read, apply, onErro
   return {
     refresh: q.refresh,
     dispose() {
-      disposed = true; clearTimeout(retryTimer); queries.delete(q); notify();
+      disposed = true; clearTimeout(retryTimer); clearTimeout(deferTimer); queries.delete(q); notify();
       if (!queries.size) stopLifecycle?.();
     },
   };

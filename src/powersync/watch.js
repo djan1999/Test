@@ -41,18 +41,18 @@ export function startWatches(handlers, range, lifecycle = {}) {
       lifecycle.onReady?.({ sources: [...ready] });
     }
   };
-  const bind = (source, triggerSql, reader, handler) => {
+  const bind = (source, triggerSql, reader, handler, lane = "live") => {
     if (!handler) return;
     enabled.add(source);
     const query = registerLiveQuery({
-      key: source, scope: lifecycle.workspaceId, tables: [source], read: reader, immediate: false,
+      key: source, scope: lifecycle.workspaceId, tables: [source], read: reader, immediate: false, lane,
       apply: async value => { if (!disposed) { const accepted = await handler(value); markReady(source); return accepted; } },
       onError: error => report(source, "read", error),
     });
     subscriptions.push(() => query.dispose());
     try {
       const subscription = db.watch(triggerSql, [], {
-        onResult: () => invalidateLiveData(source, lifecycle.workspaceId),
+        onResult: () => invalidateLiveData(source, lifecycle.workspaceId, { passive: true }),
         onError: (error) => report(source, "engine", error),
       }, opts);
       subscriptions.push(subscription);
@@ -84,14 +84,14 @@ export function startWatches(handlers, range, lifecycle = {}) {
       return { rows, forServiceId, serviceKnown };
     },
     handlers.onServiceTables);
-  bind("wines", "SELECT count(*) AS n FROM wines", readWines, handlers.onWines);
-  bind("beverages", "SELECT count(*) AS n FROM beverages", readBeverages, handlers.onBeverages);
-  bind("menu_courses", "SELECT count(*) AS n FROM menu_courses", readMenuCourses, handlers.onMenuCourses);
+  bind("wines", "SELECT count(*) AS n FROM wines", readWines, handlers.onWines, "background");
+  bind("beverages", "SELECT count(*) AS n FROM beverages", readBeverages, handlers.onBeverages, "background");
+  bind("menu_courses", "SELECT count(*) AS n FROM menu_courses", readMenuCourses, handlers.onMenuCourses, "background");
   bind("service_settings", "SELECT count(*) AS n, max(updated_at) AS ts FROM service_settings",
-    readLiveSettings, handlers.onLiveSettings);
+    readLiveSettings, handlers.onLiveSettings, "background");
   // Archive snapshots are read only by mounted archive/history consumers.
   bind("service_archive", "SELECT count(*) AS n FROM service_archive",
-    async () => null, handlers.onArchiveChanged);
+    async () => null, handlers.onArchiveChanged, "background");
 
   if (enabled.size === 0) lifecycle.onReady?.({ sources: [] });
 
