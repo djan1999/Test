@@ -10,23 +10,12 @@ import './styles.css';
 import { registerSW } from 'virtual:pwa-register';
 import { setUpdateReady, setSwRegistration } from './lib/swUpdate.js';
 import { installGlobalDiagnostics, recordClientDiagnostic } from './lib/clientDiagnostics.js';
+import { handlePreloadError } from './lib/preloadRecovery.js';
 
 installGlobalDiagnostics();
 
-const PRELOAD_RELOAD_GUARD_KEY = 'milka_preload_reload_once';
-
-// Recover from stale chunk/preload errors after deploys (common with installed PWAs).
 window.addEventListener('vite:preloadError', (event) => {
-  event?.preventDefault?.();
-  try {
-    const alreadyReloaded = sessionStorage.getItem(PRELOAD_RELOAD_GUARD_KEY) === '1';
-    if (!alreadyReloaded) {
-      sessionStorage.setItem(PRELOAD_RELOAD_GUARD_KEY, '1');
-      window.location.reload();
-      return;
-    }
-    sessionStorage.removeItem(PRELOAD_RELOAD_GUARD_KEY);
-  } catch {}
+  handlePreloadError(event, { storage: sessionStorage, reload: () => window.location.reload() });
 });
 
 // Register the service worker (registerType:'prompt' in vite.config.js). A
