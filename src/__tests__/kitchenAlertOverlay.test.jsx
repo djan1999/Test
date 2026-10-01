@@ -99,4 +99,60 @@ describe("KitchenAlertOverlay — a flood of alerts stays confirmable", () => {
     expect(onConfirm).toHaveBeenNthCalledWith(1, 4);
     expect(onConfirm).toHaveBeenNthCalledWith(2, 11);
   });
+
+  it("names exactly who splits a dish, one chip per plate", () => {
+    const ex = (sharedWith, pairing = null) => [{ key: "beetroot", name: "Beetroot", pairing, sharedWith, restriction: null }];
+    const alert = {
+      tableId: 3,
+      alert: {
+        timestamp: Date.now(),
+        seats: [
+          { id: 1, extras: ex([2]) },
+          { id: 2, extras: ex([1]) },
+          { id: 3, extras: ex(null) },
+        ],
+      },
+    };
+    const { getByText, queryByText } = render(<KitchenAlertOverlay alerts={[alert]} onConfirm={vi.fn()} />);
+    expect(getByText(/P1 \+ P2 SHARE/)).toBeInTheDocument();
+    expect(getByText("P3")).toBeInTheDocument();
+    // No anonymous "SHARE" badge that leaves the pass guessing.
+    expect(queryByText("SHARE")).toBeNull();
+  });
+
+  it("keeps a three-way share and a legacy one-id share readable", () => {
+    const alert = {
+      tableId: 5,
+      alert: {
+        timestamp: Date.now(),
+        seats: [
+          { id: 1, extras: [{ key: "cheese", name: "Cheese", sharedWith: [2, 3] }] },
+          { id: 2, extras: [{ key: "cheese", name: "Cheese", sharedWith: [1, 3] }] },
+          { id: 3, extras: [{ key: "cheese", name: "Cheese", sharedWith: [1, 2] }] },
+          { id: 4, extras: [{ key: "beetroot", name: "Beetroot", sharedWith: 5 }] },
+        ],
+      },
+    };
+    const { getByText } = render(<KitchenAlertOverlay alerts={[alert]} onConfirm={vi.fn()} />);
+    expect(getByText(/P1 \+ P2 \+ P3 SHARE/)).toBeInTheDocument();
+    // P5 did not change, so it is not in the delta — but it is still named.
+    expect(getByText(/P4 \+ P5 SHARE/)).toBeInTheDocument();
+  });
+
+  it("names who splits a pairing", () => {
+    const alert = {
+      tableId: 7,
+      alert: {
+        timestamp: Date.now(),
+        seats: [
+          { id: 1, pairing: "Wine", pairingSharedWith: [2] },
+          { id: 2, pairing: "Wine", pairingSharedWith: [1] },
+          { id: 3, pairing: "Wine", pairingSharedWith: null },
+        ],
+      },
+    };
+    const { getByText } = render(<KitchenAlertOverlay alerts={[alert]} onConfirm={vi.fn()} />);
+    expect(getByText("P1 + P2 Wine SHARE")).toBeInTheDocument();
+    expect(getByText("P3 Wine")).toBeInTheDocument();
+  });
 });

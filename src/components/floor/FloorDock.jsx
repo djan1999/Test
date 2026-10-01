@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
 import { kitchenSnapshot, kitchenDelta, mergeKitchenAlert } from "../../utils/kitchenAlerts.js";
 import { fmt } from "../../utils/tableHelpers.js";
 import {
-  extraOf, linkedPairingFor, extraShareState, extraShareLabel, withExtraShareCycled,
+  extraOf, linkedPairingFor, extraMates, shareTag, withExtraToggled, withExtraShareToggled,
   extraPairingState, withExtraPairingCycled, EXTRA_PAIRING_LABEL,
 } from "../../utils/seatExtras.js";
+import ShareControl from "../service/ShareControl.jsx";
 import { restrictionCode } from "./FloorMap.jsx";
 
 const FONT = tokens.font;
@@ -136,15 +137,17 @@ export default function FloorDock({
     if (bt.kitchenArchived) upd(bt.id, "kitchenArchived", false);
   };
 
-  // The extras controls, scrolling exactly the states the board card scrolls
-  // (utils/seatExtras). A plain dish cycles off → on → ½P{chair} → off on its
-  // own button; a dish with a linked pairing cycles off → on → wine → n/a
-  // there and carries a separate ½ for the share. The dock used to offer only
-  // on/off and send staff back across the room to say "they'll split it" or
-  // "with the wine" — the two things most often said in the same breath as
-  // "and a beetroot for P2".
-  const cycleShare = (dish, seat) => upd && bt
-    && upd(bt.id, "seats", (prev) => withExtraShareCycled(prev, seat.id, dish));
+  // The extras controls — the same state machines the board card uses
+  // (utils/seatExtras). A chair's button orders the dish (plain dish: on/off;
+  // a dish with a linked pairing: off → on → wine → n/a), and the ½ beside an
+  // ordered chair opens the share picker: tap the chairs splitting it. The
+  // dock used to offer only on/off and send staff back across the room to say
+  // "they'll split it" or "with the wine" — the two things most often said in
+  // the same breath as "and a beetroot for P2".
+  const toggleExtra = (dish, seat) => upd && bt
+    && upd(bt.id, "seats", (prev) => withExtraToggled(prev, seat.id, dish));
+  const toggleShare = (dish, seat, mateId) => upd && bt
+    && upd(bt.id, "seats", (prev) => withExtraShareToggled(prev, seat.id, dish, mateId));
   const cyclePairing = (dish, seat, linked) => upd && bt
     && upd(bt.id, "seats", (prev) => withExtraPairingCycled(prev, seat.id, dish, linked));
 
@@ -435,25 +438,25 @@ export default function FloorDock({
                     {seats.map((s) => {
                       const extra = extraOf(s, dish);
                       const on = !!extra.ordered;
-                      const sharedWith = extra.sharedWith ?? null;
-                      // The sub-label carries whichever answer this dish has to
-                      // give — the pairing when it pours one, the share partner
-                      // otherwise. An unordered chair shows none: "off" is
-                      // already what the flat styling says, and four dishes
-                      // across four chairs cannot afford the word.
+                      const mates = extraMates(s, dish);
+                      // The sub-label carries the pairing when the dish pours
+                      // one. An unordered chair shows none: "off" is already
+                      // what the flat styling says, and four dishes across
+                      // four chairs cannot afford the word. Who it is split
+                      // with reads on the ½ button beside it.
                       const state = linked
                         ? EXTRA_PAIRING_LABEL[extraPairingState(s, dish, linked)]
-                        : extraShareLabel(extraShareState(s, dish));
-                      const sub = on ? state : "";
+                        : (on ? "on" : "off");
+                      const sub = on && linked ? state : "";
                       const tone = state === "wine" || state === "n/a"
                         ? { border: tokens.green.border, bg: tokens.green.bg, color: tokens.green.text }
                         : on ? { border: tokens.neutral[500], bg: tokens.tint.parchment, color: tokens.neutral[700] }
                         : { border: tokens.ink[4], bg: tokens.neutral[0], color: tokens.ink[3] };
                       return (
-                        <span key={s.id} style={{ display: "inline-flex", alignItems: "center", gap: 1 }}>
+                        <Fragment key={s.id}>
                           <button
-                            onClick={() => (linked ? cyclePairing(dish, s, linked) : cycleShare(dish, s))}
-                            title={`${dishName} for P${s.id} — ${state}`}
+                            onClick={() => (linked ? cyclePairing(dish, s, linked) : toggleExtra(dish, s))}
+                            title={`${dishName} for P${s.id} — ${state}${mates.length ? ` · ${shareTag(mates)}` : ""}`}
                             style={{
                               fontFamily: FONT, fontSize: 9, fontWeight: on ? 700 : 400,
                               padding: "5px 7px", borderRadius: 0, cursor: "pointer", lineHeight: 1,
@@ -465,24 +468,17 @@ export default function FloorDock({
                             P{s.id}
                             {sub && <span style={{ fontSize: 8, opacity: 0.75, fontWeight: 400 }}>{sub}</span>}
                           </button>
-                          {/* A linked dish spends its own button on the pairing,
-                              so the share needs one of its own — the same ½ the
-                              board card gives it. */}
-                          {linked && on && seats.length > 1 && (
-                            <button
-                              onClick={() => cycleShare(dish, s)}
-                              title={`Share ${dishName} from P${s.id}`}
-                              style={{
-                                fontFamily: FONT, fontSize: 8, fontWeight: 700,
-                                padding: "5px 4px", borderRadius: 0, cursor: "pointer", lineHeight: 1,
-                                border: `1px solid ${sharedWith !== null ? tokens.neutral[500] : tokens.ink[4]}`,
-                                background: sharedWith !== null ? tokens.tint.parchment : tokens.neutral[0],
-                                color: sharedWith !== null ? tokens.neutral[700] : tokens.ink[3],
-                                touchAction: "manipulation", whiteSpace: "nowrap",
-                              }}
-                            >{sharedWith !== null ? `½P${sharedWith}` : "½"}</button>
+                          {on && (
+                            <ShareControl
+                              size="sm"
+                              seatId={s.id}
+                              seats={seats}
+                              mates={mates}
+                              what={dishName}
+                              onToggle={(mateId) => toggleShare(dish, s, mateId)}
+                            />
                           )}
-                        </span>
+                        </Fragment>
                       );
                     })}
                   </div>

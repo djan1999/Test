@@ -617,15 +617,16 @@ describe("FOH table dock (quick access beside the map)", () => {
     expect(paired.find((s) => s.id === 1).optionalPairings.beet_pairing)
       .toMatchObject({ ordered: true, mode: "alco" });
 
-    // The ½ beside it is the share — a second button, because the first one
-    // is spent on the pairing.
+    // The ½ beside it opens the share picker; the chair is chosen by name,
+    // not reached by tapping round the table.
     fireEvent.click(within(dock).getByTitle("Share Beetroot from P1"));
+    fireEvent.click(within(dock).getByTitle("Share Beetroot from P1 with P2"));
     const shared = upd.mock.calls.filter((c) => c[1] === "seats").at(-1)[2](start);
-    expect(shared.find((s) => s.id === 1).extras.beetroot.sharedWith).toBe(2);
-    expect(shared.find((s) => s.id === 2).extras.beetroot).toMatchObject({ ordered: true, sharedWith: 1 });
+    expect(shared.find((s) => s.id === 1).extras.beetroot.sharedWith).toEqual([2]);
+    expect(shared.find((s) => s.id === 2).extras.beetroot).toMatchObject({ ordered: true, sharedWith: [1] });
   });
 
-  it("dock extras: a dish with no pairing scrolls the share on its own button", () => {
+  it("dock extras: a dish with no pairing toggles on its button and shares from the picker", () => {
     const upd = vi.fn();
     const CHEESE = { key: "cheese", id: "cheese", name: "Cheese", pairings: ["—"] };
     const withCheese = withFired.map((t) =>
@@ -639,14 +640,20 @@ describe("FOH table dock (quick access beside the map)", () => {
     const { container, getByText } = setup({ tables: withCheese, menuCourses, optionalExtras: [CHEESE], upd });
     fireEvent.click(findTable(container, "T1"));
     const dock = dockOf(getByText);
-    // No separate ½ — an unlinked dish spends its one button on the share.
-    expect(within(dock).queryByTitle("Share Cheese from P1")).toBeNull();
+    const start = withCheese.find((t) => t.id === 1).seats;
+    // The chair button is plain on/off now — it never lands on a partner.
     const p1 = within(dock).getByTitle(/^Cheese for P1/);
-    expect(p1.textContent).toContain("on");
+    expect(p1.title).toContain("on");
     fireEvent.click(p1);
-    const next = upd.mock.calls.filter((c) => c[1] === "seats").at(-1)[2](
-      withCheese.find((t) => t.id === 1).seats);
-    expect(next.find((s) => s.id === 1).extras.cheese.sharedWith).toBe(2);
+    const off = upd.mock.calls.filter((c) => c[1] === "seats").at(-1)[2](start);
+    expect(off.find((s) => s.id === 1).extras.cheese.ordered).toBe(false);
+    expect(off.find((s) => s.id === 2).extras).toEqual({});
+    // An unordered chair offers no share.
+    expect(within(dock).queryByTitle("Share Cheese from P2")).toBeNull();
+    fireEvent.click(within(dock).getByTitle("Share Cheese from P1"));
+    fireEvent.click(within(dock).getByTitle("Share Cheese from P1 with P2"));
+    const next = upd.mock.calls.filter((c) => c[1] === "seats").at(-1)[2](start);
+    expect(next.find((s) => s.id === 1).extras.cheese.sharedWith).toEqual([2]);
   });
 
   it("a chair tap swaps the dock column to that ONE seat's quick access (22.08)", () => {

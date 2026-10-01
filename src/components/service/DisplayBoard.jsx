@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
 import { tokens } from "../../styles/tokens.js";
 import { restrCompact, restrLabel } from "../../constants/dietary.js";
@@ -12,9 +12,11 @@ import {
 import QuickBeverageSearch from "./QuickBeverageSearch.jsx";
 import { POUR_MODES, POUR_MODE_LABEL, POUR_MODE_TITLE, seatPourMode, withPourMode, withPairing } from "../../utils/pourMode.js";
 import {
-  extraOf, linkedPairingFor, extraShareState, extraShareLabel, withExtraShareCycled,
+  extraOf, linkedPairingFor, extraMates, pairingMates, shareTag,
+  withExtraToggled, withExtraShareToggled, withPairingShareToggled, withSharedPairing,
   extraPairingState, withExtraPairingCycled, EXTRA_PAIRING_LABEL,
 } from "../../utils/seatExtras.js";
+import ShareControl from "./ShareControl.jsx";
 import {
   digestivoVariants, digestivoCurrentState, digestivoNextState,
   cycleSeatDigestivo, setSeatDigestivo, digestivoEntryMatchesOption, addSeatDigestivo,
@@ -296,10 +298,16 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                 // a paired guest's wine comes from the pairing, so keeping a
                 // pour mode beside it would tell the kitchen two different
                 // stories about one seat. withPairing owns that rule.
+                // Chairs splitting this pairing follow it; clearing it ends
+                // the share (utils/seatExtras withSharedPairing).
                 const cyclePairing = () => {
                   const cur = s.pairing || "—";
                   const idx = PAIRINGS.indexOf(cur);
                   const nx = PAIRINGS[(idx + 1) % PAIRINGS.length];
+                  if (upd && pairingMates(s).length) {
+                    upd(t.id, "seats", prev => withSharedPairing(prev || [], s.id, seat => withPairing(seat, nx)));
+                    return;
+                  }
                   writeSeat(seat => withPairing(seat, nx));
                 };
                 // …and the mirror gesture: tapping BTG or BTB drops the
@@ -414,7 +422,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                       </div>
                       <div style={{ flex: 1 }}>
                         {qSectionLabel("Pairing")}
-                        <div style={{ display: "flex", gap: 2, alignItems: "stretch" }}>
+                        <div style={{ display: "flex", gap: 2, alignItems: "stretch", flexWrap: "wrap" }}>
                           <button onClick={cyclePairing} style={{
                             fontFamily: FONT, fontSize: "10px", letterSpacing: "0.06em",
                             padding: "6px 10px", flex: 1,
@@ -428,36 +436,18 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                             <span>{curPairing === "—" ? "None" : curPairing}</span>
                             <span style={{ fontSize: "8px", opacity: 0.55, fontWeight: 400 }}>→</span>
                           </button>
-                          {(() => {
-                            const otherSeats = seats.filter(x => x.id !== s.id);
-                            if (otherSeats.length === 0) return null;
-                            const curShared = s.pairingSharedWith;
-                            const cycleShare = () => {
-                              if (!upd) return;
-                              const curIdx = otherSeats.findIndex(x => x.id === curShared);
-                              const nextIdx = (curIdx + 1) % (otherSeats.length + 1);
-                              const nextTarget = nextIdx < otherSeats.length ? otherSeats[nextIdx].id : null;
-                              upd(t.id, "seats", prev => prev.map(seat => {
-                                if (seat.id === s.id) return { ...seat, pairingSharedWith: nextTarget };
-                                if (seat.id === curShared && curShared !== null) return { ...seat, pairingSharedWith: null };
-                                if (seat.id === nextTarget && nextTarget !== null) return { ...seat, pairingSharedWith: s.id, pairing: s.pairing };
-                                return seat;
-                              }));
-                            };
-                            const shareActive = curShared !== null;
-                            return (
-                              <button onClick={cycleShare} style={{
-                                fontFamily: FONT, fontSize: "10px", fontWeight: 700, padding: "6px 8px",
-                                border: `1px solid ${shareActive ? tokens.neutral[500] : tokens.ink[4]}`,
-                                borderRadius: 0, cursor: "pointer", lineHeight: 1,
-                                background: shareActive ? tokens.tint.parchment : tokens.neutral[0],
-                                color: shareActive ? tokens.neutral[700] : tokens.ink[3],
-                                touchAction: "manipulation", whiteSpace: "nowrap",
-                              }}>
-                                {shareActive ? `½P${curShared}` : "½"}
-                              </button>
-                            );
-                          })()}
+                          {/* Who splits this pairing — picked chair by chair,
+                              only once there is a pairing to split. */}
+                          {curPairing !== "—" && upd && (
+                            <ShareControl
+                              seatId={s.id}
+                              seats={seats}
+                              mates={pairingMates(s)}
+                              what="Pairing"
+                              onToggle={(mateId) => upd(t.id, "seats",
+                                prev => withPairingShareToggled(prev || [], s.id, mateId))}
+                            />
+                          )}
                           {/* BTG / BTB — the drink story for a guest who is
                               NOT on a pairing, and the only way the kitchen
                               ever hears "by the glass" or "by the bottle".
@@ -504,11 +494,21 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                         const extra = extraOf(s, dish);
                         const dishOn = !!extra.ordered;
                         const linked = linkedPairingFor(dish, optionalPairings);
-                        const otherSeats = seats.filter(x => x.id !== s.id);
-                        const curSharedWith = extra.sharedWith ?? null;
-                        const shareState = extraShareState(s, dish);
-                        const cycleExtraShare = () => upd && upd(t.id, "seats",
-                          prev => withExtraShareCycled(prev, s.id, dish));
+                        const mates = extraMates(s, dish);
+                        const dishName = String(dish.name || dish.key || "");
+                        // The dish button answers "ordered?" (and, for a dish
+                        // that pours, "with which drink?"); WHO splits it is a
+                        // separate, explicit pick beside it.
+                        const share = dishOn && upd && (
+                          <ShareControl
+                            seatId={s.id}
+                            seats={seats}
+                            mates={mates}
+                            what={dishName}
+                            onToggle={(mateId) => upd(t.id, "seats",
+                              prev => withExtraShareToggled(prev || [], s.id, dish, mateId))}
+                          />
+                        );
 
                         if (linked) {
                           const cur = extraPairingState(s, dish, linked);
@@ -520,7 +520,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                             nonalc: { border: tokens.green.border, bg: tokens.green.bg,       color: tokens.green.text },
                           }[cur];
                           return (
-                            <div key={dish.key || dish.id} style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+                            <Fragment key={dish.key || dish.id}>
                               <button onClick={() => upd && upd(t.id, "seats",
                                 prev => withExtraPairingCycled(prev, s.id, dish, linked))} style={{
                                 fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "7px 12px",
@@ -528,37 +528,32 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                                 background: styleMap.bg, color: styleMap.color, lineHeight: 1,
                                 display: "inline-flex", alignItems: "center", gap: 6, textTransform: "uppercase",
                               }}>
-                                <span style={{ fontWeight: cur === "off" ? 400 : 700 }}>{String(dish.name).slice(0, 8)}</span>
+                                <span style={{ fontWeight: cur === "off" ? 400 : 700 }}>{dishName.slice(0, 8)}</span>
                                 <span style={{ fontSize: 9, opacity: 0.7, textTransform: "lowercase" }}>{subLabel}</span>
                               </button>
-                              {dishOn && otherSeats.length > 0 && (
-                                <button onClick={cycleExtraShare} style={{
-                                  fontFamily: FONT, fontSize: 9, fontWeight: 700, padding: "7px 7px",
-                                  border: `1px solid ${curSharedWith !== null ? tokens.neutral[500] : tokens.ink[4]}`,
-                                  borderRadius: 0, cursor: "pointer", lineHeight: 1,
-                                  background: curSharedWith !== null ? tokens.tint.parchment : tokens.neutral[0],
-                                  color: curSharedWith !== null ? tokens.neutral[700] : tokens.ink[3],
-                                  touchAction: "manipulation", whiteSpace: "nowrap",
-                                }}>{curSharedWith !== null ? `½P${curSharedWith}` : "½"}</button>
-                              )}
-                            </div>
+                              {share}
+                            </Fragment>
                           );
                         }
 
-                        // Plain extra — cycles off → on → ½P{seat} per other seat → off
+                        // Plain extra — on / off
                         return (
-                          <button key={dish.key || dish.id} onClick={cycleExtraShare} style={{
-                            fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "7px 12px",
-                            border: `1px solid ${dishOn ? (curSharedWith !== null ? tokens.charcoal.default : tokens.neutral[500]) : tokens.neutral[200]}`,
-                            borderRadius: 0, cursor: "pointer", lineHeight: 1,
-                            background: dishOn ? tokens.tint.parchment : tokens.neutral[0],
-                            color: dishOn ? tokens.ink[0] : tokens.text.disabled,
-                            display: "inline-flex", alignItems: "center", gap: 6, textTransform: "uppercase",
-                            touchAction: "manipulation",
-                          }}>
-                            <span style={{ fontWeight: dishOn ? 700 : 400 }}>{String(dish.name || dish.key || "").slice(0, 8)}</span>
-                            <span style={{ fontSize: 9, opacity: 0.7, textTransform: "lowercase" }}>{extraShareLabel(shareState)}</span>
-                          </button>
+                          <Fragment key={dish.key || dish.id}>
+                            <button onClick={() => upd && upd(t.id, "seats",
+                              prev => withExtraToggled(prev, s.id, dish))} style={{
+                              fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "7px 12px",
+                              border: `1px solid ${dishOn ? (mates.length ? tokens.charcoal.default : tokens.neutral[500]) : tokens.neutral[200]}`,
+                              borderRadius: 0, cursor: "pointer", lineHeight: 1,
+                              background: dishOn ? tokens.tint.parchment : tokens.neutral[0],
+                              color: dishOn ? tokens.ink[0] : tokens.text.disabled,
+                              display: "inline-flex", alignItems: "center", gap: 6, textTransform: "uppercase",
+                              touchAction: "manipulation",
+                            }}>
+                              <span style={{ fontWeight: dishOn ? 700 : 400 }}>{dishName.slice(0, 8)}</span>
+                              <span style={{ fontSize: 9, opacity: 0.7, textTransform: "lowercase" }}>{dishOn ? "on" : "off"}</span>
+                            </button>
+                            {share}
+                          </Fragment>
                         );
                       }));
                     })()}
@@ -725,7 +720,7 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                       fontFamily: FONT, fontSize: "9px", padding: "2px 6px", borderRadius: 0,
                       background: pc.bg, border: `1px solid ${pc.border}`,
                       color: pc.color, fontWeight: 500,
-                    }}>{s.pairing}{s.pairingSharedWith ? ` ½P${s.pairingSharedWith}` : ""}</span>
+                    }}>{s.pairing}{pairingMates(s).length ? ` ${shareTag(pairingMates(s))}` : ""}</span>
                   )}
                   {/* Where the pairing chip would be, for a seat that has
                       none — the chair reads as "drinking by the glass",
@@ -739,13 +734,13 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                   )}
                   {extras.map(d => {
                     const p = extraPairingForSeat(s, d, optionalPairings);
-                    const exSharedWith = (s.extras?.[d.key] || s.extras?.[d.id])?.sharedWith ?? null;
+                    const exTag = shareTag((s.extras?.[d.key] || s.extras?.[d.id])?.sharedWith);
                     return (
                       <span key={d.key} style={{
                         fontFamily: FONT, fontSize: "9px", padding: "2px 6px", borderRadius: 0,
                         border: `1px solid ${tokens.green.border}`, color: tokens.green.text, background: tokens.green.bg,
                       }}>
-                        {d.name}{p ? ` · ${p}` : ""}{exSharedWith !== null ? ` ½P${exSharedWith}` : ""}
+                        {d.name}{p ? ` · ${p}` : ""}{exTag ? ` ${exTag}` : ""}
                       </span>
                     );
                   })}

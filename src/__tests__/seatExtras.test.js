@@ -8,11 +8,16 @@ import { describe, it, expect } from "vitest";
 import {
   extraOf,
   linkedPairingFor,
-  extraShareStates,
-  extraShareState,
-  nextExtraShareState,
-  extraShareLabel,
-  withExtraShareCycled,
+  shareMates,
+  shareTag,
+  shareGroups,
+  extraMates,
+  pairingMates,
+  withExtraToggled,
+  withExtraShareToggled,
+  withExtraShareCleared,
+  withPairingShareToggled,
+  withSharedPairing,
   extraPairingStates,
   extraPairingState,
   withExtraPairingCycled,
@@ -43,60 +48,107 @@ describe("reading an extra off a seat", () => {
   });
 });
 
-describe("the share cycle", () => {
+describe("reading a share", () => {
+  it("reads the old single-id shape and the group shape alike", () => {
+    expect(shareMates(null)).toEqual([]);
+    expect(shareMates(2)).toEqual([2]);
+    expect(shareMates([3, 2, 3])).toEqual([2, 3]);
+    expect(extraMates(seat(1, on({ sharedWith: 2 })), BEET)).toEqual([2]);
+    expect(pairingMates({ id: 1, pairingSharedWith: [4, 3] })).toEqual([3, 4]);
+  });
+
+  it("tags a chair with every partner, not just one", () => {
+    expect(shareTag(null)).toBe("");
+    expect(shareTag(2)).toBe("½ P2");
+    expect(shareTag([2, 3])).toBe("⅓ P2+P3");
+  });
+
+  it("splits chairs into groups, keeping a partner the list does not carry", () => {
+    expect(shareGroups([
+      { id: 1, mates: [2] }, { id: 2, mates: [1] }, { id: 3, mates: null },
+    ])).toEqual([[1, 2], [3]]);
+    // A one-sided legacy pair still lands in one group.
+    expect(shareGroups([{ id: 1, mates: 2 }, { id: 2, mates: null }])).toEqual([[1, 2]]);
+    // The kitchen popup only carries chairs that changed.
+    expect(shareGroups([{ id: 3, mates: [4] }])).toEqual([[3, 4]]);
+  });
+});
+
+describe("ordering and sharing a dish", () => {
   const seats = [seat(1), seat(2), seat(3)];
 
-  it("scrolls off → on → every other chair → off", () => {
-    expect(extraShareStates(1, seats)).toEqual(["off", "on", 2, 3]);
+  it("the dish button is plain on/off — it never lands on a partner", () => {
+    const once = withExtraToggled(seats, 1, BEET);
+    expect(once[0].extras.beetroot).toMatchObject({ ordered: true, sharedWith: null });
+    expect(once[1].extras).toEqual({});
+    const twice = withExtraToggled(once, 1, BEET);
+    expect(twice[0].extras.beetroot.ordered).toBe(false);
   });
 
-  it("reads a seat's current place in that cycle", () => {
-    expect(extraShareState(seat(1), BEET)).toBe("off");
-    expect(extraShareState(seat(1, on()), BEET)).toBe("on");
-    expect(extraShareState(seat(1, on({ sharedWith: 2 })), BEET)).toBe(2);
+  it("picking a chair gives it the other half, both sides naming each other", () => {
+    const next = withExtraShareToggled([seat(1, on()), seat(2), seat(3)], 1, BEET, 2);
+    expect(next[0].extras.beetroot).toMatchObject({ ordered: true, sharedWith: [2] });
+    expect(next[1].extras.beetroot).toMatchObject({ ordered: true, sharedWith: [1] });
+    expect(next[2].extras).toEqual({});
   });
 
-  it("wraps back to off past the last chair", () => {
-    const shared3 = [seat(1, on({ sharedWith: 3 })), seat(2), seat(3)];
-    expect(nextExtraShareState(shared3[0], shared3, BEET)).toBe("off");
+  it("sharing turns the dish on for the chair doing the sharing", () => {
+    const next = withExtraShareToggled(seats, 1, BEET, 2);
+    expect(next[0].extras.beetroot).toMatchObject({ ordered: true, sharedWith: [2] });
   });
 
-  it("labels a share by the chair it names", () => {
-    expect(extraShareLabel("off")).toBe("off");
-    expect(extraShareLabel("on")).toBe("on");
-    expect(extraShareLabel(2)).toBe("½P2");
+  it("three chairs can split one plate", () => {
+    let next = withExtraShareToggled([seat(1, on()), seat(2), seat(3)], 1, BEET, 2);
+    next = withExtraShareToggled(next, 1, BEET, 3);
+    expect(next.map((s) => s.extras.beetroot.sharedWith)).toEqual([[2, 3], [1, 3], [1, 2]]);
+    expect(next.every((s) => s.extras.beetroot.ordered)).toBe(true);
   });
 
-  it("orders the dish on the first tap", () => {
-    const next = withExtraShareCycled(seats, 1, BEET);
-    expect(next[0].extras.beetroot).toMatchObject({ ordered: true, sharedWith: null });
-    expect(next[1].extras).toEqual({});
-  });
-
-  it("gives the partner the other half when a share is named", () => {
-    const next = withExtraShareCycled([seat(1, on()), seat(2), seat(3)], 1, BEET);
-    expect(next[0].extras.beetroot.sharedWith).toBe(2);
-    expect(next[1].extras.beetroot).toMatchObject({ ordered: true, sharedWith: 1 });
-  });
-
-  it("releases the chair a share used to name when it moves on", () => {
-    const start = [
-      seat(1, on({ sharedWith: 2 })),
-      seat(2, on({ sharedWith: 1 })),
-      seat(3),
-    ];
-    const next = withExtraShareCycled(start, 1, BEET);
-    expect(next[0].extras.beetroot.sharedWith).toBe(3);
-    // P2 was only ordered because P1 was splitting with it.
+  it("un-picking a chair releases it and leaves the rest splitting", () => {
+    let next = withExtraShareToggled([seat(1, on()), seat(2), seat(3)], 1, BEET, 2);
+    next = withExtraShareToggled(next, 1, BEET, 3);
+    next = withExtraShareToggled(next, 1, BEET, 2);
+    // P2 only had it because it was splitting.
     expect(next[1].extras.beetroot).toMatchObject({ ordered: false, sharedWith: null });
-    expect(next[2].extras.beetroot).toMatchObject({ ordered: true, sharedWith: 1 });
+    expect(next[0].extras.beetroot.sharedWith).toEqual([3]);
+    expect(next[2].extras.beetroot.sharedWith).toEqual([1]);
   });
 
-  it("releases the partner when the whole thing is cancelled", () => {
-    const start = [seat(1, on({ sharedWith: 2 })), seat(2, on({ sharedWith: 1 }))];
-    const next = withExtraShareCycled(start, 1, BEET);   // only P2 to offer → off
-    expect(next[0].extras.beetroot.ordered).toBe(false);
+  it("a chair picked from another share leaves that one", () => {
+    // P1+P2 split one, P3+P4 another; P1 pulls P3 in.
+    const start = [
+      seat(1, on({ sharedWith: [2] })), seat(2, on({ sharedWith: [1] })),
+      seat(3, on({ sharedWith: [4] })), seat(4, on({ sharedWith: [3] })),
+    ];
+    const next = withExtraShareToggled(start, 1, BEET, 3);
+    expect(next[0].extras.beetroot.sharedWith).toEqual([2, 3]);
+    expect(next[2].extras.beetroot.sharedWith).toEqual([1, 2]);
+    // P4 keeps its plate, now on its own.
+    expect(next[3].extras.beetroot).toMatchObject({ ordered: true, sharedWith: null });
+  });
+
+  it("switching a sharer off leaves the others splitting", () => {
+    const start = [
+      seat(1, on({ sharedWith: [2, 3] })), seat(2, on({ sharedWith: [1, 3] })), seat(3, on({ sharedWith: [1, 2] })),
+    ];
+    const next = withExtraToggled(start, 1, BEET);
+    expect(next[0].extras.beetroot).toMatchObject({ ordered: false, sharedWith: null });
+    expect(next[1].extras.beetroot).toMatchObject({ ordered: true, sharedWith: [3] });
+    expect(next[2].extras.beetroot).toMatchObject({ ordered: true, sharedWith: [2] });
+  });
+
+  it("clearing a share releases every chair it named", () => {
+    const start = [seat(1, on({ sharedWith: [2] })), seat(2, on({ sharedWith: [1] }))];
+    const next = withExtraShareCleared(start, 1, BEET);
+    expect(next[0].extras.beetroot).toMatchObject({ ordered: true, sharedWith: null });
     expect(next[1].extras.beetroot.ordered).toBe(false);
+  });
+
+  it("reads a legacy single-id share when re-picking", () => {
+    const start = [seat(1, on({ sharedWith: 2 })), seat(2, on({ sharedWith: 1 })), seat(3)];
+    const next = withExtraShareToggled(start, 1, BEET, 3);
+    expect(next[0].extras.beetroot.sharedWith).toEqual([2, 3]);
+    expect(next[1].extras.beetroot.sharedWith).toEqual([1, 3]);
   });
 
   it("never touches a partner's own pairing choice", () => {
@@ -106,13 +158,51 @@ describe("the share cycle", () => {
       seat(1, on()),
       seat(2, on(), { beet_pairing: { ordered: true, mode: "alco" } }),
     ];
-    const next = withExtraShareCycled(start, 1, BEET);
+    const next = withExtraShareToggled(start, 1, BEET, 2);
     expect(next[1].optionalPairings.beet_pairing).toEqual({ ordered: true, mode: "alco" });
   });
 
   it("leaves the table alone for a seat or a dish it cannot find", () => {
-    expect(withExtraShareCycled(seats, 99, BEET)).toBe(seats);
-    expect(withExtraShareCycled(seats, 1, {})).toBe(seats);
+    expect(withExtraShareToggled(seats, 99, BEET, 2)).toBe(seats);
+    expect(withExtraShareToggled(seats, 1, BEET, 99)).toBe(seats);
+    expect(withExtraShareToggled(seats, 1, {}, 2)).toBe(seats);
+    expect(withExtraToggled(seats, 99, BEET)).toBe(seats);
+  });
+});
+
+describe("sharing a pairing", () => {
+  const p = (id, pairing = "", over = {}) => ({ id, pairing, pourMode: null, pairingSharedWith: null, ...over });
+
+  it("does nothing until there is a pairing to split", () => {
+    const seats = [p(1), p(2)];
+    expect(withPairingShareToggled(seats, 1, 2)).toBe(seats);
+  });
+
+  it("a chair picked takes the pairing and drops its pour mode", () => {
+    const next = withPairingShareToggled([p(1, "Wine"), p(2, "", { pourMode: "btg" }), p(3)], 1, 2);
+    expect(next[0].pairingSharedWith).toEqual([2]);
+    expect(next[1]).toMatchObject({ pairing: "Wine", pourMode: null, pairingSharedWith: [1] });
+    expect(next[2].pairingSharedWith).toBeNull();
+  });
+
+  it("a chair un-picked keeps what it was poured", () => {
+    let next = withPairingShareToggled([p(1, "Wine"), p(2), p(3)], 1, 2);
+    next = withPairingShareToggled(next, 1, 2);
+    expect(next[0].pairingSharedWith).toBeNull();
+    expect(next[1]).toMatchObject({ pairing: "Wine", pairingSharedWith: null });
+  });
+
+  it("changing the pairing carries the whole share with it", () => {
+    const start = [p(1, "Wine", { pairingSharedWith: [2] }), p(2, "Wine", { pairingSharedWith: [1] }), p(3, "Wine")];
+    const next = withSharedPairing(start, 1, (s) => ({ ...s, pairing: "Non-Alc" }));
+    expect(next.map((s) => s.pairing)).toEqual(["Non-Alc", "Non-Alc", "Wine"]);
+  });
+
+  it("clearing the pairing ends the share", () => {
+    const start = [p(1, "Wine", { pairingSharedWith: [2] }), p(2, "Wine", { pairingSharedWith: [1] })];
+    const next = withSharedPairing(start, 1, (s) => ({ ...s, pairing: "" }));
+    expect(next[0].pairingSharedWith).toBeNull();
+    expect(next[1]).toMatchObject({ pairing: "Wine", pairingSharedWith: null });
   });
 });
 
