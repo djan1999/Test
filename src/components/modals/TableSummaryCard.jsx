@@ -5,6 +5,7 @@ import { restrLabel } from "../../constants/dietary.js";
 import { groupDrinks, qtySuffix } from "../../utils/drinkQuantities.js";
 import { POUR_MODE_LABEL, POUR_MODE_TITLE, seatPourMode } from "../../utils/pourMode.js";
 import { tokens } from "../../styles/tokens.js";
+import { shareTag } from "../../utils/seatExtras.js";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
 
 const FONT = tokens.font;
@@ -53,17 +54,17 @@ export default function TableSummaryCard({ table: t, groupLabel, optionalExtras 
                 return <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, padding: "1px 5px", border: `1px solid ${gs.border}`, background: gs.bg, color: gs.text }}>{s.gender}</span>;
               })()}
               {s.water !== "—" && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 0, background: ws.bg || tokens.neutral[100], color: tokens.neutral[700], border: `1px solid ${tokens.neutral[200]}` }}>{s.water}</span>}
-              {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 0, border: `1px solid ${tokens.neutral[200]}`, color: PAIRING_COLOR[s.pairing] || tokens.neutral[600], background: PAIRING_BG[s.pairing] || tokens.neutral[50] }}>{s.pairing}{s.pairingSharedWith ? ` ½P${s.pairingSharedWith}` : ""}</span>}
+              {s.pairing && <span style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 0, border: `1px solid ${tokens.neutral[200]}`, color: PAIRING_COLOR[s.pairing] || tokens.neutral[600], background: PAIRING_BG[s.pairing] || tokens.neutral[50] }}>{s.pairing}{shareTag(s.pairingSharedWith) ? ` ${shareTag(s.pairingSharedWith)}` : ""}</span>}
               {/* An unpaired guest drinking by the glass or the bottle — the
                   summary shows it where the pairing would be, so the chair
                   never reads as "ordered nothing". */}
               {seatPourMode(s) && <span title={POUR_MODE_TITLE[seatPourMode(s)]} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 8px", borderRadius: 0, border: `1px solid ${tokens.neutral[500]}`, color: tokens.neutral[700], background: tokens.tint.parchment, fontWeight: 700 }}>{POUR_MODE_LABEL[seatPourMode(s)]}</span>}
               {extras.map((d) => {
                 const p = extraPairingForSeat(s, d, optionalPairings);
-                const exSharedWith = (s.extras?.[d.key] || s.extras?.[d.id])?.sharedWith ?? null;
+                const exTag = shareTag((s.extras?.[d.key] || s.extras?.[d.id])?.sharedWith);
                 return (
                   <span key={d.key} style={{ fontFamily: FONT, fontSize: 10, padding: "2px 7px", borderRadius: 0, border: `1px solid ${tokens.green.border}`, color: tokens.green.text, background: tokens.green.bg }}>
-                    {d.name}{p ? ` · ${p}` : ""}{exSharedWith !== null ? ` ½P${exSharedWith}` : ""}
+                    {d.name}{p ? ` · ${p}` : ""}{exTag ? ` ${exTag}` : ""}
                   </span>
                 );
               })}

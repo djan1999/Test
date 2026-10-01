@@ -35,66 +35,239 @@ export const linkedPairingFor = (dish, optionalPairings = []) =>
   ) || null;
 
 // ── Share ───────────────────────────────────────────────────────────────────
-// off → on → ½P{each other chair} → off. The share partner is a seat id, so
-// the cycle is as long as the table and every chair is reachable by tapping.
+// A share is a GROUP of chairs splitting one plate (or one pairing): P1 + P2,
+// or P1 + P2 + P3. Every member stores the OTHER members:
+//
+//   P1.extras.beetroot.sharedWith = [2, 3]
+//   P2.extras.beetroot.sharedWith = [1, 3]
+//   P3.extras.beetroot.sharedWith = [1, 2]
+//
+// so any one chair answers "who am I splitting with" on its own. Older rows
+// stored a single seat id (`sharedWith: 2`); shareMates() reads both shapes,
+// and every writer here writes the array.
+//
+// The old control scrolled off → on → ½P2 → ½P3 → off on one button. Staff
+// could not see who they were about to land on, could only ever pair two
+// chairs, and the kitchen heard just "Share". Now the dish button is plain
+// on/off and the share is chosen by tapping the chairs it goes to.
 
-/** The states this seat's button scrolls through, in order. */
-export const extraShareStates = (seatId, seats = []) =>
-  ["off", "on", ...(Array.isArray(seats) ? seats : [])
-    .filter((x) => x?.id !== seatId)
-    .map((x) => x.id)];
-
-/** Where the button is now: "off", "on", or the seat id it is shared with. */
-export const extraShareState = (seat, dish) => {
-  const ex = extraOf(seat, dish);
-  if (!ex.ordered) return "off";
-  const shared = ex.sharedWith ?? null;
-  return shared !== null ? shared : "on";
+/** Every other chair in this share, sorted — [] when not shared. */
+export const shareMates = (value) => {
+  const raw = Array.isArray(value) ? value : (value == null ? [] : [value]);
+  return [...new Set(raw.map(Number).filter((n) => Number.isFinite(n)))].sort((a, b) => a - b);
 };
 
-/** The state one tap moves to, wrapping back to "off" past the last chair. */
-export const nextExtraShareState = (seat, seats, dish) => {
-  const states = extraShareStates(seat?.id, seats);
-  const i = states.indexOf(extraShareState(seat, dish));
-  return states[(i < 0 ? 0 : i + 1) % states.length];
-};
+/** Stored form: the sorted mates, or null when the chair shares with nobody. */
+const storedMates = (mates) => (mates.length ? [...mates].sort((a, b) => a - b) : null);
 
-/** What the button reads: "off", "on", or "½P2". */
-export const extraShareLabel = (state) =>
-  typeof state === "number" ? `½P${state}` : String(state);
+/** The other chairs splitting this dish with this seat. */
+export const extraMates = (seat, dish) => shareMates(extraOf(seat, dish).sharedWith);
+
+/** The other chairs splitting this seat's pairing. */
+export const pairingMates = (seat) => shareMates(seat?.pairingSharedWith);
+
+const FRACTION = { 2: "½", 3: "⅓", 4: "¼" };
 
 /**
- * Every seat after one tap of this seat's share button.
- *
- * Only `extras.sharedWith` is touched. A previous version also cleared the
- * partner's `optionalPairings`, which silently wiped a pairing they had chosen
- * for themselves — the "beetroot pairing disappears when I touch share" bug.
- * The menu generator already reads the seat's own `sharedWith` flag.
+ * Short tag for a chair in a share, naming the partners: "½ P2", "⅓ P2+P3".
+ * Empty string when not shared.
  */
-export const withExtraShareCycled = (seats, seatId, dish) => {
+export const shareTag = (mates) => {
+  const list = shareMates(mates);
+  if (!list.length) return "";
+  const frac = FRACTION[list.length + 1] || `1/${list.length + 1}`;
+  return `${frac} ${list.map((id) => `P${id}`).join("+")}`;
+};
+
+/**
+ * Split chairs into their share groups. `entries` is [{ id, mates }]; returns
+ * sorted id arrays, one per group (a chair sharing with nobody is its own
+ * group of one), ordered by their first chair. A mate named by a chair but
+ * missing from `entries` is still listed — the kitchen popup only carries the
+ * chairs that changed, and "P1 + P2" must not shrink to "P1".
+ */
+export const shareGroups = (entries = []) => {
+  const groups = [];
+  const seen = new Set();
+  const byId = new Map((entries || []).map((e) => [Number(e.id), shareMates(e.mates)]));
+  [...byId.keys()].sort((a, b) => a - b).forEach((id) => {
+    if (seen.has(id)) return;
+    // Walk the links, so a half-written legacy pair (only one side pointing
+    // at the other) still lands in one group.
+    const group = new Set([id]);
+    const queue = [id];
+    while (queue.length) {
+      const cur = queue.shift();
+      const linked = [...(byId.get(cur) || [])];
+      byId.forEach((m, other) => { if (m.includes(cur)) linked.push(other); });
+      linked.forEach((n) => { if (!group.has(n)) { group.add(n); queue.push(n); } });
+    }
+    group.forEach((n) => seen.add(n));
+    groups.push([...group].sort((a, b) => a - b));
+  });
+  return groups;
+};
+
+/**
+ * Add `mateId` to `seatId`'s share group, or take them out of it.
+ *
+ * `getMates(seat)` reads a chair's mates; `write(seat, mates, role)` returns
+ * the chair with its new mates, where role is "join" (just added), "leave"
+ * (just removed) or "stay" (membership unchanged, mates list changed).
+ * A chair joining leaves whatever group it was in before.
+ */
+const regroup = (list, seatId, mateId, getMates, write) => {
+  const self = list.find((s) => s?.id === seatId);
+  const mate = list.find((s) => s?.id === mateId);
+  if (!self || !mate || seatId === mateId) return list;
+  const group = new Set([seatId, ...getMates(self)].filter((id) => list.some((s) => s?.id === id)));
+  const changes = new Map();
+  const setGroup = (members, roleOf) => members.forEach((id) =>
+    changes.set(id, { mates: members.filter((x) => x !== id), role: roleOf(id) }));
+
+  if (group.has(mateId)) {
+    group.delete(mateId);
+    changes.set(mateId, { mates: [], role: "leave" });
+    setGroup([...group], () => "stay");
+  } else {
+    // The mate's old group carries on without it.
+    const old = getMates(mate).filter((id) => id !== seatId && !group.has(id)
+      && list.some((s) => s?.id === id));
+    setGroup(old, () => "stay");
+    group.add(mateId);
+    setGroup([...group], (id) => (id === mateId ? "join" : "stay"));
+  }
+  return list.map((s) => {
+    const c = changes.get(s?.id);
+    return c ? write(s, c.mates, c.role) : s;
+  });
+};
+
+/** Take a chair out of its share group, leaving the rest of the group intact. */
+const leaveGroup = (list, seatId, getMates, write) => {
+  const self = list.find((s) => s?.id === seatId);
+  if (!self) return list;
+  const rest = getMates(self).filter((id) => list.some((s) => s?.id === id));
+  if (!rest.length) return list;
+  return list.map((s) => {
+    if (s?.id === seatId) return write(s, [], "stay");
+    if (rest.includes(s?.id)) return write(s, rest.filter((x) => x !== s.id), "stay");
+    return s;
+  });
+};
+
+const extraWriter = (dish) => (s, mates, role) => {
+  const cur = extraOf(s, dish);
+  const ordered = role === "join" ? true : role === "leave" ? false : cur.ordered;
+  return {
+    ...s,
+    extras: { ...s.extras, [dish.key]: { ...cur, ordered, sharedWith: storedMates(mates) } },
+  };
+};
+
+/**
+ * Every seat after this seat's dish is switched on or off. Switching off also
+ * takes the chair out of its share — the others keep splitting.
+ */
+export const withExtraToggled = (seats, seatId, dish) => {
   const list = Array.isArray(seats) ? seats : [];
   const seat = list.find((s) => s?.id === seatId);
   if (!seat || !dish?.key) return list;
   const extra = extraOf(seat, dish);
-  const prevShared = extra.sharedWith ?? null;
-  const next = nextExtraShareState(seat, list, dish);
-  const ordered = next !== "off";
-  const sharedWith = typeof next === "number" ? next : null;
+  if (extra.ordered) {
+    const detached = leaveGroup(list, seatId, (s) => extraMates(s, dish), extraWriter(dish));
+    return detached.map((s) => (s?.id === seatId
+      ? { ...s, extras: { ...s.extras, [dish.key]: { ...extraOf(s, dish), ordered: false, sharedWith: null } } }
+      : s));
+  }
+  return list.map((s) => (s?.id === seatId
+    ? { ...s, extras: { ...s.extras, [dish.key]: { ...extra, ordered: true, sharedWith: null } } }
+    : s));
+};
+
+/**
+ * Every seat after `mateId` is added to (or removed from) the chairs sharing
+ * `seatId`'s dish. A chair added is ordered the dish; a chair removed is not
+ * — it only had it because it was splitting.
+ *
+ * Only `extras` is touched: a mate's own optional-pairing choice survives
+ * (the "beetroot pairing disappears when I touch share" bug).
+ */
+export const withExtraShareToggled = (seats, seatId, dish, mateId) => {
+  const list = Array.isArray(seats) ? seats : [];
+  if (!dish?.key) return list;
+  const seat = list.find((s) => s?.id === seatId);
+  if (!seat || seatId === mateId || !list.some((s) => s?.id === mateId)) return list;
+  // Sharing implies the dish is on for the chair doing the sharing.
+  const base = extraOf(seat, dish).ordered ? list : withExtraToggled(list, seatId, dish);
+  return regroup(base, seatId, mateId, (s) => extraMates(s, dish), extraWriter(dish));
+};
+
+/** Every seat after this chair steps out of its dish share; the rest keep splitting. */
+export const withExtraShareLeft = (seats, seatId, dish) => {
+  const list = Array.isArray(seats) ? seats : [];
+  if (!dish?.key) return list;
+  return leaveGroup(list, seatId, (s) => extraMates(s, dish), extraWriter(dish));
+};
+
+/**
+ * Every seat after this seat's extra stops being shared with anyone. The
+ * chairs it named are released — they only had it because they were splitting.
+ */
+export const withExtraShareCleared = (seats, seatId, dish) => {
+  const list = Array.isArray(seats) ? seats : [];
+  const seat = list.find((s) => s?.id === seatId);
+  if (!seat || !dish?.key) return list;
+  return extraMates(seat, dish).reduce(
+    (acc, mateId) => regroup(acc, seatId, mateId, (s) => extraMates(s, dish), extraWriter(dish)),
+    list,
+  );
+};
+
+// ── Pairing share ───────────────────────────────────────────────────────────
+// The same group, for a drinks pairing two or more guests split. A chair
+// joining takes the group's pairing (and drops BTG/BTB — a paired chair has
+// no pour mode); a chair leaving keeps the pairing it was poured, because it
+// may well carry on with a pairing of its own.
+
+const pairingWriter = (pairing) => (s, mates, role) => ({
+  ...s,
+  pairingSharedWith: storedMates(mates),
+  ...(role === "join" ? { pairing, pourMode: null } : {}),
+});
+
+/** Every seat after `mateId` joins or leaves `seatId`'s shared pairing. */
+export const withPairingShareToggled = (seats, seatId, mateId) => {
+  const list = Array.isArray(seats) ? seats : [];
+  const seat = list.find((s) => s?.id === seatId);
+  const pairing = seat?.pairing;
+  if (!seat || !pairing || pairing === "—") return list;
+  return regroup(list, seatId, mateId, pairingMates, pairingWriter(pairing));
+};
+
+/**
+ * Every seat after `transform` changes this seat's pairing. Chairs sharing
+ * the pairing follow it; clearing the pairing dissolves the share.
+ */
+export const withSharedPairing = (seats, seatId, transform) => {
+  const list = Array.isArray(seats) ? seats : [];
+  const seat = list.find((s) => s?.id === seatId);
+  if (!seat) return list;
+  const next = transform(seat);
+  const mates = pairingMates(seat).filter((id) => list.some((s) => s?.id === id));
+  const hasPairing = !!(next.pairing && next.pairing !== "—");
+  if (!mates.length) return list.map((s) => (s?.id === seatId ? next : s));
+  if (!hasPairing) {
+    const group = [seatId, ...mates];
+    return list.map((s) => {
+      if (s?.id === seatId) return { ...next, pairingSharedWith: null };
+      if (group.includes(s?.id)) return { ...s, pairingSharedWith: null };
+      return s;
+    });
+  }
   return list.map((s) => {
-    if (s?.id === seatId) {
-      return { ...s, extras: { ...s.extras, [dish.key]: { ...extra, ordered, sharedWith } } };
-    }
-    // The chair this share used to name is released — it was only ordered
-    // because somebody else was splitting with it.
-    if (prevShared !== null && s?.id === prevShared && prevShared !== sharedWith) {
-      const old = s.extras?.[dish.key] || {};
-      return { ...s, extras: { ...s.extras, [dish.key]: { ...old, ordered: false, sharedWith: null } } };
-    }
-    // The chair it now names gets the other half.
-    if (sharedWith !== null && s?.id === sharedWith) {
-      const theirs = s.extras?.[dish.key] || { ordered: false, pairing: extra.pairing };
-      return { ...s, extras: { ...s.extras, [dish.key]: { ...theirs, ordered: true, sharedWith: seatId } } };
-    }
+    if (s?.id === seatId) return next;
+    if (mates.includes(s?.id)) return { ...s, pairing: next.pairing, pourMode: null };
     return s;
   });
 };
@@ -130,7 +303,13 @@ export const withExtraPairingCycled = (seats, seatId, dish, linked) => {
   const list = Array.isArray(seats) ? seats : [];
   if (!dish?.key || !linked?.key) return list;
   const states = extraPairingStates(linked);
-  return list.map((seat) => {
+  const seat = list.find((s) => s?.id === seatId);
+  // Cycling back to off takes the chair out of its share, as the plain
+  // on/off toggle does — the rest of the group keeps splitting.
+  const goingOff = seat
+    && states[(states.indexOf(extraPairingState(seat, dish, linked)) + 1) % states.length] === "off";
+  const base = goingOff ? withExtraShareLeft(list, seatId, dish) : list;
+  return base.map((seat) => {
     if (seat?.id !== seatId) return seat;
     const xtra = extraOf(seat, dish);
     const cur = extraPairingState(seat, dish, linked);

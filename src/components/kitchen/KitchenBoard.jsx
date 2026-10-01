@@ -13,6 +13,7 @@ import { extraPairingLabel, extraPairingForSeat } from "../../constants/pairings
 import { POUR_MODE_LABEL, POUR_MODE_TITLE, normalizePourMode, seatPourMode } from "../../utils/pourMode.js";
 import { digestivoAnchorKeys, isDigestivoAnchor, digestivoSeatOrders, digestivoCount } from "../../utils/digestivo.js";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
+import { shareGroups, shareMates } from "../../utils/seatExtras.js";
 
 // Lazy so the minimap's floor geometry only loads on the large kitchen panel
 // that actually shows it — a phone/tablet board never pays for it.
@@ -1065,14 +1066,25 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             if (orderedSeats.length === 0) return null;
             const isBirthdayCake = table.birthday && normCategory(course) === "celebration";
             const dish = { key: optKey, id: optKey };
-            const anyShared = !isBirthdayCake && orderedSeats.some(s => (s.extras?.[optKey]?.sharedWith ?? null) !== null);
+            // Who splits with whom, spelled out: "P1+P2 SHARE · P3·W". The
+            // ticket used to append one "Share" to the whole line, which
+            // could not say which chairs were splitting or how many plates
+            // to start.
+            const mark = (s) => {
+              const p = extraPairingForSeat(s, dish, optionalPairings);
+              return `P${s.id}${p ? `·${p}` : ""}`;
+            };
+            const byId = new Map(orderedSeats.map(s => [Number(s.id), s]));
             const marks = isBirthdayCake
               ? "ALL"
-              : orderedSeats.map(s => {
-                  const p = extraPairingForSeat(s, dish, optionalPairings);
-                  return `P${s.id}${p ? `·${p}` : ""}`;
-                }).join(" ");
-            return marks + (anyShared ? " Share" : "") + ((optKey === "cake" && table.cakeNote) ? ` — ${table.cakeNote}` : "");
+              : shareGroups(orderedSeats.map(s => ({
+                  id: s.id,
+                  // only chairs that actually have the dish can split it
+                  mates: shareMates(s.extras?.[optKey]?.sharedWith).filter(m => byId.has(m)),
+                }))).map(group => group.length > 1
+                  ? `${group.map(id => mark(byId.get(id))).join("+")} SHARE`
+                  : mark(byId.get(group[0]))).join(" · ");
+            return marks + ((optKey === "cake" && table.cakeNote) ? ` — ${table.cakeNote}` : "");
           })();
 
           // Optional drink pairing alert — only shown for the Crayfish course;
@@ -1586,19 +1598,19 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
             s.extras.forEach(ex => {
               if (!extrasMap[ex.key]) extrasMap[ex.key] = { name: ex.name, seats: [], anyShared: false, unassignedRestrictions: new Set() };
               (ex.unassignedRestrictions || []).forEach(warning => extrasMap[ex.key].unassignedRestrictions?.add(warning));
-              const sw = ex.sharedWith ?? null;
+              const sw = shareMates(ex.sharedWith);
               extrasMap[ex.key].seats.push({ id: s.id, gender: s.gender || null, pairing: ex.pairing, sharedWith: sw, restriction: ex.restriction ?? null });
-              if (sw !== null) extrasMap[ex.key].anyShared = true;
+              if (sw.length) extrasMap[ex.key].anyShared = true;
             });
           } else {
             // legacy format
             if (s.beet) {
               if (!extrasMap.beetroot) extrasMap.beetroot = { name: "Beetroot", seats: [], anyShared: false };
-              extrasMap.beetroot.seats.push({ id: s.id, gender: s.gender || null, pairing: s.beet.pairing, sharedWith: null });
+              extrasMap.beetroot.seats.push({ id: s.id, gender: s.gender || null, pairing: s.beet.pairing, sharedWith: [] });
             }
             if (s.cheese) {
               if (!extrasMap.cheese) extrasMap.cheese = { name: "Cheese", seats: [], anyShared: false };
-              extrasMap.cheese.seats.push({ id: s.id, gender: s.gender || null, pairing: "—", sharedWith: null });
+              extrasMap.cheese.seats.push({ id: s.id, gender: s.gender || null, pairing: "—", sharedWith: [] });
             }
           }
         });
@@ -1665,24 +1677,23 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                 </div>
               )}
               {pairSeats.length > 0 && (() => {
-                // Group seats by pairing type
+                // Group seats by pairing type, then by who splits one pairing
                 const pairingGroups = {};
                 pairSeats.forEach(s => {
-                  if (!pairingGroups[s.pairing]) pairingGroups[s.pairing] = { seats: [], anyShared: false };
-                  pairingGroups[s.pairing].seats.push(s);
-                  if (s.pairingSharedWith) pairingGroups[s.pairing].anyShared = true;
+                  if (!pairingGroups[s.pairing]) pairingGroups[s.pairing] = [];
+                  pairingGroups[s.pairing].push(s);
                 });
                 return Object.entries(pairingGroups).map(([pType, group]) => {
                   const c = PAIR_COLORS[pType] || {};
+                  const shares = shareGroups(group.map(s => ({ id: s.id, mates: s.pairingSharedWith })));
                   return (
                     <div key={pType} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
                       <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>PAIRING</span>
-                      {group.seats.map(s => (
-                        <span key={s.id} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: c.bg || tokens.neutral[50], border: `1px solid ${c.border || tokens.ink[4]}`, color: c.color || tokens.ink[2] }}>
-                          P{s.id} {pType}
+                      {shares.map(ids => (
+                        <span key={ids.join("+")} data-share={ids.length > 1 ? ids.join("+") : undefined} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: c.bg || tokens.neutral[50], border: `1px solid ${ids.length > 1 ? tokens.charcoal.default : (c.border || tokens.ink[4])}`, color: c.color || tokens.ink[2], fontWeight: ids.length > 1 ? 700 : 400 }}>
+                          {ids.map(id => `P${id}`).join(" + ")} {pType}{ids.length > 1 ? " · SHARED" : ""}
                         </span>
                       ))}
-                      {group.anyShared && <span style={{ fontFamily: FONT, fontSize: "9px", fontWeight: 700, letterSpacing: "0.10em", color: tokens.ink[2], padding: "2px 6px", border: `1px solid ${tokens.ink[4]}`, background: tokens.ink[5] }}>SHARE</span>}
                     </div>
                   );
                 });
@@ -1709,22 +1720,34 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                       Seat assignment needed — {[...group.unassignedRestrictions].join(" · ")}
                     </div>
                   )}
-                  {group.seats.map(s => (
+                  {/* One chip per PLATE: chairs splitting a dish share a
+                      chip that names them all — "P1 + P2 · SHARE · 1 PLATE"
+                      — so the pass reads who is splitting with whom, not
+                      just that somebody is. */}
+                  {shareGroups(group.seats.map(s => ({ id: s.id, mates: s.sharedWith }))).map(ids => {
+                    const members = ids.map(id => group.seats.find(s => s.id === id) || { id, pairing: null, restriction: null });
+                    const restricted = members.some(s => s.restriction);
+                    const describe = (s) => {
+                      const p = extraPairingLabel(s.pairing);
+                      return `P${s.id}${p ? ` · ${p}` : ""}${s.restriction ? ` · ${s.restriction}` : ""}`;
+                    };
                     // A restricted seat's call turns the chip red and spells
                     // the modification out — the popup is where the pass
                     // starts the plate, so "P1 · NO HAZELNUT OIL" has to be
                     // read here, not discovered later on the ticket.
-                    <span key={s.id} style={{
-                      fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0,
-                      background: s.restriction ? tokens.red.bg : tokens.green.bg,
-                      border: `1px solid ${s.restriction ? tokens.red.border : tokens.green.border}`,
-                      color: s.restriction ? tokens.red.text : tokens.green.text,
-                      fontWeight: s.restriction ? 700 : 400,
-                    }}>
-                      P{s.id}{(() => { const p = extraPairingLabel(s.pairing); return p ? ` · ${p}` : ""; })()}{s.restriction ? ` · ${s.restriction}` : ""}
-                    </span>
-                  ))}
-                  {group.anyShared && <span style={{ fontFamily: FONT, fontSize: "9px", fontWeight: 700, letterSpacing: "0.10em", color: tokens.ink[2], padding: "2px 6px", border: `1px solid ${tokens.ink[4]}`, background: tokens.ink[5] }}>SHARE</span>}
+                    return (
+                      <span key={ids.join("+")} data-share={ids.length > 1 ? ids.join("+") : undefined} style={{
+                        fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0,
+                        background: restricted ? tokens.red.bg : tokens.green.bg,
+                        border: `1px solid ${restricted ? tokens.red.border : ids.length > 1 ? tokens.charcoal.default : tokens.green.border}`,
+                        color: restricted ? tokens.red.text : tokens.green.text,
+                        fontWeight: restricted || ids.length > 1 ? 700 : 400,
+                      }}>
+                        {members.map(describe).join(" + ")}
+                        {ids.length > 1 ? " · SHARE · 1 PLATE" : ""}
+                      </span>
+                    );
+                  })}
                 </div>
               ))}
               {pairSeats.length === 0 && extrasGroups.length === 0 && pourSeats.length === 0

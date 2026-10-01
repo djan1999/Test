@@ -299,3 +299,32 @@ describe("setCourseRestrictions — a SET popup names the dietaries that change 
     expect(merged.course.restrictions).toEqual(course.restrictions);
   });
 });
+
+describe("shares reach the kitchen as groups", () => {
+  const BEET = { key: "beetroot", name: "Beetroot" };
+  const seat = (id, sharedWith) => ({ id, pairing: "", extras: { beetroot: { ordered: true, sharedWith } } });
+
+  it("snapshots every chair's partners, whatever shape the seat stored", () => {
+    const snap = kitchenSnapshot([seat(1, 2), seat(2, [1])], [BEET]);
+    expect(snap[1].extras[0].sharedWith).toEqual([2]);
+    expect(snap[2].extras[0].sharedWith).toEqual([1]);
+  });
+
+  it("an old single-id baseline is not a change by itself", () => {
+    const base = { 1: { pairing: null, pourMode: null, pairingSharedWith: null,
+      extras: [{ key: "beetroot", name: "Beetroot", pairing: "", sharedWith: 2, restriction: null, unassignedRestrictions: [] }] } };
+    const cur = kitchenSnapshot([seat(1, [2])], [BEET]);
+    expect(kitchenDelta(cur, base)).toEqual([]);
+  });
+
+  it("a third chair joining tells the kitchen about every chair in the share", () => {
+    const before = kitchenSnapshot([seat(1, [2]), seat(2, [1]), seat(3, null)], [BEET]);
+    const after = kitchenSnapshot([seat(1, [2, 3]), seat(2, [1, 3]), seat(3, [1, 2])], [BEET]);
+    expect(kitchenDelta(after, before).map((s) => s.id)).toEqual([1, 2, 3]);
+  });
+
+  it("an unpaired chair carries no pairing share", () => {
+    const snap = kitchenSnapshot([{ id: 1, pairing: "", pairingSharedWith: [2], extras: {} }], []);
+    expect(snap[1].pairingSharedWith).toBeNull();
+  });
+});

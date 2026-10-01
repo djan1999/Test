@@ -3,6 +3,16 @@ import { getCourseMod, applyModOverride } from "./menuUtils.js";
 import { seatPourMode } from "./pourMode.js";
 import { groupRestrictionsByGuest } from "./restrictionGroups.js";
 import { restrLabel } from "../constants/dietary.js";
+import { shareMates } from "./seatExtras.js";
+
+// A share as the kitchen stores it: the sorted other chairs, or null. Older
+// snapshots carry a bare seat id; both read the same through this.
+const sharedForKitchen = (value) => {
+  const mates = shareMates(value);
+  return mates.length ? mates : null;
+};
+const sameShare = (a, b) =>
+  JSON.stringify(sharedForKitchen(a)) === JSON.stringify(sharedForKitchen(b));
 
 // ── Kitchen "send" deltas ─────────────────────────────────────────────────────
 // Service pings the kitchen as a table's order firms up (pairings, optional
@@ -14,6 +24,7 @@ import { restrLabel } from "../constants/dietary.js";
 // A snapshot is the diff-friendly shape of a table's current orders:
 //   { [seatId]: { gender, pairing, pourMode, pairingSharedWith,
 //                 extras: [{key,name,pairing,sharedWith}] } }
+// where both share fields are the OTHER chairs in the share ([2, 3]) or null.
 // Digestivos are deliberately NOT in here. They print on the ticket straight
 // from the seat, as a service line above the course admin anchored them to —
 // nobody has to start a plate for one, so interrupting the pass with a popup
@@ -47,7 +58,7 @@ export function kitchenSnapshot(seats = [], optionalExtras = [], optionalPairing
           key: d.key,
           name: d.name,
           pairing: extraPairingForSeat(s, d, optionalPairings),
-          sharedWith: ex?.sharedWith ?? null,
+          sharedWith: sharedForKitchen(ex?.sharedWith),
           restriction: mod ? applyModOverride(mod, kitchenCourseNotes?.[d.course?.course_key]) : null,
           // Warn at dish level without claiming every ordering chair has the
           // allergy. Orphaned positions are also unresolved, as on the ticket.
@@ -65,7 +76,7 @@ export function kitchenSnapshot(seats = [], optionalExtras = [], optionalPairing
       // "by the glass" or "by the bottle" before — a seat with no pairing
       // simply read as no drink at all.
       pourMode: seatPourMode(s),
-      pairingSharedWith: s.pairingSharedWith ?? null,
+      pairingSharedWith: s.pairing && s.pairing !== "—" ? sharedForKitchen(s.pairingSharedWith) : null,
       extras,
     };
   });
@@ -116,14 +127,14 @@ export function kitchenDelta(current = {}, baseline = {}) {
       const prev = baseExtras.find((p) => p.key === e.key);
       if (!prev) return true; // newly ordered
       return (prev.pairing ?? null) !== (e.pairing ?? null)
-        || (prev.sharedWith ?? null) !== (e.sharedWith ?? null)
+        || !sameShare(prev.sharedWith, e.sharedWith)
         // An allergy recorded AFTER the dish was sent is exactly the update
         // the kitchen must hear about — the plate may already be on the line.
         || (prev.restriction ?? null) !== (e.restriction ?? null)
         || JSON.stringify(prev.unassignedRestrictions || []) !== JSON.stringify(e.unassignedRestrictions || []);
     });
     const pairingChanged = (cur.pairing ?? null) !== (base.pairing ?? null)
-      || (cur.pairingSharedWith ?? null) !== (base.pairingSharedWith ?? null)
+      || !sameShare(cur.pairingSharedWith, base.pairingSharedWith)
       // BTG/BTB rides with the pairing: it answers the same question about
       // the same chair, so the kitchen hears a switch between them as one
       // change and the popup prints whichever now holds.
