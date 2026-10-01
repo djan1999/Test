@@ -4846,7 +4846,12 @@ export default function App() {
     channelName: `milka-beverages-${workspaceId}`,
     filter: wsFilter,
     table: TABLES.BEVERAGES,
-    onChange: () => { loadBeverages(); },
+    // No immediate re-read per event: useRealtimeTable already invalidates
+    // passively, and the background lane folds a burst into ONE read 5s
+    // later. A catalogue save upserts every row, so an immediate reload per
+    // event re-read the whole catalogue hundreds of times (1,460 full wine
+    // reads in two minutes from one device on 01.10).
+    onChange: () => {},
     onResubscribe: () => { loadBeverages(); },
     enabled: fallbackRealtime,
   });
@@ -4856,7 +4861,7 @@ export default function App() {
     channelName: `milka-wines-${workspaceId}`,
     filter: wsFilter,
     table: TABLES.WINES,
-    onChange: () => { loadWines(); },
+    onChange: () => {}, // coalesced by the passive invalidation (see beverages)
     onResubscribe: () => { loadWines(); },
     enabled: fallbackRealtime,
   });
@@ -4866,7 +4871,7 @@ export default function App() {
     channelName: `milka-menu-courses-${workspaceId}`,
     filter: wsFilter,
     table: TABLES.MENU_COURSES,
-    onChange: () => { loadMenuCoursesRef.current?.(); },
+    onChange: () => {}, // coalesced by the passive invalidation (see beverages)
     onResubscribe: () => { loadMenuCoursesRef.current?.(); },
     enabled: fallbackRealtime,
   });
