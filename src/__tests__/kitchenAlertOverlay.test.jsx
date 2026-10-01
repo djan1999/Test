@@ -114,7 +114,7 @@ describe("KitchenAlertOverlay — a flood of alerts stays confirmable", () => {
       },
     };
     const { getByText, queryByText } = render(<KitchenAlertOverlay alerts={[alert]} onConfirm={vi.fn()} />);
-    expect(getByText(/P1 \+ P2 · SHARE · 1 PLATE/)).toBeInTheDocument();
+    expect(getByText(/P1 \+ P2 SHARE/)).toBeInTheDocument();
     expect(getByText("P3")).toBeInTheDocument();
     // No anonymous "SHARE" badge that leaves the pass guessing.
     expect(queryByText("SHARE")).toBeNull();
@@ -134,9 +134,9 @@ describe("KitchenAlertOverlay — a flood of alerts stays confirmable", () => {
       },
     };
     const { getByText } = render(<KitchenAlertOverlay alerts={[alert]} onConfirm={vi.fn()} />);
-    expect(getByText(/P1 \+ P2 \+ P3 · SHARE · 1 PLATE/)).toBeInTheDocument();
+    expect(getByText(/P1 \+ P2 \+ P3 SHARE/)).toBeInTheDocument();
     // P5 did not change, so it is not in the delta — but it is still named.
-    expect(getByText(/P4 \+ P5 · SHARE · 1 PLATE/)).toBeInTheDocument();
+    expect(getByText(/P4 \+ P5 SHARE/)).toBeInTheDocument();
   });
 
   it("names who splits a pairing", () => {
@@ -152,7 +152,7 @@ describe("KitchenAlertOverlay — a flood of alerts stays confirmable", () => {
       },
     };
     const { getByText } = render(<KitchenAlertOverlay alerts={[alert]} onConfirm={vi.fn()} />);
-    expect(getByText("P1 + P2 Wine · SHARED")).toBeInTheDocument();
+    expect(getByText("P1 + P2 Wine SHARE")).toBeInTheDocument();
     expect(getByText("P3 Wine")).toBeInTheDocument();
   });
 });

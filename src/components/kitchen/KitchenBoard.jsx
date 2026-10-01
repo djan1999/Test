@@ -1691,7 +1691,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                       <span style={{ fontFamily: FONT, fontSize: "8px", letterSpacing: "0.14em", textTransform: "uppercase", color: tokens.ink[3], minWidth: 60 }}>PAIRING</span>
                       {shares.map(ids => (
                         <span key={ids.join("+")} data-share={ids.length > 1 ? ids.join("+") : undefined} style={{ fontFamily: FONT, fontSize: "10px", padding: "3px 8px", borderRadius: 0, background: c.bg || tokens.neutral[50], border: `1px solid ${ids.length > 1 ? tokens.charcoal.default : (c.border || tokens.ink[4])}`, color: c.color || tokens.ink[2], fontWeight: ids.length > 1 ? 700 : 400 }}>
-                          {ids.map(id => `P${id}`).join(" + ")} {pType}{ids.length > 1 ? " · SHARED" : ""}
+                          {ids.map(id => `P${id}`).join(" + ")} {pType}{ids.length > 1 ? " SHARE" : ""}
                         </span>
                       ))}
                     </div>
@@ -1721,7 +1721,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                     </div>
                   )}
                   {/* One chip per PLATE: chairs splitting a dish share a
-                      chip that names them all — "P1 + P2 · SHARE · 1 PLATE"
+                      chip that names them all — "P1 + P2 SHARE"
                       — so the pass reads who is splitting with whom, not
                       just that somebody is. */}
                   {shareGroups(group.seats.map(s => ({ id: s.id, mates: s.sharedWith }))).map(ids => {
@@ -1744,7 +1744,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
                         fontWeight: restricted || ids.length > 1 ? 700 : 400,
                       }}>
                         {members.map(describe).join(" + ")}
-                        {ids.length > 1 ? " · SHARE · 1 PLATE" : ""}
+                        {ids.length > 1 ? " SHARE" : ""}
                       </span>
                     );
                   })}
