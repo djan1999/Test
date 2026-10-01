@@ -168,7 +168,7 @@ select throws_ok(
       ),
       clock_timestamp()
     )$$,
-  '40001'::character(5),
+  'PT409'::character(5),
   null::text,
   'a version miss aborts the whole multi-table board gesture'
 );

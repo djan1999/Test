@@ -36,3 +36,41 @@ export function stampWineSources(updatedWines, originalWines) {
     return { ...w, source };
   });
 }
+
+const wineKey = (w) => (typeof w.id === "string" ? w.id : `manual|legacy_${w.id}`);
+
+/** The database row a wine is stored as (without workspace_id). */
+export const wineToRow = (w) => ({
+  key: wineKey(w),
+  source: w.source,
+  wine_name: w.name,
+  name: w.producer ? `${w.producer} – ${w.name}` : w.name,
+  producer: w.producer || "",
+  vintage: w.vintage || "NV",
+  region: w.region || "",
+  country: w.country || "",
+  by_glass: w.byGlass ?? false,
+});
+
+/**
+ * What a catalogue save actually has to send. The editor hands back the WHOLE
+ * list, and upserting all of it rewrote ~1,500 rows per one-wine edit — every
+ * row a WAL change, a realtime event and a PowerSync op on every device.
+ * Only rows that are new or differ from the original list are written; keys
+ * that disappeared are deleted. `stampedWines` must already carry sources
+ * (stampWineSources), so a sync → manual flip counts as a change.
+ */
+export function wineSaveDiff(stampedWines, originalWines) {
+  const originalRows = new Map((originalWines || []).map((w) => {
+    const row = wineToRow({ ...w, source: w.source || "sync" });
+    return [row.key, JSON.stringify(row)];
+  }));
+  const allRows = (stampedWines || []).map(wineToRow);
+  const savedKeys = new Set(allRows.map((r) => r.key));
+  return {
+    rows: allRows.filter((r) => originalRows.get(r.key) !== JSON.stringify(r)),
+    deletedKeys: (originalWines || [])
+      .map((w) => (typeof w.id === "string" ? w.id : null))
+      .filter((k) => k && !savedKeys.has(k)),
+  };
+}
