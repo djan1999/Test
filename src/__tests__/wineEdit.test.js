@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { stampWineSources, wineFingerprint } from "../utils/wineEdit.js";
+import { stampWineSources, wineFingerprint, wineSaveDiff } from "../utils/wineEdit.js";
 
 const syncWine = (over = {}) => ({
   id: "movia|veliko_belo|2019|slovenia",
@@ -69,5 +69,34 @@ describe("wineFingerprint", () => {
   it("normalizes a missing vintage to NV", () => {
     expect(wineFingerprint(syncWine({ vintage: undefined })))
       .toBe(wineFingerprint(syncWine({ vintage: "NV" })));
+  });
+});
+
+describe("wineSaveDiff (write only what changed)", () => {
+  const catalogue = Array.from({ length: 50 }, (_, i) => syncWine({ id: `p|w${i}|2019|si`, name: `Wine ${i}` }));
+  const diff = (updated) => wineSaveDiff(stampWineSources(updated, catalogue), catalogue);
+
+  it("a no-op save writes nothing", () => {
+    expect(diff(catalogue)).toEqual({ rows: [], deletedKeys: [] });
+  });
+
+  it("editing one wine writes exactly that row, flipped to manual", () => {
+    const updated = catalogue.map((w, i) => (i === 7 ? { ...w, byGlass: true } : w));
+    const { rows, deletedKeys } = diff(updated);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ key: "p|w7|2019|si", by_glass: true, source: "manual" });
+    expect(deletedKeys).toEqual([]);
+  });
+
+  it("a new wine is written and a removed wine is deleted", () => {
+    const added = { id: "manual|new_one", name: "New", producer: "", vintage: "", region: "", country: "", byGlass: false };
+    const { rows, deletedKeys } = diff([...catalogue.slice(1), added]);
+    expect(rows).toEqual([expect.objectContaining({ key: "manual|new_one", source: "manual", vintage: "NV" })]);
+    expect(deletedKeys).toEqual(["p|w0|2019|si"]);
+  });
+
+  it("a wine stored without a source counts as sync, so it is not rewritten", () => {
+    const legacy = [{ ...syncWine(), source: undefined }];
+    expect(wineSaveDiff(stampWineSources(legacy, legacy), legacy).rows).toEqual([]);
   });
 });

@@ -45,7 +45,7 @@ import { digestivoOptionFromItem } from "./utils/digestivo.js";
 import { foldTable } from "./utils/foldTable.js";
 import { randomUuid } from "./utils/uuid.js";
 import { reconcileTables } from "./utils/reconcile.js";
-import { stampWineSources } from "./utils/wineEdit.js";
+import { stampWineSources, wineSaveDiff } from "./utils/wineEdit.js";
 import { historyGapsByMenuType } from "./utils/archiveInsights.js";
 import {
   currentServiceDay, isStaleServiceDate, isActivePastReview, isLiveServiceActivity,
@@ -2068,23 +2068,9 @@ export default function App() {
     const accept = () => { setWines(withSource); writeLocalWines(withSource); };
     if (!supabase) { accept(); return { ok: true }; }
     const BATCH = 200;
-    const rows = withSource.map(w => {
-      const key = typeof w.id === "string" ? w.id : `manual|legacy_${w.id}`;
-      return {
-        key,
-        source: w.source,
-        wine_name: w.name,
-        name: w.producer ? `${w.producer} – ${w.name}` : w.name,
-        producer: w.producer || "",
-        vintage: w.vintage || "NV",
-        region: w.region || "",
-        country: w.country || "",
-        by_glass: w.byGlass ?? false,
-      };
-    });
-    const savedKeys = new Set(rows.map(r => r.key));
-    const originalKeys = wines.map(w => (typeof w.id === "string" ? w.id : null)).filter(Boolean);
-    const deletedKeys = originalKeys.filter(k => !savedKeys.has(k));
+    // Only new/changed rows and removed keys — not the whole catalogue.
+    const { rows, deletedKeys } = wineSaveDiff(withSource, wines);
+    if (rows.length === 0 && deletedKeys.length === 0) { accept(); return { ok: true }; }
     if (sqlitePrimaryRef.current) {
       try {
         const { writeWines, deleteWines } = await import("./powersync/writes.js");
