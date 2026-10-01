@@ -67,6 +67,17 @@ describe("database migration contracts", () => {
     }
   });
 
+  it("never raises 40001 from the board batch CAS — PostgREST retries it forever", () => {
+    const batchConflict = fs.readFileSync(
+      path.join(ROOT, "supabase/migrations/20261001223000_batch_cas_conflict_not_serialization_failure.sql"),
+      "utf8",
+    );
+    const body = batchConflict.slice(batchConflict.indexOf("create or replace function"));
+    expect(body).toContain("save_service_tables_batch_if_current");
+    expect(body).toContain("using errcode = 'PT409'");
+    expect(body).not.toContain("'40001'");
+  });
+
   it("reconstructs every table required by the PowerSync streams", () => {
     for (const table of [
       "workspace_members", "service_tables", "reservations", "service_settings",

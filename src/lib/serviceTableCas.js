@@ -197,9 +197,13 @@ export async function saveServiceTableWithCas({
 }
 
 // Multi-row board gestures (move, swap, layout switch) must commit as one
-// unit. The RPC raises a serialization failure when any expected version has
+// unit. The RPC raises PT409 (HTTP 409) when any expected version has
 // changed, which rolls the entire function call back before this helper
-// re-reads and folds every row again.
+// re-reads and folds every row again. It used to raise 40001, which
+// PostgREST retries server-side forever with the same stale versions; 40001
+// is still accepted here while that function is being replaced.
+const BATCH_VERSION_MISS_CODES = new Set(["PT409", "40001"]);
+
 export async function saveServiceTablesBatchWithCas({
   client,
   workspaceId,
@@ -245,7 +249,7 @@ export async function saveServiceTablesBatchWithCas({
         p_updated_at: new Date().toISOString(),
       },
     );
-    if (error && String(error.code || "") !== "40001") throw error;
+    if (error && !BATCH_VERSION_MISS_CODES.has(String(error.code || ""))) throw error;
     if (!error && saved === true) return { rows: merged };
   }
 

@@ -226,6 +226,34 @@ describe("server shield attestation (p_allow_clear)", () => {
     expect(rows.find((r) => r.table_id === 11).allow_clear).toBe(false);
   });
 
+  it("a PT409 batch version miss re-reads and retries on the client, then succeeds", async () => {
+    const client = makeClient(null);
+    client.rpc
+      .mockResolvedValueOnce({ data: null, error: { code: "PT409", message: "Service-table batch version changed for table 1" } })
+      .mockResolvedValueOnce({ data: true, error: null });
+    await saveServiceTablesBatchWithCas({
+      client, workspaceId: "ws-a", serviceId: "svc-1",
+      writes: [
+        { tableId: 1, data: workedTable, ancestor: null },
+        { tableId: 2, data: skeletonTable, ancestor: workedTable },
+      ],
+    });
+    expect(client.rpc).toHaveBeenCalledTimes(2);
+  });
+
+  it("a persistent batch version miss stops after maxAttempts instead of spinning", async () => {
+    const client = makeClient(null);
+    client.rpc.mockResolvedValue({ data: null, error: { code: "PT409", message: "version changed" } });
+    await expect(saveServiceTablesBatchWithCas({
+      client, workspaceId: "ws-a", serviceId: "svc-1",
+      writes: [
+        { tableId: 1, data: workedTable, ancestor: null },
+        { tableId: 2, data: skeletonTable, ancestor: workedTable },
+      ],
+    })).rejects.toMatchObject({ code: "MILKA_CAS_EXHAUSTED" });
+    expect(client.rpc).toHaveBeenCalledTimes(4);
+  });
+
   it("hasWorkedContent stays in lockstep with the SQL predicate's fixtures", () => {
     // The migration's pgTAP suite (supabase/tests/board_history.sql) asserts
     // the same verdicts against private.board_row_has_worked_content.

@@ -332,7 +332,7 @@ export const fakeSupabase = {
       }
       if (pending.some(({ versionMatches }) => !versionMatches)) {
         const error = new Error("service-table batch version changed");
-        error.code = "40001";
+        error.code = "PT409";
         return { data: null, error };
       }
       for (const { item } of pending) {
