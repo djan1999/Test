@@ -512,6 +512,38 @@ describe("SupabaseConnector.uploadData — natural-key rebuild per table", () =>
     expect(tx.complete).toHaveBeenCalledTimes(1);
   });
 
+  it("REGRESSION (01.10): an unchanged floor-maps re-save (PATCH without state) never wipes the layout", async () => {
+    const layout = {
+      maps: [
+        { id: "dining_a", kind: "dining", name: "DINNING ROOM", tables: [] },
+        { id: "terrace_main", kind: "terrace", name: "TERRACE", tables: [] },
+      ],
+      config: { moveSingleTap: false },
+      geometryVersion: 3,
+      activeDiningMapId: "dining_a",
+      activeDiningByDate: { "2026-10-01": "dining_a" },
+    };
+    h.remoteServiceSetting = { state: layout, updated_at: "2026-10-01T14:14:13.000Z" };
+    // PowerSync PATCH carries only changed columns: just updated_at.
+    const tx = makeTx([{
+      ...patch("service_settings", "ws-a|floor_maps_v1", {
+        updated_at: "2026-10-01T14:14:14.000Z",
+        workspace_id: "ws-a",
+      }),
+      previousValues: {
+        workspace_id: "ws-a",
+        id: "floor_maps_v1",
+        state: JSON.stringify(layout),
+        updated_at: "2026-10-01T14:14:13.000Z",
+      },
+    }]);
+
+    await new SupabaseConnector().uploadData(makeDb(tx));
+
+    expect(h.calls).toHaveLength(0);
+    expect(tx.complete).toHaveBeenCalledTimes(1);
+  });
+
   it("reservations PUT → version-checked insert with the uuid preserved", async () => {
     const tx = makeTx([put("reservations", "uuid-1", {
       date: "2026-06-06", table_id: 2, data: '{"resName":"Smith"}',

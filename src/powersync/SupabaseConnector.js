@@ -293,12 +293,18 @@ async function applyServiceTableBatch(ops, database) {
 
 async function applyMergeableSettingWrite(op, ws, row) {
   const id = String(row.id ?? naturalKeyFromLocalId(op.id, ws));
+  // A PATCH carries only the columns that changed. An unchanged re-save bumps
+  // only updated_at, so the op has NO state. Folding that as `{}` read as
+  // "this device deleted every map" against an unchanged server and wrote an
+  // empty floor layout (01.10 mid-service wipe). Nothing changed: nothing to
+  // upload.
+  if (row.state == null) return { error: null };
   try {
     const result = await saveServiceSettingWithCas({
       client: supabase,
       workspaceId: ws,
       id,
-      state: row.state ?? {},
+      state: row.state,
       ancestor: convertValue("service_settings", "state", op.previousValues?.state),
     });
     if (result.conflicts?.length) {
