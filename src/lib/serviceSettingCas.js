@@ -24,6 +24,9 @@ export async function saveServiceSettingWithCas({
   maxAttempts = 4,
 }) {
   if (!client || !workspaceId || !id) throw new Error("Invalid service-setting CAS request");
+  // A missing value is not an empty document: folded as `{}` it deletes every
+  // key the ancestor had (the 01.10 floor-layout wipe).
+  if (state == null) throw new Error(`Service-setting CAS for ${id} without a state`);
   const mine = asObject(state);
   const base = ancestor == null ? null : asObject(ancestor);
 
