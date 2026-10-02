@@ -1158,8 +1158,8 @@ export default function App() {
   // Read the CURRENT service's board from the source of truth (SQLite when
   // primary). No live service → no rows: between services the board is blank
   // by construction, not by clearing anything.
-  const fetchBoardRows = useCallback(async () => {
-    const svcId = serviceIdRef.current;
+  const fetchBoardRows = useCallback(async (forServiceId = null) => {
+    const svcId = forServiceId || serviceIdRef.current;
     if (!svcId) return [];
     if (sqlitePrimaryRef.current) {
       const { readServiceTables } = await loadPsReads();
@@ -2863,16 +2863,33 @@ export default function App() {
   // a party/seat present on one side, gone on the other) is the alarm and lands
   // in diagnostics; a CONCURRENT-TIEBREAK (both sides keep a worked seat, only
   // a contended value differs) is expected pre-flip and reported, not alarmed.
+  // The board a parity check grades against: the stored rows (server, or the
+  // synced local DB on PowerSync devices) for exactly the service whose log
+  // is being folded — never this device's on-screen board. tablesRef can belong to another service (a device still holding a
+  // forgotten test service while the real night runs elsewhere): on 14.08 the
+  // watchdog folded the 13.08 test service's log, compared it with the live
+  // night's board and filed a false CONTENT LOSS for tables 8 and 9. The
+  // end-of-night verdict already reads server rows for the same reason.
+  const readServerBoardCards = async (svcId) => {
+    const rows = await fetchBoardRows(svcId);
+    return rows.map((r) => sanitizeTable({ id: Number(r.table_id), ...(r.data || {}) }));
+  };
+
   const checkLogParity = async () => {
     const svcId = serviceIdRef.current;
     if (!svcId || sandboxRef.current) return { ok: false, error: new Error("no live service to check") };
+    // Unsaved board edits on this device are in the log but not yet on the
+    // server board — grading now would report them as lost.
+    if (pendingBoardWritesRef.current.size > 0) {
+      return { ok: false, error: new Error("this device has unsaved board changes — try again in a moment") };
+    }
     try {
       // Flush this device's queued facts first so the fold sees them (other
       // devices' queues can still lag — a divergence says "look", not "lost").
       await drainServiceEvents().catch(() => {});
       const events = await readAllServiceEvents(svcId);
       const folded = foldServiceEvents(events);
-      const cards = (tablesRef.current || []).map((table) => sanitizeTable(table));
+      const cards = await readServerBoardCards(svcId);
       const { compared, matches, divergent, contentLoss, tiebreaks } = compareFoldToBoard(folded, cards);
       if (contentLoss.length > 0) {
         recordClientDiagnostic("logbook parity CONTENT LOSS", new Error(
@@ -3734,12 +3751,15 @@ export default function App() {
         // Facts still queued after a drain mean we're offline — every sweep
         // would be a guaranteed false red, so this one abstains.
         if (pendingServiceEventCount() > 0) { watchdogPrevLossRef.current = null; return; }
+        // Same for board saves still queued on this device.
+        if (pendingBoardWritesRef.current.size > 0) { watchdogPrevLossRef.current = null; return; }
         const events = await readAllServiceEvents(svcId);
         // No facts at all: the logbook is not active for this service (it
         // predates the log or no updated device touched it) — abstain. The
         // watchdog engages by itself the moment the first fact lands.
         if (events.length === 0) { watchdogPrevLossRef.current = null; return; }
-        const cards = (tablesRef.current || []).map((table) => sanitizeTable(table));
+        // Server rows for THIS service (see readServerBoardCards).
+        const cards = await readServerBoardCards(svcId);
         const { compared, matches, divergent, contentLoss, tiebreaks } = compareFoldToBoard(foldServiceEvents(events), cards);
         const signature = contentLoss.length > 0 ? `${svcId}:${contentLoss.join(",")}` : null;
         const confirmed = signature != null && watchdogPrevLossRef.current === signature;
