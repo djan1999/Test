@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildBeverageLinkedKey, resolveAperitifFromQuickAccessOption } from "../utils/quickAccessResolve.js";
+import { buildBeverageLinkedKey, describeQuickAccessLink, resolveAperitifFromQuickAccessOption, wineKeyIsStale } from "../utils/quickAccessResolve.js";
 
 describe("resolveAperitifFromQuickAccessOption", () => {
   const wines = [{ id: "movia|lunar|2019|si", name: "Lunar", producer: "Movia", byGlass: true }];
@@ -70,5 +70,54 @@ describe("tea and coffee are catalogue products like any other", () => {
       catalogs,
     );
     expect(r.name).toBe("Espresso");
+  });
+});
+
+describe("a linked wine never falls back to a fuzzy guess", () => {
+  // The reported bug: links coming back as an old Adrien Renoir. A linked
+  // button whose row is gone used to fuzzy-search its name across the whole
+  // list and take the first by-the-glass hit.
+  const wines = [
+    { id: "adrien_renoir|'le_terroir'_verzy_grand_cru_(dég.03/22)|nv|fr", name: "'Le Terroir' Verzy Grand Cru", producer: "Adrien Renoir", byGlass: true },
+    { id: "egly-ouriet|grand_cru|nv|fr", name: "Grand Cru", producer: "Egly-Ouriet", byGlass: true },
+    { id: "krug|vintage_2013|2013|fr", name: "Vintage 2013", producer: "Krug", byGlass: false },
+  ];
+  const catalogs = { wines, cocktails: [], spirits: [], beers: [] };
+
+  it("returns null rather than another wine when the link is gone", () => {
+    const ap = {
+      label: "Renoir", type: "wine",
+      linkedKey: "adrien_renoir|'le_terroir'_verzy_grand_cru_(dég.05/25)|nv|fr",
+      searchKey: "'Le Terroir' Verzy Grand Cru (dég.05/25)",
+    };
+    expect(resolveAperitifFromQuickAccessOption(ap, catalogs)).toBeNull();
+    expect(describeQuickAccessLink(ap, catalogs).status).toBe("missing");
+  });
+
+  it("re-finds the same wine by exact name and producer when only its key changed", () => {
+    const ap = { label: "Krug", type: "wine", linkedKey: "krug|vintage_2013|2013|be", searchKey: "Vintage 2013" };
+    expect(resolveAperitifFromQuickAccessOption(ap, catalogs)).toBe(wines[2]);
+    expect(describeQuickAccessLink(ap, catalogs).status).toBe("relinked");
+  });
+
+  it("does not re-find a same-named wine from another producer", () => {
+    const ap = { label: "Egly", type: "wine", linkedKey: "pierre_peters|grand_cru|nv|fr", searchKey: "Grand Cru" };
+    expect(resolveAperitifFromQuickAccessOption(ap, catalogs)).toBeNull();
+  });
+
+  it("still guesses by label for a button that was never linked", () => {
+    const d = describeQuickAccessLink({ label: "Krug", searchKey: "Krug", type: "wine" }, catalogs);
+    expect(d.status).toBe("guessed");
+    expect(d.item).toBe(wines[2]);
+  });
+});
+
+describe("wineKeyIsStale", () => {
+  it("flags a row edited into another producer's wine", () => {
+    // Live data: the Renoir row retyped as Nakada-Park Harmonie kept its key.
+    expect(wineKeyIsStale({ id: "adrien_renoir|'le_terroir'_verzy_grand_cru_(dég.05/25)|nv|fr", name: "Harmonie", producer: "Nakada-Park" })).toBe(true);
+    expect(wineKeyIsStale({ id: "nakada-park|harmonie|nv|fr", name: "Harmonie", producer: "Nakada-Park" })).toBe(false);
+    expect(wineKeyIsStale({ id: "domaine_slapšak|blanc_de_blanc|2020|si", name: "Blanc de blanc", producer: "Domaine Slapšak" })).toBe(false);
+    expect(wineKeyIsStale({ id: "manual|abc", name: "Harmonie", producer: "Nakada-Park" })).toBe(false);
   });
 });

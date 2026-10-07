@@ -3,10 +3,10 @@ import { tokens } from "../../styles/tokens.js";
 import { digestivoVariantOptions, digestivoVariantRows } from "../../utils/digestivo.js";
 import { FONT, baseInp } from "./adminStyles.js";
 import { fuzzy, fuzzyDrink } from "../../utils/search.js";
-import { buildBeverageLinkedKey, resolveAperitifFromQuickAccessOption } from "../../utils/quickAccessResolve.js";
+import { buildBeverageLinkedKey, describeQuickAccessLink, wineKeyIsStale } from "../../utils/quickAccessResolve.js";
 
 // ── WinePickerInput — sets stable linkedKey + display searchKey ─────────────
-function WinePickerInput({ searchKey, linkedKey, onPick, type, wines, cocktails, spirits, beers, teas = [], coffees = [], style }) {
+function WinePickerInput({ searchKey, linkedKey, chipLabel, onPick, type, wines, cocktails, spirits, beers, teas = [], coffees = [], style }) {
   const [q, setQ]       = useState("");
   const [open, setOpen] = useState(false);
   const ref             = useRef(null);
@@ -35,7 +35,7 @@ function WinePickerInput({ searchKey, linkedKey, onPick, type, wines, cocktails,
     setOpen(false);
   };
 
-  const chipText = searchKey || linkedKey || "";
+  const chipText = chipLabel || searchKey || linkedKey || "";
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
@@ -73,6 +73,10 @@ function WinePickerInput({ searchKey, linkedKey, onPick, type, wines, cocktails,
               {item.producer && <span style={{ color: tokens.ink[3] }}> · {item.producer}</span>}
               {item.vintage  && <span style={{ color: tokens.ink[4] }}> · {item.vintage}</span>}
               {item.byGlass  && <span style={{ color: tokens.green.text, marginLeft: 4, fontSize: 8 }}>BTG</span>}
+              {type === "wine" && wineKeyIsStale(item) && (
+                <span title={`Edited from another wine in Drinks — its id still reads ${item.id}`}
+                  style={{ color: tokens.red.text, marginLeft: 4, fontSize: 8 }}>EDITED COPY</span>
+              )}
             </div>
           ))}
         </div>
@@ -81,19 +85,57 @@ function WinePickerInput({ searchKey, linkedKey, onPick, type, wines, cocktails,
   );
 }
 
-function linkedPreviewText(item, catalogs) {
-  const ap = {
+const productText = (r, type) => {
+  if (!r) return null;
+  if ((type || "wine") === "wine") {
+    const base = r.producer ? `${r.producer} – ${r.name}` : r.name;
+    return r.vintage ? `${base} · ${r.vintage}` : base;
+  }
+  return r.name;
+};
+
+// What a row actually pours, in words. The raw linked id used to sit here
+// ("id: adrien_renoir|…"), which reads like a link to Adrien Renoir even when
+// the row behind it is now a different wine — so the panel says the product,
+// and says plainly when it is guessed from the label rather than linked.
+function linkStatus(item, catalogs) {
+  const type = item.type || "wine";
+  const d = describeQuickAccessLink({
     label: item.label,
     searchKey: item.searchKey || item.label,
     linkedKey: item.linkedKey,
-    type: item.type || "wine",
-  };
-  const r = resolveAperitifFromQuickAccessOption(ap, catalogs);
-  if (!r) return null;
-  if ((item.type || "wine") === "wine") {
-    return r.producer ? `${r.producer} – ${r.name}` : r.name;
-  }
-  return r.name;
+    type,
+  }, catalogs);
+  return { ...d, text: productText(d.item, type) };
+}
+
+function LinkStatusLine({ status, size = 9 }) {
+  const line = (color, text, bold = false) => (
+    <div style={{ fontFamily: FONT, fontSize: size, color, marginTop: 4, fontWeight: bold ? 600 : 400 }}>{text}</div>
+  );
+  return <>
+    {status.status === "linked"   && line(tokens.green.text, `→ ${status.text}`)}
+    {status.status === "relinked" && line(tokens.green.text, `→ ${status.text} (linked row was replaced by the wine sync — re-pick in EDIT to keep it)`)}
+    {status.status === "guessed"  && line(tokens.ink[2], `≈ ${status.text} — matched by name, not linked. Pick a product in EDIT to pin it.`)}
+    {status.status === "missing"  && line(tokens.red.text, "Linked product missing — re-pick in EDIT or the button adds its label only.", true)}
+    {status.staleKey && line(tokens.red.text,
+      "This wine was edited in Drinks from a different wine and still carries that wine's id. Check DRINKS for a duplicate and re-pick here.", true)}
+  </>;
+}
+
+// Module scope, not inside the panel: a component defined during render is a
+// new type every render, so React remounted the select on each keystroke.
+function TypeSelect({ value, onChange, style }) {
+  return (
+    <select value={value} onChange={e => onChange(e.target.value)} style={style}>
+      <option value="wine">Wine</option>
+      <option value="cocktail">Cocktail</option>
+      <option value="spirit">Spirit</option>
+      <option value="beer">Beer</option>
+      <option value="tea">Tea</option>
+      <option value="coffee">Coffee</option>
+    </select>
+  );
 }
 
 // ── QuickAccessPanel — configure which drinks appear in Quick Access buttons ──
@@ -228,20 +270,10 @@ export default function QuickAccessPanel({
   const inpSm  = { ...baseInp, padding: "5px 8px", fontSize: 11 };
   const selSm  = { ...inpSm, cursor: "pointer" };
 
-  const TypeSelect = ({ value, onChange }) => (
-    <select value={value} onChange={e => onChange(e.target.value)} style={selSm}>
-      <option value="wine">Wine</option>
-      <option value="cocktail">Cocktail</option>
-      <option value="spirit">Spirit</option>
-      <option value="beer">Beer</option>
-      <option value="tea">Tea</option>
-      <option value="coffee">Coffee</option>
-    </select>
-  );
-
   const catalogs = { wines, cocktails, spirits, beers, teas, coffees };
   const pickerProps = (type, searchKey, linkedKey, onPick) => ({
     ...catalogs, type, searchKey, linkedKey, onPick, style: inpSm,
+    chipLabel: linkedKey ? linkStatus({ searchKey, linkedKey, type }, catalogs).text : null,
   });
 
   return (
@@ -252,8 +284,7 @@ export default function QuickAccessPanel({
 
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 24 }}>
         {quickAccessItems.map((item, idx) => {
-          const preview = linkedPreviewText(item, catalogs);
-          const broken = Boolean(item.linkedKey) && !preview;
+          const status = linkStatus(item, catalogs);
           return (
             <div key={item.id} style={{
               border: `1px solid ${editingId === item.id ? tokens.charcoal.default : item.enabled ? tokens.ink[4] : tokens.ink[4]}`,
@@ -272,9 +303,7 @@ export default function QuickAccessPanel({
                   <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 600, color: tokens.ink[0] }}>{item.label}</div>
                   <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.ink[3] }}>
                     {isGroup(item) ? <span style={{ color: tokens.ink[2] }}>category — each subcategory links its own drink</span> : <>
-                      search: <span style={{ color: tokens.ink[2] }}>{item.searchKey}</span>
-                      {item.linkedKey && <span style={{ color: tokens.ink[2] }}> · id: {String(item.linkedKey).slice(0, 36)}{String(item.linkedKey).length > 36 ? "…" : ""}</span>}
-                      {" · "}{item.type || "wine"}
+                      {item.type || "wine"}
                     </>}
                     {showMenuOnly && item.menuOnly && <span style={{ marginLeft: 6, color: tokens.ink[1], fontWeight: 600 }}>menu only</span>}
                     {showVariants && digestivoVariantOptions(item).length > 0 && (
@@ -283,16 +312,7 @@ export default function QuickAccessPanel({
                       </span>
                     )}
                   </div>
-                  {preview && !isGroup(item) && (
-                    <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.green.text, marginTop: 4 }}>
-                      → {preview}
-                    </div>
-                  )}
-                  {broken && !isGroup(item) && (
-                    <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text, marginTop: 4, fontWeight: 600 }}>
-                      Linked product missing — re-pick in EDIT or button falls back to label only.
-                    </div>
-                  )}
+                  {!isGroup(item) && <LinkStatusLine status={status} />}
                 </div>
 
                 {showMenuOnly && <button type="button" onClick={() => onUpdateQuickAccess(quickAccessItems.map(i => i.id === item.id ? { ...i, menuOnly: !i.menuOnly } : i))} style={{
@@ -341,10 +361,11 @@ export default function QuickAccessPanel({
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {variantsOf(item).map((v, i) => {
-                      const vPreview = linkedPreviewText(
-                        { label: v.label, searchKey: v.searchKey || v.label, linkedKey: v.linkedKey, type: v.type || "coffee" },
-                        catalogs,
-                      );
+                      // A subcategory with no pick is not searched by its label
+                      // (utils/digestivo resolveDigestivoProduct) — say nothing.
+                      const vStatus = (v.linkedKey || v.searchKey)
+                        ? linkStatus({ label: v.label, searchKey: v.searchKey || v.label, linkedKey: v.linkedKey, type: v.type || "coffee" }, catalogs)
+                        : null;
                       return (
                         <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr 100px 24px", gap: 6, alignItems: "start" }}>
                           <input
@@ -359,13 +380,11 @@ export default function QuickAccessPanel({
                               {...pickerProps(v.type || "coffee", v.searchKey, v.linkedKey, ({ searchKey, linkedKey }) =>
                                 setVariant(item, i, { searchKey, linkedKey }))}
                             />
-                            {vPreview && (
-                              <div style={{ fontFamily: FONT, fontSize: 8, color: tokens.green.text, marginTop: 3 }}>→ {vPreview}</div>
-                            )}
+                            {vStatus && <LinkStatusLine status={vStatus} size={8} />}
                           </div>
                           <select
                             value={v.type || "coffee"}
-                            onChange={e => setVariant(item, i, { type: e.target.value, linkedKey: undefined })}
+                            onChange={e => setVariant(item, i, { type: e.target.value, linkedKey: undefined, searchKey: "" })}
                             aria-label={`${item.label} subcategory ${i + 1} type`}
                             style={selSm}
                           >
@@ -424,8 +443,11 @@ export default function QuickAccessPanel({
                   </div>
                   <div>
                     <div style={{ fontFamily: FONT, fontSize: 8, color: tokens.ink[3], letterSpacing: 1, marginBottom: 3 }}>TYPE</div>
-                    <TypeSelect value={editType} onChange={(t) => {
+                    <TypeSelect value={editType} style={selSm} onChange={(t) => {
+                      // A new type empties the pick: the old product name would
+                      // otherwise stay behind as fuzzy search text in the new list.
                       setEditType(t);
+                      setEditKey("");
                       setEditLinkedKey(undefined);
                     }} />
                   </div>
@@ -463,7 +485,7 @@ export default function QuickAccessPanel({
           </div>
           <div>
             <div style={{ fontFamily: FONT, fontSize: 8, letterSpacing: 1, color: tokens.ink[3], marginBottom: 2 }}>TYPE</div>
-            <TypeSelect value={newType} onChange={(t) => { setNewType(t); setNewLinkedKey(undefined); }} />
+            <TypeSelect value={newType} style={selSm} onChange={(t) => { setNewType(t); setNewSearchKey(""); setNewLinkedKey(undefined); }} />
           </div>
         </div>
         <button type="button" onClick={addItem} style={{

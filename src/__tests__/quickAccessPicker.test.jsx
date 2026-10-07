@@ -75,3 +75,33 @@ describe("searching for a product to link", () => {
     expect(onUpdate.mock.calls.at(-1)[0][0]).toMatchObject({ linkedKey: "spirit|Grappa Williams" });
   });
 });
+
+describe("the panel says what a button pours", () => {
+  // Live config, 07.10: "Nakada" linked to a row whose key is the old Adrien
+  // Renoir pour — the row had been retyped into Harmonie in Drinks. The panel
+  // showed "id: adrien_renoir|…", which read as a link to Renoir.
+  const WINES = [
+    { id: "adrien_renoir|'le_terroir'_verzy_grand_cru_(dég.05/25)|nv|fr", name: "Harmonie", producer: "Nakada-Park", vintage: "NV", byGlass: true },
+    { id: "nakada-park|harmonie|nv|fr", name: "Harmonie", producer: "Nakada-Park", vintage: "NV", byGlass: true },
+  ];
+  const renderAperitif = (items) => render(
+    <QuickAccessPanel quickAccessItems={items} onUpdateQuickAccess={vi.fn()} wines={WINES} />,
+  );
+
+  it("names the product, not the raw id, and flags a row edited from another wine", () => {
+    renderAperitif([{ id: 1, label: "Nakada", type: "wine", enabled: true, searchKey: "Harmonie", linkedKey: WINES[0].id }]);
+    expect(screen.getByText("→ Nakada-Park – Harmonie · NV")).toBeTruthy();
+    expect(screen.queryByText(/adrien_renoir/)).toBeNull();
+    expect(screen.getByText(/edited in Drinks from a different wine/)).toBeTruthy();
+  });
+
+  it("shows a vanished link as missing instead of guessing another wine", () => {
+    renderAperitif([{ id: 1, label: "Renoir", type: "wine", enabled: true, searchKey: "'Le Terroir' Verzy Grand Cru (dég.03/22)", linkedKey: "adrien_renoir|'le_terroir'_verzy_grand_cru_(dég.03/22)|nv|fr" }]);
+    expect(screen.getByText(/Linked product missing/)).toBeTruthy();
+  });
+
+  it("marks an unlinked button as a name match", () => {
+    renderAperitif([{ id: 1, label: "Harmonie", type: "wine", enabled: true, searchKey: "Harmonie" }]);
+    expect(screen.getByText(/matched by name, not linked/)).toBeTruthy();
+  });
+});
