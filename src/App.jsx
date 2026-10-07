@@ -4249,7 +4249,10 @@ export default function App() {
         linkedKey: i.linkedKey,
         type: i.type || "wine",
       }));
-    if (fromQuickAccess.length > 0) return fromQuickAccess;
+    // Fallbacks are for a list that was never configured. A configured list
+    // whose buttons are all switched off means "no buttons" — falling back
+    // there brought back the build defaults and the old aperitif_btn column.
+    if (fromQuickAccess.length > 0 || quickAccessItems.length > 0) return fromQuickAccess;
     // Fallback to aperitif_btn column from courses
     const fromSheet = [...new Set(activeMenuCourses.map(c => c.aperitif_btn).filter(Boolean))].slice(0, 4);
     if (fromSheet.length > 0) return fromSheet.map(l => ({ label: l, searchKey: l, type: "wine" }));
@@ -4269,7 +4272,7 @@ export default function App() {
         linkedKey: i.linkedKey,
         type: i.type || "wine",
       }));
-    if (fromQuickAccess.length > 0) return fromQuickAccess;
+    if (fromQuickAccess.length > 0 || quickAccessItems.length > 0) return fromQuickAccess;
     const fromSheet = [...new Set(activeMenuCourses.map(c => c.aperitif_btn).filter(Boolean))].slice(0, 4);
     if (fromSheet.length > 0) return fromSheet.map(l => ({ label: l, searchKey: l, type: "wine" }));
     return DEFAULT_QUICK_ACCESS_ITEMS.filter(i => i.enabled && !i.menuOnly)
