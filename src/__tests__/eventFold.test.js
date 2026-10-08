@@ -333,6 +333,16 @@ describe("kitchen state, staff notes and seat genders — the rest of the covera
     expect(missed.divergent.map(d => d.tableId)).toEqual([6]);
   });
 
+  it("the birthday guest's chair is recorded per seat and rebuilt", () => {
+    const before = { ...blankCard(6), active: true, guests: 2, birthday: true, seats: [blankSeat(1), blankSeat(2)] };
+    const after = { ...before, seats: [{ ...blankSeat(1), celebrating: true }, blankSeat(2)] };
+    const facts = boardFactsFromDiff(before, after);
+    expect(facts).toEqual([{ type: "seat_celebrating_set", tableId: 6, payload: { seatId: 1, to: true } }]);
+    expect(foldServiceEvents(asEvents(facts)).get(6).seats["1"].celebrating).toBe(true);
+    const whole = asEvents(boardFactsFromDiff(blankCard(6), after));
+    expect(compareFoldToBoard(foldServiceEvents(whole), [after]).divergent).toEqual([]);
+  });
+
   it("no change in any of them emits nothing (no fact churn on every autosave)", () => {
     const t = {
       ...blankCard(7), active: true, guests: 2, notes: "x",

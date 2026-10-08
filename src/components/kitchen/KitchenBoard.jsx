@@ -890,6 +890,8 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               }}>
                 P{s.id}
                 {gs && <span style={{ fontSize: "7px", fontWeight: 700, padding: "0 3px", background: gs.bg, color: gs.text, letterSpacing: 0 }}>{compact ? (s.gender === "Mr" ? "M" : "F") : s.gender}</span>}
+                {/* the plate the candle goes on */}
+                {table.birthday && s.celebrating && <span title="Birthday guest">🎂</span>}
                 {p ? ` · ${pLabel(p)}` : ""}
                 {/* No pairing, but not silent either: BTG/BTB is how this
                     chair is drinking, and the pass paces the wine service on
