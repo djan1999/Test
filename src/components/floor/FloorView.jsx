@@ -205,7 +205,10 @@ export default function FloorView({
     // chair has to say instead — a blank second line read as "nothing", which
     // is the silence those buttons exist to end. seatPourMode hides the mode
     // whenever a real pairing holds, so the pill can never stack both.
-    return [water, pairingCode(s.pairing) || pourModeLabel(s)].filter(Boolean).join("·");
+    // LH: a left-hander's place is laid mirrored. Right is the default and
+    // says nothing — only the exception earns a line on the pill.
+    const hand = s.hand === "L" ? "LH" : "";
+    return [water, pairingCode(s.pairing) || pourModeLabel(s), hand].filter(Boolean).join("·");
   };
   const seatNotesOf = (bt, positionKey) => {
     const notes = {};

@@ -166,6 +166,12 @@ export function boardFactsFromDiff(prevTable, nextTable) {
     if (bGender !== aGender) {
       facts.push({ type: "seat_gender_set", tableId, payload: { seatId, to: aGender } });
     }
+    // Left / right hand — service-entered beside Mr/Mrs, read by the floor map.
+    const bHand = b.hand ?? null;
+    const aHand = a.hand ?? null;
+    if (bHand !== aHand) {
+      facts.push({ type: "seat_hand_set", tableId, payload: { seatId, to: aHand } });
+    }
     // BTG / BTB — how an unpaired guest is drinking. Read through
     // seatPourMode so a row still carrying both a pairing and a stale mode
     // records the same single story every other surface shows.
@@ -290,6 +296,7 @@ const aspectKeyOf = (serviceId, fact) => {
     case "table_service_state_set": return `${base}|serviceState`;
     case "table_notes_set": return `${base}|notes`;
     case "seat_gender_set": return `${base}|gender|${p.seatId}`;
+    case "seat_hand_set": return `${base}|hand|${p.seatId}`;
     case "extra_ordered": case "extra_unordered":
       return `${base}|extra|${p.seatId}|${p.key}`;
     case "option_ordered": case "option_unordered":

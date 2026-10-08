@@ -7,6 +7,10 @@ import { normalizePourMode } from "./pourMode.js";
 const normSeat = (id, e) => ({
   id,
   gender:            e?.gender            ?? null,
+  // Which hand the guest eats with — "L" / "R", or null when nobody asked.
+  // Front of house lays a left-hander's cutlery mirrored, so the floor map
+  // marks LH at the chair (FloorView bevNote).
+  hand:              e?.hand === "L" || e?.hand === "R" ? e.hand : null,
   pairingSharedWith: e?.pairingSharedWith ?? null,
   water:             e?.water             ?? "—",
   aperitifs: e?.aperitifs ?? [],
@@ -218,7 +222,7 @@ const seatHasContent = (s, ignoreExtraKeys = null) => {
   // tableHasServiceContent)) receive filter's INDEX as the second argument,
   // and (1).includes crashed the whole app ("n.includes is not a function").
   const ignore = Array.isArray(ignoreExtraKeys) ? ignoreExtraKeys : null;
-  if (s.gender || (s.water && s.water !== "—") || (s.pairing && s.pairing !== "—" && s.pairing !== "")) return true;
+  if (s.gender || s.hand || (s.water && s.water !== "—") || (s.pairing && s.pairing !== "—" && s.pairing !== "")) return true;
   if ((s.aperitifs || []).length || (s.digestivos || []).length || (s.glasses || []).length
       || (s.cocktails || []).length || (s.spirits || []).length || (s.beers || []).length) return true;
   if (normalizePourMode(s.pourMode)) return true;

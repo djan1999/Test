@@ -391,6 +391,24 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                               touchAction: "manipulation",
                             }}>{g}</button>
                           ))}
+                          <span style={{ width: 1, alignSelf: "stretch", background: tokens.ink[4], margin: "0 2px" }} />
+                          {[
+                            { h: "L", label: "Left" },
+                            { h: "R", label: "Right" },
+                          ].map(({ h, label }) => (
+                            <button key={h} onClick={() => updSeat && updSeat(t.id, s.id, "hand", s.hand === h ? null : h)}
+                              aria-pressed={s.hand === h}
+                              aria-label={`P${s.id} ${label.toLowerCase()}-handed`}
+                              style={{
+                              fontFamily: FONT, fontSize: "9px", fontWeight: 700, letterSpacing: "0.06em",
+                              padding: "3px 9px",
+                              border: `1px solid ${s.hand === h ? tokens.charcoal.default : tokens.ink[4]}`,
+                              borderRadius: 0, cursor: "pointer", lineHeight: 1,
+                              background: s.hand === h ? tokens.ink[5] : tokens.neutral[0],
+                              color: s.hand === h ? tokens.ink[0] : tokens.ink[3],
+                              touchAction: "manipulation",
+                            }}>{label}</button>
+                          ))}
                           {restr.map((r, i) => (
                             <span key={i} style={{
                               fontFamily: FONT, fontSize: "8px", letterSpacing: "0.06em",
@@ -707,6 +725,13 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                       }}>{s.gender}</span>
                     );
                   })()}
+                  {s.hand && (
+                    <span style={{
+                      fontFamily: FONT, fontSize: "8px", fontWeight: 700, letterSpacing: "0.06em",
+                      padding: "1px 5px", borderRadius: 0,
+                      border: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[0], color: tokens.ink[1],
+                    }}>{s.hand === "L" ? "LH" : "RH"}</span>
+                  )}
                   {!hasContent && <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[5] }}>—</span>}
                   {s.water && s.water !== "—" && (
                     <span style={{

@@ -35,6 +35,21 @@ describe("service quick controls", () => {
     expect(updSeat).toHaveBeenCalledWith(1, 1, "water", "—");
   });
 
+  it("Left / Right sit beside Mr/Mrs and toggle the seat's hand", () => {
+    const updSeat = vi.fn();
+    const { getByLabelText, rerender } = render(
+      <DisplayBoardCard t={table()} quickMode updSeat={updSeat} aperitifOptions={[]} />,
+    );
+    fireEvent.click(getByLabelText("P1 left-handed"));
+    expect(updSeat).toHaveBeenCalledWith(1, 1, "hand", "L");
+    rerender(<DisplayBoardCard t={table({ hand: "L" })} quickMode updSeat={updSeat} aperitifOptions={[]} />);
+    // second tap clears it, the same as Mr/Mrs
+    fireEvent.click(getByLabelText("P1 left-handed"));
+    expect(updSeat).toHaveBeenLastCalledWith(1, 1, "hand", null);
+    fireEvent.click(getByLabelText("P1 right-handed"));
+    expect(updSeat).toHaveBeenLastCalledWith(1, 1, "hand", "R");
+  });
+
   it("cycles back to a truly empty pairing instead of storing a dash", () => {
     // The pairing cycle writes through the seats updater because it also has
     // to clear BTG/BTB — the two answer the same question about one chair.
