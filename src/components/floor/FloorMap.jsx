@@ -535,6 +535,12 @@ export default function FloorMap({
             <TableShape t={t} fill={fill} stroke={stroke}
               strokeWidth={strip ? 0.7 : blueprint ? 0.45 : 0.35}
               dash={reserved ? "1.4 1" : undefined} />
+            {/* 🎂 — a birthday booking, pinned to the table's corner. The
+                birthday guest's own chair carries a second one in its pill. */}
+            {mode === "service" && st.birthday && (
+              <text x={t.x + t.w - 0.4} y={t.y + 2.6} textAnchor="end" fontSize={2.4}
+                pointerEvents="none" data-birthday={t.label}>🎂</text>
+            )}
             {sent && (
               <TableShape t={{ ...t, x: t.x - 1.1, y: t.y - 1.1, w: t.w + 2.2, h: t.h + 2.2 }}
                 fill="none" stroke={tokens.signal.warn} strokeWidth={0.7} />

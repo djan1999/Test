@@ -66,7 +66,7 @@ const seatOf = (table, seatId) => {
     table.seats[key] = {
       water: "—", pairing: "",
       drinks: Object.fromEntries(DRINK_CATEGORIES.map((category) => [category, {}])),
-      extras: [], options: [], gender: null, pourMode: null,
+      extras: [], options: [], gender: null, hand: null, celebrating: false, pourMode: null,
     };
   }
   return table.seats[key];
@@ -202,6 +202,12 @@ export function foldServiceEvents(events) {
       case "seat_gender_set":
         seatOf(table, payload.seatId).gender = payload.to ?? null;
         break;
+      case "seat_hand_set":
+        seatOf(table, payload.seatId).hand = payload.to ?? null;
+        break;
+      case "seat_celebrating_set":
+        seatOf(table, payload.seatId).celebrating = payload.to === true;
+        break;
       case "seat_pour_mode_set":
         seatOf(table, payload.seatId).pourMode = payload.to ?? null;
         break;
@@ -259,6 +265,8 @@ const seatHasContent = (seat) =>
   || seat.extras.length > 0
   || seat.options.length > 0
   || seat.gender != null
+  || seat.hand != null
+  || seat.celebrating === true
   || seat.pourMode != null;
 
 const namesOf = (list) => (Array.isArray(list) ? list : [])
@@ -281,6 +289,8 @@ export function boardProjection(table) {
     folded.water = seat.water ?? "—";
     folded.pairing = seat.pairing ?? "";
     folded.gender = seat.gender ?? null;
+    folded.hand = seat.hand ?? null;
+    folded.celebrating = seat.celebrating === true;
     folded.pourMode = seatPourMode(seat);
     for (const category of DRINK_CATEGORIES) {
       for (const name of namesOf(seat[category])) bump(folded.drinks[category], name, +1);
@@ -318,6 +328,8 @@ const canonical = (projection) => ({
       .sort(([a], [b]) => Number(a) - Number(b))
       .map(([seatId, seat]) => [seatId, {
         water: seat.water, pairing: seat.pairing, gender: seat.gender ?? null,
+        hand: seat.hand ?? null,
+        celebrating: seat.celebrating === true,
         pourMode: seat.pourMode ?? null,
         drinks: Object.fromEntries(
           DRINK_CATEGORIES.filter((category) => Object.keys(seat.drinks[category]).length > 0)

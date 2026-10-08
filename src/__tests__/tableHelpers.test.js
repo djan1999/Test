@@ -506,7 +506,7 @@ describe("makeSeats", () => {
   it("creates n seats with default values", () => {
     const seats = makeSeats(3);
     expect(seats).toHaveLength(3);
-    expect(seats[0]).toEqual({ id: 1, gender: null, pairingSharedWith: null, water: "—", aperitifs: [], digestivos: [], glasses: [], cocktails: [], spirits: [], beers: [], pairing: "", pourMode: null, extras: {}, floorPositions: {}, optionalPairings: {} });
+    expect(seats[0]).toEqual({ id: 1, gender: null, hand: null, celebrating: false, pairingSharedWith: null, water: "—", aperitifs: [], digestivos: [], glasses: [], cocktails: [], spirits: [], beers: [], pairing: "", pourMode: null, extras: {}, floorPositions: {}, optionalPairings: {} });
   });
 
   it("ids start at 1 and increment", () => {

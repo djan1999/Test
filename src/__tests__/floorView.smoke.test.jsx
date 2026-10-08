@@ -111,6 +111,46 @@ describe("FloorView (FOH FLOOR surface)", () => {
     expect(container.textContent.match(/BTG/g)).toHaveLength(1);
   });
 
+  it("a left-handed guest's chair pill says LH; right-handed says nothing", () => {
+    const hands = [
+      boardTable(1, { active: true, resName: "NOVAK", guests: 2, seats: [
+        // No water, no pairing — the LH alone still puts a pill on the chair.
+        { id: 1, water: "—", pairing: "", hand: "L", floorPositions: {} },
+        { id: 2, water: "OW", pairing: "Wine", hand: "R", floorPositions: {} },
+      ] }),
+      ...tables.filter((t) => t.id !== 1),
+    ];
+    const { container } = setup({ tables: hands });
+    expect(container.textContent.match(/LH/g)).toHaveLength(1);
+    expect(container.textContent).toContain("OW");
+    expect(container.textContent).not.toContain("RH");
+  });
+
+  it("a birthday table gets a 🎂 on the tile and on the birthday guest's chair", () => {
+    const party = [
+      boardTable(1, { active: true, resName: "NOVAK", guests: 2, birthday: true, seats: [
+        { id: 1, water: "XC", pairing: "", celebrating: true, floorPositions: {} },
+        { id: 2, water: "OW", pairing: "", floorPositions: {} },
+      ] }),
+      ...tables.filter((t) => t.id !== 1),
+    ];
+    const { container } = setup({ tables: party });
+    expect(container.querySelectorAll("[data-birthday]")).toHaveLength(1);
+    expect(container.textContent.match(/🎂/g)).toHaveLength(2); // tile + P1's chair
+  });
+
+  it("a seat cake left over from an unticked birthday shows nothing", () => {
+    const party = [
+      boardTable(1, { active: true, resName: "NOVAK", guests: 2, birthday: false, seats: [
+        { id: 1, water: "XC", pairing: "", celebrating: true, floorPositions: {} },
+        { id: 2, water: "OW", pairing: "", floorPositions: {} },
+      ] }),
+      ...tables.filter((t) => t.id !== 1),
+    ];
+    const { container } = setup({ tables: party });
+    expect(container.textContent).not.toContain("🎂");
+  });
+
   it("a chair with neither a pairing nor a pour mode still says only its water", () => {
     const plain = [
       boardTable(1, { active: true, resName: "NOVAK", guests: 1, seats: [

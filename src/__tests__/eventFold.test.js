@@ -320,6 +320,29 @@ describe("kitchen state, staff notes and seat genders — the rest of the covera
     expect(compareFoldToBoard(foldServiceEvents(whole), [after]).divergent).toEqual([]);
   });
 
+  it("seat hand (left / right) is recorded per seat and rebuilt", () => {
+    const before = { ...blankCard(6), active: true, guests: 2, seats: [blankSeat(1), blankSeat(2)] };
+    const after = { ...before, seats: [blankSeat(1), { ...blankSeat(2), hand: "L" }] };
+    const facts = boardFactsFromDiff(before, after);
+    expect(facts).toEqual([{ type: "seat_hand_set", tableId: 6, payload: { seatId: 2, to: "L" } }]);
+    expect(foldServiceEvents(asEvents(facts)).get(6).seats["2"].hand).toBe("L");
+    const whole = asEvents(boardFactsFromDiff(blankCard(6), after));
+    expect(compareFoldToBoard(foldServiceEvents(whole), [after]).divergent).toEqual([]);
+    // A hand the log never recorded is divergence, like a gender would be.
+    const missed = compareFoldToBoard(foldServiceEvents(asEvents(boardFactsFromDiff(blankCard(6), before))), [after]);
+    expect(missed.divergent.map(d => d.tableId)).toEqual([6]);
+  });
+
+  it("the birthday guest's chair is recorded per seat and rebuilt", () => {
+    const before = { ...blankCard(6), active: true, guests: 2, birthday: true, seats: [blankSeat(1), blankSeat(2)] };
+    const after = { ...before, seats: [{ ...blankSeat(1), celebrating: true }, blankSeat(2)] };
+    const facts = boardFactsFromDiff(before, after);
+    expect(facts).toEqual([{ type: "seat_celebrating_set", tableId: 6, payload: { seatId: 1, to: true } }]);
+    expect(foldServiceEvents(asEvents(facts)).get(6).seats["1"].celebrating).toBe(true);
+    const whole = asEvents(boardFactsFromDiff(blankCard(6), after));
+    expect(compareFoldToBoard(foldServiceEvents(whole), [after]).divergent).toEqual([]);
+  });
+
   it("no change in any of them emits nothing (no fact churn on every autosave)", () => {
     const t = {
       ...blankCard(7), active: true, guests: 2, notes: "x",

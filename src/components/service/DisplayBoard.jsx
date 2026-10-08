@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
 import { tokens } from "../../styles/tokens.js";
 import { restrCompact, restrLabel } from "../../constants/dietary.js";
@@ -17,6 +17,7 @@ import {
   extraPairingState, withExtraPairingCycled, EXTRA_PAIRING_LABEL,
 } from "../../utils/seatExtras.js";
 import ShareControl from "./ShareControl.jsx";
+import { copySeatOrderToAll, otherSeatsHaveOrders } from "../../utils/seatCopy.js";
 import {
   digestivoVariants, digestivoCurrentState, digestivoNextState,
   cycleSeatDigestivo, setSeatDigestivo, digestivoEntryMatchesOption, addSeatDigestivo,
@@ -70,6 +71,14 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
     // Ids, not the rows themselves, so the panel reads the seat as it is now
     // rather than as it was when the button was tapped.
     const [digestivoPick, setDigestivoPick] = useState(null);
+    // SAME FOR ALL arms on the first tap when it would overwrite other chairs'
+    // orders; the arm decays on its own so a stray tap leaves nothing behind.
+    const [sameArmed, setSameArmed] = useState(null);
+    useEffect(() => {
+      if (sameArmed === null) return undefined;
+      const id = setTimeout(() => setSameArmed(null), 4000);
+      return () => clearTimeout(id);
+    }, [sameArmed]);
     const seats = t.seats || [];
 
     // Service → kitchen "Send" only carries what's new since this table LAST
@@ -391,6 +400,63 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                               touchAction: "manipulation",
                             }}>{g}</button>
                           ))}
+                          <span style={{ width: 1, alignSelf: "stretch", background: tokens.ink[4], margin: "0 2px" }} />
+                          {[
+                            { h: "L", label: "Left" },
+                            { h: "R", label: "Right" },
+                          ].map(({ h, label }) => (
+                            <button key={h} onClick={() => updSeat && updSeat(t.id, s.id, "hand", s.hand === h ? null : h)}
+                              aria-pressed={s.hand === h}
+                              aria-label={`P${s.id} ${label.toLowerCase()}-handed`}
+                              style={{
+                              fontFamily: FONT, fontSize: "9px", fontWeight: 700, letterSpacing: "0.06em",
+                              padding: "3px 9px",
+                              border: `1px solid ${s.hand === h ? tokens.charcoal.default : tokens.ink[4]}`,
+                              borderRadius: 0, cursor: "pointer", lineHeight: 1,
+                              background: s.hand === h ? tokens.ink[5] : tokens.neutral[0],
+                              color: s.hand === h ? tokens.ink[0] : tokens.ink[3],
+                              touchAction: "manipulation",
+                            }}>{label}</button>
+                          ))}
+                          {/* Which guest the birthday is for — only offered on a
+                              birthday table, where the cake has somewhere to go. */}
+                          {t.birthday && (
+                            <button onClick={() => updSeat && updSeat(t.id, s.id, "celebrating", !s.celebrating)}
+                              aria-pressed={!!s.celebrating}
+                              aria-label={`P${s.id} birthday guest`}
+                              style={{
+                              fontFamily: FONT, fontSize: "9px", padding: "2px 7px", lineHeight: 1,
+                              border: `1px solid ${s.celebrating ? tokens.charcoal.default : tokens.ink[4]}`,
+                              borderRadius: 0, cursor: "pointer",
+                              background: s.celebrating ? tokens.tint.parchment : tokens.neutral[0],
+                              opacity: s.celebrating ? 1 : 0.55,
+                              touchAction: "manipulation",
+                            }}>🎂</button>
+                          )}
+                          {/* SAME FOR ALL — P1's order onto every other chair
+                              (utils/seatCopy: gender, hand and the birthday
+                              guest stay put). Two taps when it would overwrite
+                              something already ordered. */}
+                          {seatIdx === 0 && seats.length > 1 && upd && (() => {
+                            const armed = sameArmed === s.id;
+                            return (
+                              <button onClick={() => {
+                                if (!armed && otherSeatsHaveOrders(seats, s.id)) { setSameArmed(s.id); return; }
+                                setSameArmed(null);
+                                upd(t.id, "seats", prev => copySeatOrderToAll(prev, s.id));
+                              }}
+                                aria-label={armed ? `Confirm copy P${s.id} to all seats` : `Copy P${s.id} to all seats`}
+                                title="Copy this guest's water, pairing, drinks and extras to every seat (not Mr/Mrs, hand or birthday)"
+                                style={{
+                                fontFamily: FONT, fontSize: "8px", fontWeight: 700, letterSpacing: "0.08em",
+                                padding: "3px 7px", lineHeight: 1, borderRadius: 0, cursor: "pointer",
+                                border: `1px solid ${armed ? tokens.red.border : tokens.ink[3]}`,
+                                background: armed ? tokens.red.bg : tokens.neutral[0],
+                                color: armed ? tokens.red.text : tokens.ink[1],
+                                touchAction: "manipulation", whiteSpace: "nowrap",
+                              }}>{armed ? "REPLACE ALL?" : "SAME FOR ALL"}</button>
+                            );
+                          })()}
                           {restr.map((r, i) => (
                             <span key={i} style={{
                               fontFamily: FONT, fontSize: "8px", letterSpacing: "0.06em",
@@ -707,6 +773,13 @@ export function DisplayBoardCard({ t, quickMode, upd, updSeat, onCardClick, onOp
                       }}>{s.gender}</span>
                     );
                   })()}
+                  {s.hand && (
+                    <span style={{
+                      fontFamily: FONT, fontSize: "8px", fontWeight: 700, letterSpacing: "0.06em",
+                      padding: "1px 5px", borderRadius: 0,
+                      border: `1px solid ${tokens.ink[4]}`, background: tokens.neutral[0], color: tokens.ink[1],
+                    }}>{s.hand === "L" ? "LH" : "RH"}</span>
+                  )}
                   {!hasContent && <span style={{ fontFamily: FONT, fontSize: "9px", color: tokens.ink[5] }}>—</span>}
                   {s.water && s.water !== "—" && (
                     <span style={{

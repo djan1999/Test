@@ -199,18 +199,24 @@ export default function FloorView({
     if (!v || v === "—") return "";
     return PAIRING_CODES[v] || v.split(/[\s-]+/).map((w) => w.charAt(0)).join("").toUpperCase();
   };
-  const bevNote = (s) => {
+  const bevNote = (s, birthdayTable = false) => {
     const water = s.water && s.water !== "—" ? String(s.water).toUpperCase() : "";
     // A guest off the pairing is still drinking, and BTG / BTB is what that
     // chair has to say instead — a blank second line read as "nothing", which
     // is the silence those buttons exist to end. seatPourMode hides the mode
     // whenever a real pairing holds, so the pill can never stack both.
-    return [water, pairingCode(s.pairing) || pourModeLabel(s)].filter(Boolean).join("·");
+    // LH: a left-hander's place is laid mirrored. Right is the default and
+    // says nothing — only the exception earns a line on the pill.
+    const hand = s.hand === "L" ? "LH" : "";
+    // 🎂 on the birthday guest's chair — only while the table is still a
+    // birthday table, so unticking the booking clears the map too.
+    const cake = birthdayTable && s.celebrating ? "🎂" : "";
+    return [water, pairingCode(s.pairing) || pourModeLabel(s), hand, cake].filter(Boolean).join("·");
   };
   const seatNotesOf = (bt, positionKey) => {
     const notes = {};
     for (const s of bt?.seats || []) {
-      const note = bevNote(s);
+      const note = bevNote(s, !!bt?.birthday);
       if (note) notes[seatFloorPosition(s, positionKey)] = note;
     }
     return Object.keys(notes).length ? notes : null;
@@ -255,6 +261,7 @@ export default function FloorView({
             // the party's identity on the terrace IS their dining table
             sub: diningLabelOf(r),
             allergy: restr.length > 0,
+            birthday: !!(bt?.birthday || r.data?.birthday),
             strip,
             // announced to the kitchen (SET on a kitchen ticket, the board
             // sheet, or here) → amber ring, whatever surface pressed it
@@ -285,6 +292,7 @@ export default function FloorView({
           // the table's course readout ("C3/7") rides the tile like the
           // kitchen floor's — the same information wherever you look
           sub: progressOf(bt),
+          birthday: !!bt.birthday,
           // announced to the kitchen for its next course → amber ring. NOT
           // gated on the strip: a SET pressed on the kitchen ticket or the
           // board sheet writes courseReady only, and the floor must show it
@@ -298,6 +306,7 @@ export default function FloorView({
           status: "reserved",
           pax: bt.guests || undefined,
           allergy: restr.length > 0,
+          birthday: !!bt.birthday,
           strip,
         };
       } else {
