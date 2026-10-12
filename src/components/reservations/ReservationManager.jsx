@@ -7,6 +7,7 @@ import { getCourseMod, applyModOverride } from "../../utils/menuUtils.js";
 import { groupRestrictionsByGuest } from "../../utils/restrictionGroups.js";
 import { RESTRICTIONS } from "../../constants/dietary.js";
 import { tokens } from "../../styles/tokens.js";
+import { PRINT_FONT_LINK, PRINT_WEIGHT_REGULAR, PRINT_WEIGHT_BOLD } from "../../utils/printFonts.js";
 import { baseInput, fieldLabel as fieldLabelMixin, circleButton } from "../../styles/mixins.js";
 import ServiceDatePicker from "./ServiceDatePicker.jsx";
 import ResvForm from "./ResvForm.jsx";
@@ -130,8 +131,8 @@ function buildWeeklyRows(reservations, weekDays, restrictionDefs = []) {
 }
 
 const WEEKLY_RESV_HTML_SHELL = (body) => {
-  const ROBOTO = `<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">`;
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Weekly Reservations</title>${ROBOTO}<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:12mm 10mm;}@page{size:A4 portrait;margin:0}table{width:100%;border-collapse:collapse;table-layout:fixed}col.c0{width:11%}col.c1{width:9%}col.c2{width:9%}col.c3{width:16%}col.c4{width:8%}col.c5{width:22%}col.c6{width:25%}thead{display:table-header-group}tr{page-break-inside:avoid;break-inside:avoid}.date-row{page-break-after:avoid;break-after:avoid}.date-row td{background:#f0f0f0}th,td{border:1px solid #aaa;padding:4pt 5pt;vertical-align:top;text-align:center;font-size:8.5pt;color:#000;font-weight:700;overflow:hidden;word-wrap:break-word}th{background:#fff}u{text-decoration:underline;color:#000}h1{font-size:11pt;text-align:center;margin:0 0 2pt;font-weight:700}h2{font-size:9pt;text-align:center;margin:0 0 10pt;font-weight:700}</style></head><body>${body}</body></html>`;
+  const ROBOTO = PRINT_FONT_LINK;
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Weekly Reservations</title>${ROBOTO}<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Roboto Mono',monospace;font-weight:${PRINT_WEIGHT_REGULAR};font-size:9pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:12mm 10mm;}@page{size:A4 portrait;margin:0}table{width:100%;border-collapse:collapse;table-layout:fixed}col.c0{width:11%}col.c1{width:9%}col.c2{width:9%}col.c3{width:16%}col.c4{width:8%}col.c5{width:22%}col.c6{width:25%}thead{display:table-header-group}tr{page-break-inside:avoid;break-inside:avoid}.date-row{page-break-after:avoid;break-after:avoid}.date-row td{background:#f0f0f0}th,td{border:1px solid #aaa;padding:4pt 5pt;vertical-align:top;text-align:center;font-size:8.5pt;color:#000;font-weight:${PRINT_WEIGHT_BOLD};overflow:hidden;word-wrap:break-word}th{background:#fff}u{text-decoration:underline;color:#000}h1{font-size:11pt;text-align:center;margin:0 0 2pt;font-weight:${PRINT_WEIGHT_BOLD}}h2{font-size:9pt;text-align:center;margin:0 0 10pt;font-weight:${PRINT_WEIGHT_BOLD}}</style></head><body>${body}</body></html>`;
 };
 
 function weeklyRowsToHTML(rows, edits, totalGuests, dateRange) {
@@ -144,7 +145,7 @@ function weeklyRowsToHTML(rows, edits, totalGuests, dateRange) {
     if (row.type==="date")
       body += `<tr class="date-row"><td style="text-align:left;">${e(c[0])}</td><td colspan="6" style="text-align:left;padding-left:8pt;white-space:nowrap;">Total: ${e(c[1])} guests</td></tr>`;
     else if (row.type==="sub")
-      body += `<tr class="date-row"><td colspan="7" style="text-align:left;padding-left:14pt;font-weight:700;letter-spacing:0.08em;">${e(c[0])}</td></tr>`;
+      body += `<tr class="date-row"><td colspan="7" style="text-align:left;padding-left:14pt;font-weight:${PRINT_WEIGHT_BOLD};letter-spacing:0.08em;">${e(c[0])}</td></tr>`;
     else
       body += `<tr><td></td><td>${e(c[1])}</td><td>${e(c[2])}</td><td>${e(c[3])}</td><td><u>${e(c[4])}</u></td><td style="white-space:pre-line;">${e(c[5])}</td><td style="white-space:pre-line;">${e(c[6])}</td></tr>`;
   }
@@ -175,7 +176,7 @@ function allergyBaseCell(course, resv) {
   return "";
 }
 
-const ALLERGY_ROBOTO = `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">`;
+const ALLERGY_ROBOTO = PRINT_FONT_LINK;
 
 function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdits, restrictionDefs, shortCourseKeySet = null) {
   const resvCount = weekResv.length;
@@ -193,12 +194,12 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
   const resvColPct = `${Math.floor((100 - parseInt(courseColPct)) / resvCount)}%`;
   const courseCS = isLarge ? `width:${courseColPct};text-align:left;padding-left:6pt;` : `min-width:110pt;text-align:left;padding-left:6pt;`;
   const resvCS = isLarge ? `width:${resvColPct};text-align:center;` : `min-width:90pt;text-align:center;`;
-  const css = `*{margin:0;padding:0;box-sizing:border-box;}body{font-family:'Roboto Mono',monospace;font-size:${baseFontPt}pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:5mm 5mm;}@page{size:A4 landscape;margin:0;}table{border-collapse:collapse;${tableLayout}}th,td{border:1px solid #aaa;padding:${cellPad};vertical-align:top;text-align:left;font-size:${baseFontPt}pt;color:#000;font-weight:700;overflow:hidden;word-wrap:break-word;line-height:1.15;}th{text-align:center;}.green-header{background:#3d6b4f;color:#fff;}.green-header th,.green-header td{border-color:#2e5a3e;color:#fff;}.highlight{background:#edf7ef;}.opt-row{background:#fafafa;}.course-name{text-transform:uppercase;font-size:${baseFontPt}pt;}.course-sub{font-size:${courseSubPt}pt;color:#555;font-weight:400;}.resv-cell{font-size:${baseFontPt}pt;line-height:1.15;white-space:pre-line;}`;
+  const css = `*{margin:0;padding:0;box-sizing:border-box;}body{font-family:'Roboto Mono',monospace;font-weight:${PRINT_WEIGHT_REGULAR};font-size:${baseFontPt}pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:5mm 5mm;}@page{size:A4 landscape;margin:0;}table{border-collapse:collapse;${tableLayout}}th,td{border:1px solid #aaa;padding:${cellPad};vertical-align:top;text-align:left;font-size:${baseFontPt}pt;color:#000;font-weight:${PRINT_WEIGHT_BOLD};overflow:hidden;word-wrap:break-word;line-height:1.15;}th{text-align:center;}.green-header{background:#3d6b4f;color:#fff;}.green-header th,.green-header td{border-color:#2e5a3e;color:#fff;}.highlight{background:#edf7ef;}.opt-row{background:#fafafa;}.course-name{text-transform:uppercase;font-size:${baseFontPt}pt;}.course-sub{font-size:${courseSubPt}pt;color:#555;font-weight:${PRINT_WEIGHT_REGULAR};}.resv-cell{font-size:${baseFontPt}pt;line-height:1.15;white-space:pre-line;}`;
   let body = `<table><tr class="green-header"><th style="${courseCS}">${escH(allergyEdits["hdr-date"] ?? dateRange)}</th>`;
   weekResv.forEach(r => { body += `<th style="${resvCS}">${escH(allergyEdits[`name-${r.id}`] ?? (r.data?.resName || "—"))}</th>`; });
   body += `</tr><tr><td style="padding-left:6pt;">Date</td>`;
   weekResv.forEach(r => { body += `<td style="text-align:center;">${fmtS(r.date)}</td>`; });
-  body += `</tr><tr><td style="padding-left:6pt;font-weight:700;">Allergies/Restrictions</td>`;
+  body += `</tr><tr><td style="padding-left:6pt;font-weight:${PRINT_WEIGHT_BOLD};">Allergies/Restrictions</td>`;
   weekResv.forEach(r => {
     const d = r.data || {};
     const mt = d.menuType === "short" ? "SHORT MENU" : "LONG MENU";
@@ -225,7 +226,7 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
     const courseOnShort = shortCourseKeySet ? shortCourseKeySet.has(key) : true;
     const baseName = course.menu?.name || key;
     const baseSub = course.menu?.sub || "";
-    body += `<tr${isOpt ? ` class="opt-row"` : ""}><td style="padding-left:6pt;"><span class="course-name">${escH(baseName)}${isOpt ? ` <span style="font-weight:400;font-size:smaller;color:#999;">(opt)</span>` : ""}${courseOnShort ? ` <span style="font-weight:400;font-size:smaller;color:#3d6b4f;">[S]</span>` : ""}</span>${baseSub ? `<br><span class="course-sub">${escH(baseSub)}</span>` : ""}</td>`;
+    body += `<tr${isOpt ? ` class="opt-row"` : ""}><td style="padding-left:6pt;"><span class="course-name">${escH(baseName)}${isOpt ? ` <span style="font-weight:${PRINT_WEIGHT_REGULAR};font-size:smaller;color:#999;">(opt)</span>` : ""}${courseOnShort ? ` <span style="font-weight:${PRINT_WEIGHT_REGULAR};font-size:smaller;color:#3d6b4f;">[S]</span>` : ""}</span>${baseSub ? `<br><span class="course-sub">${escH(baseSub)}</span>` : ""}</td>`;
     weekResv.forEach(r => {
       const isShortResv = String(r.data?.menuType || "").trim().toLowerCase() === "short";
       // Grey out courses not on the short menu for short-menu reservations

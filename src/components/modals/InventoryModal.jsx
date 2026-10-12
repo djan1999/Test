@@ -5,6 +5,7 @@ import { readStateKey, readStatePrefix, saveStateKey, pendingStateKeys } from ".
 import { workspaceKey } from "../../utils/storage.js";
 import { COUNTRY_NAMES, stripCountryFromRegion, inferCountryFromRegion } from "../../constants/countries.js";
 import { tokens } from "../../styles/tokens.js";
+import { PRINT_FONT_LINK, PRINT_WEIGHT_REGULAR, PRINT_WEIGHT_BOLD } from "../../utils/printFonts.js";
 import { baseInput } from "../../styles/mixins.js";
 import FullModal from "../ui/FullModal.jsx";
 import { useIsMobile } from "../../hooks/useIsMobile.js";
@@ -185,10 +186,10 @@ export default function InventoryModal({ wines, onClose }) {
       const sub = [stripCountryFromRegion(w.region, rc), COUNTRY_NAMES[rc] || rc].filter(Boolean).join(", ");
       return `<tr>
         <td style="padding:5px 4px;border-bottom:1px solid ${tokens.neutral[200]};vertical-align:top;">
-          <div style="font-weight:600;">${escapeHtml(w.producer)} ${escapeHtml(w.name)} <span style="font-weight:400;color:${tokens.neutral[500]};">${escapeHtml(vin)}</span></div>
+          <div style="font-weight:${PRINT_WEIGHT_BOLD};">${escapeHtml(w.producer)} ${escapeHtml(w.name)} <span style="font-weight:${PRINT_WEIGHT_REGULAR};color:${tokens.neutral[500]};">${escapeHtml(vin)}</span></div>
           ${sub ? `<div style="font-size:9px;color:${tokens.neutral[400]};margin-top:1px;">${escapeHtml(sub)}</div>` : ""}
         </td>
-        <td style="padding:5px 4px;border-bottom:1px solid ${tokens.neutral[200]};text-align:right;font-size:15px;font-weight:700;color:${n > 0 ? tokens.neutral[900] : tokens.neutral[300]};white-space:nowrap;width:48px;">${fmtCount(n)}</td>
+        <td style="padding:5px 4px;border-bottom:1px solid ${tokens.neutral[200]};text-align:right;font-size:15px;font-weight:${PRINT_WEIGHT_BOLD};color:${n > 0 ? tokens.neutral[900] : tokens.neutral[300]};white-space:nowrap;width:48px;">${fmtCount(n)}</td>
       </tr>`;
     }).join("");
     const sections = Object.entries(byCountry).sort(([a], [b]) => a.localeCompare(b)).map(([country, ws]) => `
@@ -197,13 +198,13 @@ export default function InventoryModal({ wines, onClose }) {
         <table style="width:100%;border-collapse:collapse;">${rows(ws)}</table>
       </div>`).join("");
     const html = `<html><head><title>Wine Inventory · ${dateStr}</title>
-      <style>body{font-family:'Roboto Mono',monospace;font-size:11px;padding:24px;color:${tokens.neutral[900]};}@media print{body{padding:12px;}}</style>
+      ${PRINT_FONT_LINK}<style>body{font-family:'Roboto Mono',monospace;font-weight:${PRINT_WEIGHT_REGULAR};font-size:11px;padding:24px;color:${tokens.neutral[900]};}@media print{body{padding:12px;}}</style>
       </head><body>
-        <div style="font-size:14px;font-weight:600;letter-spacing:4px;margin-bottom:4px;">WINE INVENTORY</div>
+        <div style="font-size:14px;font-weight:${PRINT_WEIGHT_BOLD};letter-spacing:4px;margin-bottom:4px;">WINE INVENTORY</div>
         <div style="font-size:9px;letter-spacing:2px;color:${tokens.neutral[500]};margin-bottom:4px;">${dateStr}</div>
         ${deviceTotals.length > 1 ? `<div style="font-size:9px;color:${tokens.neutral[500]};margin-bottom:20px;">${deviceSummary} · TOTAL: ${fmtCount(grandTotal)}</div>` : `<div style="font-size:9px;color:${tokens.neutral[500]};margin-bottom:20px;">Total: ${fmtCount(grandTotal)} bottles</div>`}
         ${sections}
-        <div style="font-size:11px;font-weight:700;text-align:right;padding-top:12px;border-top:1px solid ${tokens.neutral[200]};">TOTAL: ${fmtCount(grandTotal)} bottles</div>
+        <div style="font-size:11px;font-weight:${PRINT_WEIGHT_BOLD};text-align:right;padding-top:12px;border-top:1px solid ${tokens.neutral[200]};">TOTAL: ${fmtCount(grandTotal)} bottles</div>
       </body></html>`;
     const w = window.open("", "_blank");
     if (!w) return;

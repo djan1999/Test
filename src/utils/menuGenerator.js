@@ -10,6 +10,7 @@
  */
 
 import { applyCourseRestriction, resolveSeatRestrictionKeys, optionalPairingEnabled } from "./menuUtils.js";
+import { PRINT_WEIGHT_REGULAR, PRINT_WEIGHT_BOLD } from "./printFonts.js";
 import { buildDefaultTemplate, parseWidthPreset } from "./menuTemplateSchema.js";
 import { digestivoMenuParts } from "./digestivo.js";
 
@@ -807,7 +808,7 @@ export function generateMenuHTML({
 <title>${safeTitle}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@${PRINT_WEIGHT_REGULAR};${PRINT_WEIGHT_BOLD}&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
 :root{
@@ -817,14 +818,14 @@ export function generateMenuHTML({
   --inner-h:calc(var(--page-h) - var(--pad-t) - var(--pad-b));
 }
 @page{size:A5 portrait;margin:0;}
-html,body{width:var(--page-w);height:var(--page-h);overflow:hidden;background:#fff;color:#000;font-family:'Roboto Mono',monospace;font-size:${s("fontSize",6.75)}pt;line-height:1.08;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+html,body{width:var(--page-w);height:var(--page-h);overflow:hidden;background:#fff;color:#000;font-family:'Roboto Mono',monospace;font-weight:${PRINT_WEIGHT_REGULAR};font-size:${s("fontSize",6.75)}pt;line-height:1.08;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
 body{position:relative;}
 #sheet{width:var(--page-w);height:var(--page-h);overflow:hidden;position:relative;background:#fff;}
 #frame{position:absolute;inset:0;padding:var(--pad-t) var(--pad-r) var(--pad-b) var(--pad-l);overflow:hidden;}
 #scaleTarget{width:100%;min-height:var(--inner-h);display:flex;flex-direction:column;transform-origin:top left;}
 .menu-header-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:${s("headerColGap",8.6)}mm;margin-bottom:${s("headerSpacing",7)}mm;}
-#title{font-size:${titleFontSize}pt;font-weight:700;letter-spacing:${titleTracking}em;text-transform:${titleTransform};text-align:${titleAlign};}
-#menu-date{font-size:5.8pt;font-weight:400;letter-spacing:0.02em;margin-top:${s("menuDateMarginTop",0.8)}mm;text-transform:none;}
+#title{font-size:${titleFontSize}pt;font-weight:${PRINT_WEIGHT_BOLD};letter-spacing:${titleTracking}em;text-transform:${titleTransform};text-align:${titleAlign};}
+#menu-date{font-size:5.8pt;font-weight:${PRINT_WEIGHT_REGULAR};letter-spacing:0.02em;margin-top:${s("menuDateMarginTop",0.8)}mm;text-transform:none;}
 #logo{transform:translate(${logoOffsetX}mm,${logoOffsetY}mm);}
 #logo img{width:${logoSize}mm;display:block;}
 #menu{width:100%;flex:1;display:flex;flex-direction:column;}
@@ -835,9 +836,9 @@ body{position:relative;}
 .menu-row.wine-only{margin-bottom:${s("wineRowSpacing",4.5)}pt;}
 
 .menu-col{min-width:0;}
-.menu-main{font-weight:700;line-height:1.02;letter-spacing:0.012em;overflow-wrap:anywhere;text-transform:uppercase;}
+.menu-main{font-weight:${PRINT_WEIGHT_BOLD};line-height:1.02;letter-spacing:0.012em;overflow-wrap:anywhere;text-transform:uppercase;}
 .menu-sub{line-height:1.08;margin-top:${s("menuSubMarginTop",0.75)}pt;overflow-wrap:anywhere;}
-.menu-section-label{font-weight:700;letter-spacing:0.042em;padding-top:${s("sectionLabelPaddingTop",0.6)}pt;text-transform:uppercase;}
+.menu-section-label{font-weight:${PRINT_WEIGHT_BOLD};letter-spacing:0.042em;padding-top:${s("sectionLabelPaddingTop",0.6)}pt;text-transform:uppercase;}
 .menu-thankyou{margin-top:${s("thankYouSpacing",7)}pt;font-size:6.55pt;font-style:normal;}
 #team{font-size:6.5pt;line-height:1.2;overflow-wrap:anywhere;}
 #team .menu-main{margin-bottom:0;}

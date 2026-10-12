@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { tokens } from "../styles/tokens.js";
+import { PRINT_WEIGHT_REGULAR, PRINT_WEIGHT_BOLD } from "../utils/printFonts.js";
 import { RESTRICTIONS } from "../constants/dietary.js";
 import { useFocusChain } from "../hooks/useFocusChain.js";
 import { useModalEscape } from "../hooks/useModalEscape.js";
@@ -296,6 +297,7 @@ function PlainInput({ value, onChange, bold, center, style, focusBind }) {
       value={value}
       onChange={(e) => onChange(e.target.value)}
       onKeyDown={focusBind?.onKeyDown}
+      className={bold ? "sb-bold" : undefined}
       style={{
         ...plainInputStyle,
         fontWeight: bold ? 700 : "inherit",
@@ -725,7 +727,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
                 marginBottom: "4pt",
               }}
             >
-              <span style={{ fontWeight: 700, flexShrink: 0 }}>
+              <span className="sb-bold" style={{ fontWeight: 700, flexShrink: 0 }}>
                 Extra bread count:
               </span>
               <input
@@ -749,7 +751,7 @@ export default function ServiceBreakdown({ dateStr, reservations, onClose }) {
               />
             </div>
 
-            <div style={{ fontWeight: 700, marginBottom: "2pt" }}>
+            <div className="sb-bold" style={{ fontWeight: 700, marginBottom: "2pt" }}>
               Service Announcements:
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: "2pt" }}>
@@ -876,6 +878,15 @@ function PrintStyles() {
         .sb-sheet input,
         .sb-sheet textarea {
           line-height: 1.45 !important;
+        }
+        /* Lighter print weights so inkjet bleed doesn't thicken the text. */
+        .sb-sheet,
+        .sb-sheet input,
+        .sb-sheet textarea {
+          font-weight: ${PRINT_WEIGHT_REGULAR} !important;
+        }
+        .sb-sheet .sb-bold {
+          font-weight: ${PRINT_WEIGHT_BOLD} !important;
         }
         .header-block {
           margin-bottom: 12pt !important;

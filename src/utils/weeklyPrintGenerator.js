@@ -5,26 +5,27 @@
 import { getCourseMod, applyModOverride } from "./menuUtils.js";
 import { groupRestrictionsByGuest } from "./restrictionGroups.js";
 import { deriveCourseKeysFromTemplate } from "./menuLayoutProfiles.js";
+import { PRINT_FONT_LINK, PRINT_WEIGHT_REGULAR, PRINT_WEIGHT_BOLD } from "./printFonts.js";
 
 const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
-const ROBOTO_LINK = `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">`;
+const ROBOTO_LINK = PRINT_FONT_LINK;
 
 const resvHtmlShell = (title, bodyHtml) => `<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>${esc(title)}</title>
 ${ROBOTO_LINK}
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:12mm 10mm;}
+body{font-family:'Roboto Mono',monospace;font-weight:${PRINT_WEIGHT_REGULAR};font-size:9pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:12mm 10mm;}
 @page{size:A4 portrait;margin:0;}
 table{width:100%;border-collapse:collapse;}
 tr{page-break-inside:avoid;}
-th,td{border:1px solid #aaa;padding:4pt 5pt;vertical-align:top;text-align:center;font-size:8.5pt;color:#000;font-weight:700;}
+th,td{border:1px solid #aaa;padding:4pt 5pt;vertical-align:top;text-align:center;font-size:8.5pt;color:#000;font-weight:${PRINT_WEIGHT_BOLD};}
 th{text-align:center;background:#fff;}
 .date-row td{background:#f0f0f0;}
 u{text-decoration:underline;color:#000;}
-h1{font-family:'Roboto Mono',monospace;font-size:11pt;text-align:center;margin:0 0 2pt;font-weight:700;}
-h2{font-family:'Roboto Mono',monospace;font-size:9pt;text-align:center;margin:0 0 10pt;font-weight:700;color:#000;}
+h1{font-family:'Roboto Mono',monospace;font-size:11pt;text-align:center;margin:0 0 2pt;font-weight:${PRINT_WEIGHT_BOLD};}
+h2{font-family:'Roboto Mono',monospace;font-size:9pt;text-align:center;margin:0 0 10pt;font-weight:${PRINT_WEIGHT_BOLD};color:#000;}
 </style></head><body>${bodyHtml}</body></html>`;
 
 const allergyHtmlShell = (title, bodyHtml, resvCount) => {
@@ -40,10 +41,10 @@ const allergyHtmlShell = (title, bodyHtml, resvCount) => {
 ${ROBOTO_LINK}
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Roboto Mono',monospace;font-size:${baseFontPt}pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:5mm 5mm;}
+body{font-family:'Roboto Mono',monospace;font-weight:${PRINT_WEIGHT_REGULAR};font-size:${baseFontPt}pt;color:#000;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:5mm 5mm;}
 @page{size:A4 landscape;margin:0;}
 table{border-collapse:collapse;${tableLayout}}
-th,td{border:1px solid #aaa;padding:${cellPad};vertical-align:top;text-align:left;font-size:${baseFontPt}pt;color:#000;font-weight:700;overflow:hidden;word-wrap:break-word;line-height:1.15;}
+th,td{border:1px solid #aaa;padding:${cellPad};vertical-align:top;text-align:left;font-size:${baseFontPt}pt;color:#000;font-weight:${PRINT_WEIGHT_BOLD};overflow:hidden;word-wrap:break-word;line-height:1.15;}
 th{text-align:center;}
 .green-header{background:#3d6b4f;color:#fff;}
 .green-header th,.green-header td{border-color:#2e5a3e;color:#fff;}
@@ -51,7 +52,7 @@ th{text-align:center;}
 .center{text-align:center;}
 .highlight{background:#edf7ef;}
 .course-name{text-transform:uppercase;font-size:${baseFontPt}pt;}
-.course-sub{font-size:${courseSubPt}pt;color:#555;font-weight:400;}
+.course-sub{font-size:${courseSubPt}pt;color:#555;font-weight:${PRINT_WEIGHT_REGULAR};}
 .resv-cell{font-size:${baseFontPt}pt;line-height:1.15;}
 </style></head><body>${bodyHtml}</body></html>`;
 };
@@ -307,7 +308,7 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
 
   // Header row 3: allergies/restrictions summary + menu type (white background)
   body += `<tr>`;
-  body += `<td style="padding-left:6pt;font-weight:700;">Allergies/Restrictions</td>`;
+  body += `<td style="padding-left:6pt;font-weight:${PRINT_WEIGHT_BOLD};">Allergies/Restrictions</td>`;
   weekResv.forEach(r => {
     const d = r.data || {};
     const mt = d.menuType === "short" ? "SHORT MENU" : "LONG MENU";
@@ -422,7 +423,7 @@ function optExtraPresetQty(key, name, guests) {
 
 export function generateKitchenTicketsHTML(reservations, menuCourses, restrictionDefs = [], profiles = [], assignments = {}) {
   if (!reservations || reservations.length === 0) {
-    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Kitchen Tickets</title>${ROBOTO_LINK}</head><body style="font-family:'Roboto Mono',monospace;padding:40pt;text-align:center;">No reservations</body></html>`;
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Kitchen Tickets</title>${ROBOTO_LINK}</head><body style="font-family:'Roboto Mono',monospace;font-weight:${PRINT_WEIGHT_REGULAR};padding:40pt;text-align:center;">No reservations</body></html>`;
   }
 
   const normFlag = s => String(s || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
@@ -614,7 +615,7 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
 
   const css = `
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#000;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:4mm;}
+body{font-family:'Roboto Mono',monospace;font-weight:${PRINT_WEIGHT_REGULAR};font-size:9pt;color:#000;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;padding:4mm;}
 @page{size:A4 portrait;margin:0;}
 .page{display:grid;grid-template-columns:repeat(2,1fr);gap:4mm;align-items:start;page-break-after:always;break-after:page;}
 .page:last-child{page-break-after:auto;break-after:auto;}
@@ -622,22 +623,22 @@ body{font-family:'Roboto Mono',monospace;font-size:9pt;color:#000;background:#ff
 .hdr{border-bottom:1pt solid #000;padding:4pt 6pt;display:grid;grid-template-columns:1fr 1fr;gap:1pt 5pt;}
 .hcol{display:flex;align-items:baseline;gap:2pt;}
 .hfull{grid-column:1/-1;display:flex;align-items:baseline;gap:2pt;}
-.hlbl{font-size:7pt;font-weight:400;letter-spacing:0.04em;flex-shrink:0;}
-.hval{font-size:11pt;font-weight:700;line-height:1.1;}
-.pair{border-bottom:1pt solid #000;padding:3pt 6pt;font-size:8pt;font-weight:700;letter-spacing:0.08em;text-align:center;}
+.hlbl{font-size:7pt;font-weight:${PRINT_WEIGHT_REGULAR};letter-spacing:0.04em;flex-shrink:0;}
+.hval{font-size:11pt;font-weight:${PRINT_WEIGHT_BOLD};line-height:1.1;}
+.pair{border-bottom:1pt solid #000;padding:3pt 6pt;font-size:8pt;font-weight:${PRINT_WEIGHT_BOLD};letter-spacing:0.08em;text-align:center;}
 .notes{border-bottom:1pt solid #000;padding:2.5pt 6pt;font-size:8pt;font-style:italic;}
 .courses{border-bottom:1pt solid #000;}
 .cr{display:flex;align-items:baseline;padding:1.5pt 6pt;overflow:hidden;}
-.qty{min-width:13pt;font-size:9.5pt;font-weight:700;flex-shrink:0;}
-.cname{font-size:9.5pt;font-weight:700;line-height:1.2;flex-shrink:0;}
-.cmods{font-size:8pt;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.qty{min-width:13pt;font-size:9.5pt;font-weight:${PRINT_WEIGHT_BOLD};flex-shrink:0;}
+.cname{font-size:9.5pt;font-weight:${PRINT_WEIGHT_BOLD};line-height:1.2;flex-shrink:0;}
+.cmods{font-size:8pt;font-weight:${PRINT_WEIGHT_REGULAR};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .summary{padding:3pt 6pt;}
-.srow{font-size:8.5pt;font-weight:700;min-height:15pt;padding:2pt 0;border-bottom:0.5pt solid #ccc;display:flex;align-items:flex-start;}
+.srow{font-size:8.5pt;font-weight:${PRINT_WEIGHT_BOLD};min-height:15pt;padding:2pt 0;border-bottom:0.5pt solid #ccc;display:flex;align-items:flex-start;}
 .srow-notes{min-height:20pt;border-bottom:none;}
 .srow:last-child{border-bottom:none;}
 .slbl{flex-shrink:0;}
-.sval{margin-left:4pt;font-weight:700;}
-.srestr-val{font-weight:400;margin-left:3pt;}
+.sval{margin-left:4pt;font-weight:${PRINT_WEIGHT_BOLD};}
+.srestr-val{font-weight:${PRINT_WEIGHT_REGULAR};margin-left:3pt;}
 `;
 
   return `<!DOCTYPE html>
