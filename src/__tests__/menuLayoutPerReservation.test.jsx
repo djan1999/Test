@@ -199,3 +199,23 @@ describe("MenuLayoutPanel — special layouts", () => {
     expect(onBadge).toHaveBeenCalledWith("fh", "DUO");
   });
 });
+
+describe("second logo on the menu header", () => {
+  it("stacks a second inline logo under the main one, and refuses non-image sources", async () => {
+    const { generateMenuHTML } = await import("../utils/menuGenerator.js");
+    const png = "data:image/png;base64,iVBORw0KGgo=";
+    const template = (second) => ({ version: 2, rows: [
+      { id: "h", left: { type: "title" }, right: { type: "logo", size: 10.5, secondLogo: second, secondLogoSize: 16, secondLogoGap: 2.5 }, widthPreset: "55/45" },
+      { id: "c", left: { type: "course", courseKey: "bread" }, right: null, widthPreset: "55/45" },
+    ] });
+    const render = (second) => generateMenuHTML({
+      seat: { id: 1 }, table: { menuType: "" }, menuCourses, menuTemplate: template(second),
+      logoDataUri: "data:image/png;base64,AAAA", lang: "en",
+    });
+    const withSecond = render(png);
+    expect(withSecond).toContain('class="logo-second"');
+    expect(withSecond).toContain("width:16mm");
+    expect(render("").includes("logo-second")).toBe(false);
+    expect(render("https://evil.example/x.png\" onerror=\"x").includes("logo-second")).toBe(false);
+  });
+});

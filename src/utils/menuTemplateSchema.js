@@ -120,8 +120,13 @@ export const BLOCK_META = {
       { key: "offsetX", label: "Offset X (mm)", type: "number", step: 0.5 },
       { key: "offsetY", label: "Offset Y (mm)", type: "number", step: 0.5 },
       { key: "align",   label: "Alignment",     type: "select", options: ["left", "center", "right"] },
+      // A second logo stacked under the main one — a guest chef's restaurant
+      // on a four-hands menu. Stored on this layout's block only.
+      { key: "secondLogo",     label: "Second logo (under the main one)", type: "image" },
+      { key: "secondLogoSize", label: "Second logo width (mm)",           type: "number", step: 0.5 },
+      { key: "secondLogoGap",  label: "Gap above second logo (mm)",       type: "number", step: 0.5 },
     ],
-    defaults: { size: 10.5, offsetX: 0, offsetY: 0, align: "right" },
+    defaults: { size: 10.5, offsetX: 0, offsetY: 0, align: "right", secondLogo: "", secondLogoSize: 16, secondLogoGap: 2.5 },
   },
   title: {
     label: "Title",         group: "static", color: "#1a1a1a", bg: "#f8f8f8", icon: "T",
