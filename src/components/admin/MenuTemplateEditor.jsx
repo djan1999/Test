@@ -581,6 +581,8 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
                 </span>
               )}
             </div>
+          ) : field.type === "image" ? (
+            <ImageField value={block[field.key] || ""} onChange={v => setField(field.key, v)} />
           ) : field.type === "checkbox" ? (
             <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
               <input
@@ -601,6 +603,43 @@ function BlockInspector({ block, onUpdate, menuCourses, wines = [], cocktails = 
           )}
         </div>
       ))}
+    </div>
+  );
+}
+
+// Picks an image file and stores it inline (data URI) on the block, so the
+// layout carries it to every device without a separate upload store.
+const IMAGE_FIELD_MAX_BYTES = 400 * 1024;
+function ImageField({ value, onChange }) {
+  const [error, setError] = useState("");
+  const pick = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!/^image\/(png|jpeg|webp|gif|svg\+xml)$/.test(file.type)) { setError("Use a PNG, JPG, WEBP, GIF or SVG image."); return; }
+    if (file.size > IMAGE_FIELD_MAX_BYTES) { setError("Image is over 400 KB — use a smaller file."); return; }
+    const reader = new FileReader();
+    reader.onload = () => { setError(""); onChange(String(reader.result || "")); };
+    reader.onerror = () => setError("Could not read that file.");
+    reader.readAsDataURL(file);
+  };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {value && (
+        <div style={{ padding: 6, border: `1px solid ${tokens.ink[5]}`, background: tokens.neutral[0] }}>
+          <img src={value} alt="" style={{ maxWidth: "100%", maxHeight: 48, display: "block" }} />
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 6 }}>
+        <label style={{ ...baseInp, fontSize: 10, cursor: "pointer", width: "auto", textAlign: "center", flex: 1 }}>
+          {value ? "Replace image" : "Upload image"}
+          <input type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" onChange={pick} style={{ display: "none" }} />
+        </label>
+        {value && (
+          <button type="button" onClick={() => onChange("")} style={{ ...baseInp, fontSize: 10, cursor: "pointer", width: "auto" }}>Remove</button>
+        )}
+      </div>
+      {error && <div style={{ fontFamily: FONT, fontSize: 9, color: tokens.red.text }}>{error}</div>}
     </div>
   );
 }

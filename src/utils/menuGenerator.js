@@ -770,13 +770,22 @@ export function generateMenuHTML({
     }
     if (row.type === "_header") {
       const hasTitle = !!row.titleBlock;
-      const hasLogo  = !!row.logoBlock && !!_logo;
+      // Only an inline image may be stamped into the src — never an arbitrary URL.
+      const second = typeof row.logoBlock?.secondLogo === "string"
+        && /^data:image\/(png|jpeg|webp|gif|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(row.logoBlock.secondLogo)
+        ? row.logoBlock.secondLogo : "";
+      const hasLogo  = !!row.logoBlock && (!!_logo || !!second);
       const titleHtml = hasTitle
         ? `<div id="title">${safeTitle}<div id="menu-date">${esc(menuDate)}</div></div>`
         : "";
-      const logoHtml = hasLogo
-        ? `<div id="logo"><img src="${_logo}" alt="Logo"></div>`
-        : "";
+      const secondW = Number(row.logoBlock?.secondLogoSize) > 0 ? Number(row.logoBlock.secondLogoSize) : logoSize;
+      const secondGap = Number.isFinite(Number(row.logoBlock?.secondLogoGap)) ? Number(row.logoBlock.secondLogoGap) : 2.5;
+      const logoHtml = !hasLogo ? "" : second
+        ? `<div id="logo" style="display:flex;flex-direction:column;align-items:center;">`
+          + (_logo ? `<img src="${_logo}" alt="Logo">` : "")
+          + `<img class="logo-second" src="${second}" alt="" style="width:${secondW}mm;${_logo ? `margin-top:${secondGap}mm;` : ""}">`
+          + `</div>`
+        : `<div id="logo"><img src="${_logo}" alt="Logo"></div>`;
       return `<div class="menu-header-row" style="${gapStyle}">${titleHtml}${logoHtml}</div>`;
     }
     if (row.type === "_team") {
