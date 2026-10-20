@@ -388,6 +388,15 @@ describe("courseRestrictionModCounts", () => {
     expect(courseRestrictionModCounts(vegCourse, seats4, restrictions)).toEqual({ CELERIAC: 2 });
   });
 
+  it("only the guests having a dish count when servedSeatIds is given", () => {
+    // P2 is vegetarian, P1 alone ordered the optional course: no mod.
+    expect(courseRestrictionModCounts(vegCourse, seats4, [{ pos: 2, note: "veg" }], [1])).toBeNull();
+    // P2 ordered it too: the mod applies to P2.
+    expect(courseRestrictionModCounts(vegCourse, seats4, [{ pos: 2, note: "veg" }], [1, 2])).toEqual({ CELERIAC: 1 });
+    // Unpinned restrictions can't be attributed, so they keep showing.
+    expect(courseRestrictionModCounts(vegCourse, seats4, [{ pos: null, note: "veg" }], [1])).toEqual({ CELERIAC: 1 });
+  });
+
   it("returns null when nothing modifies this course", () => {
     expect(courseRestrictionModCounts(vegCourse, seats4, [{ pos: null, note: "gluten" }])).toBeNull();
     expect(courseRestrictionModCounts(vegCourse, seats4, [])).toBeNull();
