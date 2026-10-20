@@ -116,17 +116,19 @@ export const BLOCK_META = {
     label: "Logo",          group: "static", color: "#1a1a1a", bg: "#f8f8f8", icon: "▣",
     desc: "Restaurant logo image",
     fields: [
-      { key: "size",    label: "Size (mm)",     type: "number", step: 0.5 },
+      { key: "size",    label: "Size (mm)",     type: "number", step: 0.5, min: 1, max: 80 },
       { key: "offsetX", label: "Offset X (mm)", type: "number", step: 0.5 },
       { key: "offsetY", label: "Offset Y (mm)", type: "number", step: 0.5 },
       { key: "align",   label: "Alignment",     type: "select", options: ["left", "center", "right"] },
       // A second logo stacked under the main one — a guest chef's restaurant
       // on a four-hands menu. Stored on this layout's block only.
       { key: "secondLogo",     label: "Second logo (under the main one)", type: "image" },
-      { key: "secondLogoSize", label: "Second logo width (mm)",           type: "number", step: 0.5 },
+      { key: "secondLogoSize", label: "Second logo width (mm)",           type: "number", step: 0.5, min: 1, max: 80 },
       { key: "secondLogoGap",  label: "Gap above second logo (mm)",       type: "number", step: 0.5 },
     ],
-    defaults: { size: 10.5, offsetX: 0, offsetY: 0, align: "right", secondLogo: "", secondLogoSize: 16, secondLogoGap: 2.5 },
+    // No size/offset defaults: a block without them falls back to the layout's
+    // legacy logo style, then 10.5mm. Once set here, the block's value wins.
+    defaults: { align: "right", secondLogo: "", secondLogoSize: 16, secondLogoGap: 2.5 },
   },
   title: {
     label: "Title",         group: "static", color: "#1a1a1a", bg: "#f8f8f8", icon: "T",

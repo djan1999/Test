@@ -694,9 +694,13 @@ export function generateMenuHTML({
   const titleTransform = (titleBlock?.uppercase !== false) ? "uppercase" : "none";
   const titleAlign    = titleBlock?.align     ?? "left";
 
-  const logoSize    = s("logoSize",    logoBlock?.size    ?? 10.5);
-  const logoOffsetX = s("logoOffsetX", logoBlock?.offsetX ?? 0);
-  const logoOffsetY = s("logoOffsetY", logoBlock?.offsetY ?? 0);
+  // The logo block's own size/offset win — they are what the layout builder
+  // edits. layoutStyles.logo* are a leftover of the old flat layout editor
+  // (nothing edits them any more); they only apply to a block without a value.
+  const blockNum = (v) => (v !== null && v !== undefined && v !== "" && Number.isFinite(Number(v))) ? Number(v) : null;
+  const logoSize    = blockNum(logoBlock?.size)    ?? s("logoSize",    10.5);
+  const logoOffsetX = blockNum(logoBlock?.offsetX) ?? s("logoOffsetX", 0);
+  const logoOffsetY = blockNum(logoBlock?.offsetY) ?? s("logoOffsetY", 0);
 
   // ── Render helpers ────────────────────────────────────────────────────────
 
