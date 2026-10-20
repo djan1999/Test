@@ -38,6 +38,10 @@ export default function ResvForm({
   onSwapReservations,
   hotelGuestsEnabled = false,
   roomOptions = [],
+  // Guest menu layouts this booking can be served from ({ id, name }), and
+  // which one is live. The picker only appears when there is a choice.
+  menuLayouts = [],
+  liveLayoutId = null,
 }) {
   const isMobile = useIsMobile(560);
   const showHotelGuests = hotelGuestsEnabled || initial?.data?.guestType === "hotel";
@@ -60,6 +64,16 @@ export default function ResvForm({
   const [time, setTime] = useState(initial?.data?.resTime || "");
   const [serviceSession, setServiceSession] = useState(initial?.data?.service_session || "dinner");
   const [menuType, setMenuType] = useState(initial?.data?.menuType || "");
+  const [menuProfileId, setMenuProfileId] = useState(initial?.data?.menuProfileId || "");
+  const safeLayouts = Array.isArray(menuLayouts) ? menuLayouts.filter(l => l && l.id) : [];
+  const liveLayout = safeLayouts.find(l => l.id === liveLayoutId) || null;
+  // Live first (stored as ""), then every other layout by its own id.
+  const layoutChoices = [
+    ...(liveLayout ? [{ id: "", name: liveLayout.name, live: true }] : []),
+    ...safeLayouts.filter(l => l.id !== liveLayoutId).map(l => ({ id: l.id, name: l.name, live: false })),
+  ];
+  const staleLayout = !!menuProfileId && safeLayouts.length > 0 && !safeLayouts.some(l => l.id === menuProfileId);
+  const selectedLayoutId = menuProfileId === liveLayoutId || staleLayout ? "" : menuProfileId;
   const [lang, setLang] = useState(initial?.data?.lang || "en");
   const [guests, setGuests] = useState(initial?.data?.guests || 2);
   const [guestType, setGuestType] = useState(initial?.data?.guestType || "");
@@ -87,7 +101,7 @@ export default function ResvForm({
   const [saveError, setSaveError] = useState("");
   const savingRef = useRef(false);
   const dismissGuard = useContext(ModalDismissContext);
-  const draft = JSON.stringify({ tableIds, name, time, serviceSession, menuType, lang, guests,
+  const draft = JSON.stringify({ tableIds, name, time, serviceSession, menuType, menuProfileId, lang, guests,
     guestType, rooms, birthday, cakeNote, restrictions, notes, customLabel, customDetail });
   const initialDraft = useRef(draft);
   const dirty = draft !== initialDraft.current;
@@ -177,6 +191,9 @@ export default function ResvForm({
     const sortedRooms = guestType === "hotel" ? [...rooms].sort((a, b) => String(a).localeCompare(String(b))) : [];
     const data = {
       service_session: serviceSession, resName: name, resTime: time, menuType, lang, guests, guestType,
+      // "" = the live layout. Picking the live one explicitly stores "" too, so
+      // the booking follows whatever is live rather than pinning today's pick.
+      menuProfileId: menuProfileId && menuProfileId !== liveLayoutId && !staleLayout ? menuProfileId : "",
       room: sortedRooms[0] || "",
       rooms: sortedRooms,
       birthday, cakeNote: birthday ? cakeNote : "", restrictions, notes,
@@ -479,6 +496,32 @@ export default function ResvForm({
           </label>
         </div>
       </div>
+
+      {layoutChoices.length > 1 && (
+        <div style={{ marginBottom: 10 }}>
+          <div style={fieldLabel}>Menu layout</div>
+          <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+            {layoutChoices.map(({ id, name: layoutName, live }) => {
+              const on = (selectedLayoutId || "") === id;
+              return (
+                <button key={id || "live"} type="button" aria-pressed={on} onClick={() => setMenuProfileId(live ? "" : id)} style={{
+                  fontFamily: FONT, fontSize: 10, letterSpacing: 0.5, padding: "8px 10px", flex: "1 1 auto",
+                  border: "1px solid", borderColor: on ? tokens.charcoal.default : tokens.ink[4],
+                  borderRadius: 0, cursor: "pointer",
+                  background: on ? tokens.tint.parchment : tokens.neutral[0],
+                  color: on ? tokens.ink[1] : tokens.ink[3],
+                  fontWeight: on && !live ? 700 : 400,
+                }}>{layoutName}{live ? " (live)" : ""}</button>
+              );
+            })}
+          </div>
+          {staleLayout && (
+            <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.red.text, marginTop: 4 }}>
+              The layout this booking was on has been deleted — it is served from the live menu.
+            </div>
+          )}
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr auto", gap: 10, alignItems: "flex-start", marginBottom: 10 }}>
         <div>
