@@ -14,7 +14,7 @@
  */
 
 import {
-  getAssignedGuestProfile,
+  resolveTableTemplate,
   deriveCourseKeysFromTemplate,
   deriveKitchenItemsFromTemplate,
 } from "./menuLayoutProfiles.js";
@@ -50,17 +50,11 @@ function pickKitchenTemplate(table, options) {
   const profiles = options.profiles;
   const assignments = options.assignments;
   if (Array.isArray(profiles) && assignments) {
-    const menuType = table?.menuType || "";
-    const isShortType = String(menuType).trim().toLowerCase() === "short";
-    // kitchen_flow was removed — resolve via the guest profile so the
-    // short/long guest template drives the kitchen board automatically.
-    const guestProfile = getAssignedGuestProfile("", profiles, assignments);
-    if (guestProfile) {
-      const tpl = isShortType
-        ? (guestProfile.shortMenuTemplate || guestProfile.menuTemplate)
-        : guestProfile.menuTemplate;
-      if (tpl?.rows) return tpl;
-    }
+    // The party's own layout when it is booked on one (four-hands dinner,
+    // event menu), else the live profile — its long or short template per
+    // table.menuType.
+    const tpl = resolveTableTemplate(table, profiles, assignments);
+    if (tpl?.rows) return tpl;
   }
   return null;
 }

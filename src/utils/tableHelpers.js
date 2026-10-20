@@ -129,6 +129,9 @@ export const blankTable = id => ({
   rooms: [],
   arrivedAt: null,
   menuType: "",
+  // Layout picked for this party only (a four-hands dinner, an event menu).
+  // Empty → the live menu layout. See utils/menuLayoutProfiles.js.
+  menuProfileId: "",
   pace: "",
   bottleWines: [],
   restrictions: [],
@@ -178,6 +181,7 @@ export const reservationDescriptiveFields = (d = {}) => ({
   resName:            d.resName || "",
   resTime:            d.resTime || "",
   menuType:           d.menuType || "",
+  menuProfileId:      d.menuProfileId || "",
   lang:               d.lang || "en",
   guestType:          d.guestType || "",
   room:               (Array.isArray(d.rooms) && d.rooms.length ? d.rooms[0] : d.room) || "",

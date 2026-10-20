@@ -634,6 +634,7 @@ describe("Editor → Supabase → editor round-trip", () => {
       ticketTemplate:      editorProfile.ticketTemplate,
       shortTicketTemplate: editorProfile.shortTicketTemplate,
       layoutStyles:        editorProfile.layoutStyles,
+      badge:               "",
     });
   });
 });

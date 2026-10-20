@@ -148,6 +148,9 @@ export function sanitizeProfilesPayload(raw) {
       ticketTemplate: p.ticketTemplate && typeof p.ticketTemplate === "object" ? p.ticketTemplate : null,
       shortTicketTemplate: p.shortTicketTemplate && typeof p.shortTicketTemplate === "object" ? p.shortTicketTemplate : null,
       layoutStyles: p.layoutStyles && typeof p.layoutStyles === "object" ? p.layoutStyles : {},
+      // Short tag the kitchen ticket and the reservation list show for a
+      // party booked on this layout (e.g. "4 HANDS"). Empty → the name is used.
+      badge: String(p.badge || "").trim(),
     }));
 
   const a = raw?.assignments || {};
@@ -252,6 +255,83 @@ export function getAssignedProfile(menuType, profiles = [], assignments = {}, ta
 export const getAssignedGuestProfile = (menuType, profiles, assignments) =>
   getAssignedProfile(menuType, profiles, assignments, "guest_menu");
 
+// ── Per-reservation layouts ───────────────────────────────────────────────────
+//
+// A reservation (and the table it seats) may carry `menuProfileId`: a layout
+// picked for that party only — a four-hands dinner, a private event — that
+// replaces the live layout everywhere the party is served: the guest menu, the
+// kitchen ticket, the floor/course progress and the weekly prints. Empty, or
+// pointing at a profile that has since been deleted, means "the live menu".
+// Every surface resolves the party's layout through these helpers so they can
+// never disagree about which courses a party is getting.
+
+const hasRows = (tpl) => !!tpl && Array.isArray(tpl.rows) && tpl.rows.length > 0;
+
+/** The guest profile a table/reservation is served from. */
+export function resolveTableProfile(table, profiles = [], assignments = {}) {
+  const list = Array.isArray(profiles) ? profiles : [];
+  const overrideId = String(table?.menuProfileId || "").trim();
+  if (overrideId) {
+    const found = list.find(p => p.id === overrideId && (p.target || "guest_menu") === "guest_menu");
+    if (found) return found;
+  }
+  return getAssignedGuestProfile("", list, assignments);
+}
+
+/** A profile's long or short template; short falls back to long when unset. */
+export function profileTemplateForMenuType(profile, menuType) {
+  if (!profile) return null;
+  const isShort = String(menuType || "").trim().toLowerCase() === "short";
+  if (isShort && hasRows(profile.shortMenuTemplate)) return profile.shortMenuTemplate;
+  return profile.menuTemplate || null;
+}
+
+/** The template (long/short per table.menuType) a table is served from. */
+export function resolveTableTemplate(table, profiles = [], assignments = {}) {
+  return profileTemplateForMenuType(resolveTableProfile(table, profiles, assignments), table?.menuType);
+}
+
+/**
+ * The special layout a table is booked on, or null when it is on the live
+ * menu. Used for the badges ("4 HANDS") — a party on the regular menu shows
+ * nothing extra.
+ */
+export function tableLayoutOverride(table, profiles = [], assignments = {}) {
+  const overrideId = String(table?.menuProfileId || "").trim();
+  if (!overrideId) return null;
+  const profile = resolveTableProfile(table, profiles, assignments);
+  if (!profile || profile.id !== overrideId) return null;
+  if (profile.id === assignments?.longMenuProfileId) return null;
+  return profile;
+}
+
+/** Short label for a profile on tickets and lists. */
+export const profileBadge = (profile) =>
+  String(profile?.badge || profile?.name || "").trim();
+
+/**
+ * Course keys that appear ONLY on special layouts — a guest chef's dishes for
+ * a four-hands night. Lists that otherwise show every course (the weekly
+ * allergy sheet) leave these out unless a party in view is booked on a layout
+ * that serves them, so the regular week isn't padded with dishes nobody gets.
+ */
+export function specialOnlyCourseKeys(profiles = [], assignments = {}) {
+  const list = Array.isArray(profiles) ? profiles : [];
+  const live = getAssignedGuestProfile("", list, assignments);
+  const liveKeys = new Set([
+    ...deriveCourseKeysFromTemplate(live?.menuTemplate),
+    ...deriveCourseKeysFromTemplate(live?.shortMenuTemplate),
+  ]);
+  const out = new Set();
+  list.forEach(p => {
+    if (!p || p.id === live?.id) return;
+    [p.menuTemplate, p.shortMenuTemplate].forEach(tpl => {
+      deriveCourseKeysFromTemplate(tpl).forEach(k => { if (!liveKeys.has(k)) out.add(k); });
+    });
+  });
+  return out;
+}
+
 // ── Profile management ────────────────────────────────────────────────────────
 
 export function duplicateProfile(profile, nextName) {
@@ -268,7 +348,13 @@ export function duplicateProfile(profile, nextName) {
     ticketTemplate: profile.ticketTemplate ? cloneTemplate(profile.ticketTemplate) : null,
     shortTicketTemplate: profile.shortTicketTemplate ? cloneTemplate(profile.shortTicketTemplate) : null,
     layoutStyles: profile.layoutStyles ? { ...profile.layoutStyles } : {},
+    badge: "",
   };
+}
+
+export function setProfileBadge(profiles, id, badge) {
+  const next = String(badge || "").trim().slice(0, 24);
+  return (profiles || []).map(p => (p.id === id ? { ...p, badge: next } : p));
 }
 
 export function renameProfile(profiles, id, nextName) {

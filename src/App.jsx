@@ -6,7 +6,7 @@ import {
 } from "./utils/menuUtils.js";
 import { courseToSupabaseRow, supabaseRowToCourse } from "./utils/menuCourseMapper.js";
 import { DEFAULT_MENU_RULES, normalizeMenuRules } from "./utils/menuGenerator.js";
-import { buildDefaultTemplate } from "./utils/menuTemplateSchema.js";
+import { buildDefaultTemplate, buildDefaultLongMenuTemplate } from "./utils/menuTemplateSchema.js";
 import {
   createDefaultProfiles,
   sanitizeProfilesPayload,
@@ -14,6 +14,7 @@ import {
   migrateLegacySingleLayout,
   duplicateProfile,
   renameProfile,
+  setProfileBadge,
   canDeleteProfile,
   isProfileAssigned,
   makeProfile,
@@ -618,6 +619,22 @@ export default function App() {
   // especially must not clear ghost tables) until both reservations and the
   // remote service-table state have actually loaded.
   const [reservationsLoaded, setReservationsLoaded] = useState(!supabase);
+  // Upcoming bookings per special menu layout — the layout builder shows them
+  // so a four-hands layout isn't deleted (or edited blind) with parties on it.
+  const layoutBookings = useMemo(() => {
+    const today = toLocalDateISO();
+    const out = {};
+    (reservations || []).forEach(r => {
+      const id = String(r?.data?.menuProfileId || "").trim();
+      if (!id || !r?.date || r.date < today) return;
+      const entry = out[id] || (out[id] = { count: 0, guests: 0, dates: [] });
+      entry.count += 1;
+      entry.guests += Number(r.data?.guests) || 0;
+      if (!entry.dates.includes(r.date)) entry.dates.push(r.date);
+    });
+    Object.values(out).forEach(e => e.dates.sort());
+    return out;
+  }, [reservations]);
   // True only after the board truth (local SQLite when primary, Supabase on
   // the fallback) has been read and adopted at least once. Non-negotiable:
   // reconciling/saving against the blank boot state once wiped a live service
@@ -3857,16 +3874,24 @@ export default function App() {
 
   // Create a new profile for the given target. Optionally seed the template
   // by cloning the currently-active profile so the user has a starting point.
-  const createProfile = useCallback(({ name, target = "guest_menu", cloneFromActive = false } = {}) => {
+  // `blank` starts from the empty layout skeleton (header, drink scaffolding,
+  // empty course slots, footer) — the starting point for a menu built from
+  // scratch, e.g. a four-hands dinner mixing our dishes and a guest chef's.
+  // Styles are carried over from the profile being edited so it still prints
+  // in the house look.
+  const createProfile = useCallback(({ name, target = "guest_menu", cloneFromActive = false, blank = false } = {}) => {
     const fallbackName = "New Menu Layout";
     let createdId = null;
     updateProfiles(prev => {
-      const seed = cloneFromActive
-        ? prev.profiles.find(p => p.id === prev.activeProfileId)
-        : null;
+      const current = prev.profiles.find(p => p.id === prev.activeProfileId) || null;
+      const seed = cloneFromActive && !blank ? current : null;
       const created = seed
         ? { ...duplicateProfile(seed, name || fallbackName), target }
-        : makeProfile({ name: name || fallbackName, target, menuTemplate: null, layoutStyles: {} });
+        : makeProfile({
+            name: name || fallbackName, target,
+            menuTemplate: blank ? buildDefaultLongMenuTemplate() : null,
+            layoutStyles: blank && current?.layoutStyles ? { ...current.layoutStyles } : {},
+          });
       createdId = created.id;
       return {
         profiles: [...prev.profiles, created],
@@ -3879,6 +3904,10 @@ export default function App() {
 
   const renameProfileById = useCallback((profileId, nextName) => {
     updateProfiles(prev => ({ ...prev, profiles: renameProfile(prev.profiles, profileId, nextName) }));
+  }, [updateProfiles]);
+
+  const setProfileBadgeById = useCallback((profileId, badge) => {
+    updateProfiles(prev => ({ ...prev, profiles: setProfileBadge(prev.profiles, profileId, badge) }));
   }, [updateProfiles]);
 
   const duplicateProfileById = useCallback((profileId, nextName) => {
@@ -5451,6 +5480,8 @@ export default function App() {
         onCreateLayoutProfile={createProfile}
         onDeleteLayoutProfile={deleteProfileById}
         onRenameLayoutProfile={renameProfileById}
+        onSetLayoutProfileBadge={setProfileBadgeById}
+        layoutBookings={layoutBookings}
         onDuplicateLayoutProfile={duplicateProfileById}
         onDuplicateAndAssignProfile={duplicateAndAssignProfile}
         layoutAssignments={profilesState.assignments}
@@ -5844,6 +5875,8 @@ export default function App() {
             excludeId={null}
             hotelGuestsEnabled={hotelGuestsEnabled}
             roomOptions={roomOptions}
+            menuLayouts={profilesState.profiles.filter(p => (p.target || "guest_menu") === "guest_menu")}
+            liveLayoutId={profilesState.assignments?.longMenuProfileId || null}
             onSave={async (row) => { const r = await upsertReservation(row); if (r?.ok) setAddResOpen(false); return r; }}
             onCancel={() => setAddResOpen(false)}
           />

@@ -16,7 +16,7 @@ const FONT = tokens.font;
 // "Kitchen Profile" slot whose target was never recognized; both have been
 // removed to stop offering dropdowns that don't drive anything.
 const ASSIGNMENT_ROWS = [
-  { slot: "longMenuProfileId", label: "Active Menu Profile", target: "guest_menu" },
+  { slot: "longMenuProfileId", label: "Live menu — every booking gets this unless it picks another layout", target: "guest_menu" },
 ];
 
 const btn = (active = false) => ({
@@ -109,6 +109,9 @@ export default function MenuLayoutPanel({
   onSelectLayoutProfile,
   onCreateLayoutProfile,
   onRenameLayoutProfile,
+  onSetLayoutProfileBadge,
+  // { [profileId]: { count, guests, dates } } — upcoming bookings per layout
+  layoutBookings = {},
   onDuplicateLayoutProfile,
   onDuplicateAndAssignProfile,
   onDeleteLayoutProfile,
@@ -127,6 +130,11 @@ export default function MenuLayoutPanel({
   );
 
   const guestProfiles = layoutProfiles.filter(p => (p.target || "guest_menu") === "guest_menu");
+  const liveId = layoutAssignments?.longMenuProfileId || null;
+  const liveProfiles = guestProfiles.filter(p => p.id === liveId);
+  const specialProfiles = guestProfiles.filter(p => p.id !== liveId);
+  const activeIsLive = !!active && active.id === liveId;
+  const activeBookings = active ? layoutBookings?.[active.id] : null;
 
   const activeSlots = useMemo(() => {
     if (!active) return [];
@@ -144,9 +152,19 @@ export default function MenuLayoutPanel({
 
   const handleCreate = () => {
     onCreateLayoutProfile?.({
-      name: "New Menu Layout",
+      name: active ? `${active.name} (copy)` : "New Menu Layout",
       target: "guest_menu",
       cloneFromActive: !!active,
+    });
+  };
+
+  // A layout built from scratch: header, drink scaffolding, EMPTY course slots
+  // and footer — fill each slot with any dish (ours or a guest chef's).
+  const handleCreateBlank = () => {
+    onCreateLayoutProfile?.({
+      name: "New Event Menu",
+      target: "guest_menu",
+      blank: true,
     });
   };
 
@@ -167,13 +185,17 @@ export default function MenuLayoutPanel({
       // eslint-disable-next-line no-alert
       alert(
         isProfileAssigned(active.id, layoutAssignments)
-          ? "Make a different profile the Active Menu Profile first — this one is currently live."
+          ? "Make a different layout live first — this one is currently the live menu."
           : "At least one profile must remain."
       );
       return;
     }
+    const booked = activeBookings?.count || 0;
+    const warning = booked > 0
+      ? `\n\n${booked} upcoming booking${booked === 1 ? " is" : "s are"} on this layout — ${booked === 1 ? "it" : "they"} will fall back to the live menu.`
+      : "";
     // eslint-disable-next-line no-alert
-    if (!confirm(`Delete profile "${active.name}"?`)) return;
+    if (!confirm(`Delete layout "${active.name}"?${warning}`)) return;
     onDeleteLayoutProfile?.(active.id);
   };
 
@@ -190,35 +212,59 @@ export default function MenuLayoutPanel({
         }}>
           <div>
             <div style={{ fontFamily: FONT, fontSize: 9, letterSpacing: "0.16em", color: tokens.charcoal.default, textTransform: "uppercase", fontWeight: 700 }}>
-              ▨ Menu Layout Profiles
+              ▨ Menu Layouts
             </div>
-            <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], marginTop: 4, lineHeight: 1.5 }}>
-              Each profile holds its own Long and Short version — switch between them with the
-              LONG / SHORT toggle in the editor below. Pick which profile is currently live
-              (printed for guests) here. Course content stays in Courses; profiles only control
-              layout, structure, and order. Edits auto-save.
+            <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], marginTop: 4, lineHeight: 1.5, maxWidth: 640 }}>
+              The <b>live</b> layout is the regular menu — every booking gets it. Every other layout
+              is a <b>special menu</b> (a four-hands dinner, an event): pick it on a reservation under
+              “Menu layout” and that party’s printed menu, kitchen ticket and course flow all follow it.
+              To build one, add any guest chef dishes in Dishes first, then “+ Empty layout” and fill
+              each course slot with ours or theirs. Each layout has its own Long and Short version
+              (LONG / SHORT toggle below). Edits auto-save.
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <button onClick={handleCreate} style={btn(false)}>+ New Profile</button>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <button onClick={handleCreateBlank} style={btn(false)}>+ Empty layout</button>
+            <button onClick={handleCreate} style={btn(false)} disabled={!active}
+              title={active ? `Start from a copy of ${active.name}` : undefined}>+ Copy of current</button>
           </div>
         </div>
 
-        {/* Profile selector */}
+        {/* Profile selector — live first, then the special layouts */}
         <div style={{ marginBottom: 14 }}>
-          <div style={lbl}>Menu Layout Profiles ({guestProfiles.length})</div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {guestProfiles.length === 0 && (
-              <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], padding: 6 }}>None yet.</div>
-            )}
-            {guestProfiles.map(p => (
-              <ProfileButton
-                key={p.id} profile={p} active={active?.id === p.id}
-                assignments={layoutAssignments}
-                onClick={() => onSelectLayoutProfile?.(p.id)}
-              />
-            ))}
-          </div>
+          {guestProfiles.length === 0 && (
+            <div style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], padding: 6 }}>None yet.</div>
+          )}
+          {liveProfiles.length > 0 && (
+            <>
+              <div style={lbl}>Live menu</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 10 }}>
+                {liveProfiles.map(p => (
+                  <ProfileButton
+                    key={p.id} profile={p} active={active?.id === p.id}
+                    assignments={layoutAssignments}
+                    onClick={() => onSelectLayoutProfile?.(p.id)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+          {specialProfiles.length > 0 && (
+            <>
+              <div style={lbl}>Special layouts — pick on a reservation ({specialProfiles.length})</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {specialProfiles.map(p => (
+                  <ProfileButton
+                    key={p.id} profile={p} active={active?.id === p.id}
+                    assignments={layoutAssignments}
+                    bookings={layoutBookings?.[p.id]}
+                    special
+                    onClick={() => onSelectLayoutProfile?.(p.id)}
+                  />
+                ))}
+              </div>
+            </>
+          )}
         </div>
 
         {/* Active profile actions */}
@@ -248,8 +294,8 @@ export default function MenuLayoutPanel({
                   disabled={!canDeleteProfile(active.id, layoutProfiles, layoutAssignments)}
                   title={
                     isProfileAssigned(active.id, layoutAssignments)
-                      ? "Make a different profile the Active Menu Profile before deleting"
-                      : "Delete this profile"
+                      ? "Make a different layout live before deleting this one"
+                      : "Delete this layout"
                   }
                   style={{
                     ...btn(false),
@@ -259,6 +305,32 @@ export default function MenuLayoutPanel({
                   }}
                 >Delete</button>
               </>
+            )}
+          </div>
+        )}
+
+        {/* Kitchen badge — only meaningful for a special layout */}
+        {active && !activeIsLive && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
+            padding: 10, background: tokens.ink.bg, border: `1px solid ${tokens.ink[5]}`, marginBottom: 14,
+          }}>
+            <label style={{ ...lbl, marginBottom: 0 }} htmlFor="layout-badge">Kitchen badge</label>
+            <BadgeInput
+              key={active.id}
+              id="layout-badge"
+              value={active.badge || ""}
+              placeholder={active.name}
+              onCommit={(v) => onSetLayoutProfileBadge?.(active.id, v)}
+            />
+            <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[3], flex: "1 1 220px" }}>
+              Short tag on the kitchen ticket and reservation list for parties on this layout
+              (e.g. “4 HANDS”). Empty uses the layout name.
+            </span>
+            {activeBookings?.count > 0 && (
+              <span style={{ fontFamily: FONT, fontSize: 10, color: tokens.ink[1], width: "100%" }}>
+                Booked: {bookingSummary(activeBookings)}
+              </span>
             )}
           </div>
         )}
@@ -330,14 +402,43 @@ export default function MenuLayoutPanel({
           fontFamily: FONT, fontSize: 11, color: tokens.ink[3], padding: 24,
           border: `1px dashed ${tokens.ink[4]}`, textAlign: "center",
         }}>
-          No layout profile yet. Click "+ New Profile" above to create one.
+          No layout yet. Click "+ Empty layout" above to create one.
         </div>
       )}
     </div>
   );
 }
 
-function ProfileButton({ profile, active, assignments, onClick }) {
+const fmtDay = (iso) => {
+  const d = new Date(`${iso}T00:00:00`);
+  return Number.isNaN(d.getTime()) ? iso : `${d.getDate()}.${d.getMonth() + 1}.`;
+};
+
+function bookingSummary(b) {
+  if (!b?.count) return "";
+  const dates = (b.dates || []).slice(0, 3).map(fmtDay).join(", ") + ((b.dates || []).length > 3 ? "…" : "");
+  return `${b.count} booking${b.count === 1 ? "" : "s"} · ${b.guests} guests · ${dates}`;
+}
+
+// Commits on blur / Enter so every keystroke isn't a synced write.
+function BadgeInput({ id, value, placeholder, onCommit }) {
+  const [draft, setDraft] = useState(value);
+  const commit = () => { if (draft.trim() !== value) onCommit(draft.trim()); };
+  return (
+    <input
+      id={id}
+      value={draft}
+      maxLength={24}
+      placeholder={placeholder}
+      onChange={e => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
+      style={{ ...inp, width: 160, textTransform: "uppercase" }}
+    />
+  );
+}
+
+function ProfileButton({ profile, active, assignments, onClick, bookings = null, special = false }) {
   const slots = Object.entries(assignments || {})
     .filter(([, id]) => id === profile.id)
     .map(([slot]) => slot);
@@ -355,8 +456,19 @@ function ProfileButton({ profile, active, assignments, onClick }) {
       }}
     >
       <div style={{ fontWeight: 600, marginBottom: 2 }}>{profile.name}</div>
-      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
         {slots.map(slot => <Badge key={slot} text={SLOT_BADGE[slot] || slot} />)}
+        {special && (
+          <span style={{
+            fontSize: 8, letterSpacing: "0.12em", padding: "1px 5px", textTransform: "uppercase",
+            background: tokens.charcoal.default, color: tokens.neutral[0], fontWeight: 700,
+          }}>{String(profile.badge || profile.name || "").trim()}</span>
+        )}
+        {special && (
+          <span style={{ fontSize: 9, color: tokens.ink[3] }}>
+            {bookings?.count ? bookingSummary(bookings) : "No upcoming bookings"}
+          </span>
+        )}
       </div>
     </button>
   );

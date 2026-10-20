@@ -7,6 +7,7 @@ import { groupRestrictionsByGuest } from "../../utils/restrictionGroups.js";
 import { fmt, parseHHMM } from "../../utils/tableHelpers.js";
 import { tokens } from "../../styles/tokens.js";
 import { getVisibleCoursesForTable, getCourseProgressState } from "../../utils/courseProgress.js";
+import { resolveTableTemplate, tableLayoutOverride, profileBadge } from "../../utils/menuLayoutProfiles.js";
 import { estimateNextFire, fireGapsForTable } from "../../utils/fireCadence.js";
 import { gapsForMenuType } from "../../utils/archiveInsights.js";
 import { extraPairingLabel, extraPairingForSeat } from "../../constants/pairings.js";
@@ -116,15 +117,19 @@ const FONT = tokens.font;
 // use site): an inline {} here re-armed an infinite render loop every render.
 const NO_COURSE_NOTES = {};
 
-// Resolve course list template from the guest menu profile — same logic as the
-// print generator — so both live board and ticket preview show the same courses.
-function resolveGuestTemplate(table, profiles, assignments) {
-  const guestId = assignments?.longMenuProfileId;
-  if (!guestId || !Array.isArray(profiles)) return null;
-  const p = profiles.find(pr => pr.id === guestId);
-  if (!p) return null;
-  const isShort = String(table?.menuType || "").toLowerCase() === "short";
-  return isShort ? (p.shortMenuTemplate || p.menuTemplate) : p.menuTemplate;
+// The party's layout badge ("4 HANDS") — shown only when the table is booked
+// on a layout other than the live menu, so the pass knows at a glance that
+// this ticket runs a different course list.
+export function LayoutBadge({ table, profiles, assignments, pad = "1px 5px", fontSize = "8px" }) {
+  const profile = tableLayoutOverride(table, profiles, assignments);
+  if (!profile) return null;
+  return (
+    <span title={`Menu layout: ${profile.name}`} style={{
+      fontFamily: FONT, fontSize, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase",
+      padding: pad, borderRadius: 0, flexShrink: 0, whiteSpace: "nowrap",
+      background: tokens.charcoal.default, color: tokens.neutral[0],
+    }}>{profileBadge(profile)}</span>
+  );
 }
 
 export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragListeners, profiles = [], assignments = {}, kitchenTemplate = null, editable = false, quickNotes = {}, compact = false, quickAccess = false, heightCap = null, roomGaps = [], historyGaps = [] }) {
@@ -489,7 +494,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
   // sessions stay stable.
   const courseOptions = kitchenTemplate
     ? { kitchenTemplate }
-    : { kitchenTemplate: resolveGuestTemplate(table, profiles, assignments) };
+    : { kitchenTemplate: resolveTableTemplate(table, profiles, assignments) };
   const visibleCoursesForTable = getVisibleCoursesForTable(table, menuCourses || [], courseOptions);
   // Edit mode shows EVERY course, including optional dishes nobody has
   // ordered yet (cheese, an extra course, the cake). A restriction or a note
@@ -650,6 +655,7 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
             {/* No guest name on kitchen tickets (GDPR, per Djan): the pass
                 screen faces the dining room. The name stays on reservations
                 and the service board, where only staff read it. */}
+            <LayoutBadge table={table} profiles={profiles} assignments={assignments} pad={dz.badgePad} />
             {table.menuType && <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 600, letterSpacing: "0.08em", padding: dz.badgePad, borderRadius: 0, background: tokens.ink[5], color: tokens.ink[3], flexShrink: 0 }}>{isShort ? "SHORT" : "LONG"}</span>}
             <span style={{ fontFamily: FONT, fontSize: "8px", fontWeight: 600, letterSpacing: "0.08em", padding: dz.badgePad, borderRadius: 0, background: table.lang === "si" ? tokens.red.bg : tokens.green.bg, color: table.lang === "si" ? tokens.red.text : tokens.green.text, border: "1px solid", borderColor: table.lang === "si" ? tokens.red.border : tokens.green.border, flexShrink: 0 }}>{table.lang === "si" ? "SI" : "EN"}</span>
             {/* Pace badge — on compact boards pace is SET from the quick-access
@@ -1516,7 +1522,7 @@ export function SortableTicket({ table, menuCourses, upd, isDragging, anyDraggin
 // drag handle; the sensors' hold-delay keeps scrolling working. A TAP (same
 // gesture split as the ticket header: short, no movement) opens the
 // seat-only sheet — the kitchen can seat an arrived party itself.
-export function SortableBanner({ table, isDragging, anyDragging, compact = false, onTap = null }) {
+export function SortableBanner({ table, isDragging, anyDragging, compact = false, onTap = null, profiles = [], assignments = {} }) {
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({
     id: table.id,
   });
@@ -1555,7 +1561,7 @@ export function SortableBanner({ table, isDragging, anyDragging, compact = false
       }}
     >
       <div style={{ visibility: isDragging ? "hidden" : undefined, minHeight: isDragging ? 48 : undefined }}>
-        <UpcomingBanner table={table} compact={compact} />
+        <UpcomingBanner table={table} compact={compact} profiles={profiles} assignments={assignments} />
       </div>
     </div>
   );
@@ -1777,7 +1783,7 @@ export function KitchenAlertOverlay({ alerts, onConfirm }) {
 // table, pax, restrictions…), no courses. It sits in the grid slot the full
 // ticket will occupy once the table is seated, so it stays small (dashed
 // border = "not in yet") and simply expands in place on the seat.
-export function UpcomingBanner({ table: t, compact = false }) {
+export function UpcomingBanner({ table: t, compact = false, profiles = [], assignments = {} }) {
   const label = t.displayGroupLabel || t.displayLabel || (t.tableGroup?.length > 1 ? `T${t.tableGroup.join("-")}` : `T${t.id}`);
   const pax = t.guests || (t.seats || []).length || 0;
   const isShort = String(t.menuType || "").trim().toLowerCase() === "short";
@@ -1796,6 +1802,7 @@ export function UpcomingBanner({ table: t, compact = false }) {
         <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: tokens.ink[0], flexShrink: 0 }}>{pax} <span style={{ fontWeight: 400, fontSize: 9, letterSpacing: "0.06em" }}>PAX</span></span>
       </div>
       <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0, flexWrap: "wrap" }}>
+        <LayoutBadge table={t} profiles={profiles} assignments={assignments} pad="0 3px" fontSize={8} />
         {t.menuType && <span style={{ fontFamily: FONT, fontSize: 8, fontWeight: 600, letterSpacing: "0.08em", padding: "0 3px", background: tokens.ink[5], color: tokens.ink[3], flexShrink: 0 }}>{isShort ? "SHORT" : "LONG"}</span>}
         {t.guestType === "hotel" && <span style={{ fontFamily: FONT, fontSize: 8, color: tokens.ink[3], letterSpacing: "0.06em", flexShrink: 0 }}>{rooms.length ? `#${rooms.join(", ")}` : "Hotel"}</span>}
         {t.birthday && <span style={{ fontSize: 10, flexShrink: 0 }}>🎂</span>}
@@ -2067,6 +2074,8 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
                 anyDragging={activeId !== null}
                 compact={compact}
                 onTap={onSeat && upd ? setSeatSheetId : null}
+                profiles={profiles}
+                assignments={assignments}
               />
             ) : (
               <SortableTicket
@@ -2097,7 +2106,7 @@ export default function KitchenBoard({ tables, menuCourses, upd, updMany, profil
             opacity: 0.97,
           }}>
             {upcomingIds.has(activeTable.id) ? (
-              <UpcomingBanner table={activeTable} compact={compact} />
+              <UpcomingBanner table={activeTable} compact={compact} profiles={profiles} assignments={assignments} />
             ) : (
               <KitchenTicket
                 table={activeTable}

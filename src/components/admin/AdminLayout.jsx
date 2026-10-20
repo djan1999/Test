@@ -90,6 +90,8 @@ export default function AdminLayout({
   onCreateLayoutProfile,
   onDeleteLayoutProfile,
   onRenameLayoutProfile,
+  onSetLayoutProfileBadge,
+  layoutBookings = {},
   onDuplicateLayoutProfile,
   onDuplicateAndAssignProfile,
   layoutAssignments = {},
@@ -398,6 +400,8 @@ export default function AdminLayout({
                 onSelectLayoutProfile={onSelectLayoutProfile}
                 onCreateLayoutProfile={onCreateLayoutProfile}
                 onRenameLayoutProfile={onRenameLayoutProfile}
+                onSetLayoutProfileBadge={onSetLayoutProfileBadge}
+                layoutBookings={layoutBookings}
                 onDuplicateLayoutProfile={onDuplicateLayoutProfile}
                 onDuplicateAndAssignProfile={onDuplicateAndAssignProfile}
                 onDeleteLayoutProfile={onDeleteLayoutProfile}

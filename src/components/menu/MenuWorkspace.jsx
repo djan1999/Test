@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { tokens } from "../../styles/tokens.js";
 import { useIsMobile, BP } from "../../hooks/useIsMobile.js";
 import { generateMenuHTML, DEFAULT_MENU_RULES, normalizeMenuRules } from "../../utils/menuGenerator.js";
-import { getAssignedGuestProfile } from "../../utils/menuLayoutProfiles.js";
+import { resolveTableProfile, tableLayoutOverride, profileBadge } from "../../utils/menuLayoutProfiles.js";
 import { writeTeamNames, readTeamNames, writeMenuTitle, readMenuTitle, writeThankYouNote, readThankYouNote } from "../../utils/storage.js";
 import { optionalExtrasFromCourses, optionalPairingsFromCourses, resolveSeatRestrictionKeys } from "../../utils/menuUtils.js";
 import { supabase } from "../../lib/supabaseClient.js";
@@ -114,9 +114,13 @@ const langTag = (lang) => (lang === "si" ? "SL" : "EN");
 
 const statusOf = (t) => (t.active || t.arrivedAt ? "SEATED" : "RESERVED");
 
-/** "CV_02 · LONG · SL · SEATED" */
-const metaLineOf = (t) => [
+/** "CV_02 · LONG · SL · SEATED" — "CV_02 · 4 HANDS · LONG · …" on a special layout */
+const metaLineOf = (t, profiles, assignments) => [
   `CV_${pad2((t.seats || []).length)}`,
+  ...(() => {
+    const layout = tableLayoutOverride(t, profiles, assignments);
+    return layout ? [profileBadge(layout).toUpperCase()] : [];
+  })(),
   menuTypeOf(t).toUpperCase(),
   langTag(langOf(t)),
   statusOf(t),
@@ -273,9 +277,11 @@ export default function MenuWorkspace({
   };
 
   // ── Layout profile → template + styles (the app's ONE engine setup) ────────
+  // The party's own layout when it is booked on one (a four-hands dinner, an
+  // event menu), else the live profile.
   const assignedProfile = useMemo(
-    () => getAssignedGuestProfile("", profiles, assignments),
-    [profiles, assignments],
+    () => resolveTableProfile(table, profiles, assignments),
+    [table?.menuProfileId, profiles, assignments], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const isShortMenu = menuType === "short";
   const menuTemplate = isShortMenu
@@ -553,7 +559,7 @@ export default function MenuWorkspace({
                 <span style={{
                   display: "block", marginTop: 3, fontFamily: FONT, fontSize: "8px",
                   letterSpacing: "0.1em", textTransform: "uppercase", color: ink[3],
-                }}>{metaLineOf(t)}</span>
+                }}>{metaLineOf(t, profiles, assignments)}</span>
               </span>
               {restrCount > 0 && (
                 <span style={{

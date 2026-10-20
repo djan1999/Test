@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { generateWeeklyReservationsHTML, generateWeeklyAllergyHTML, generateKitchenTicketsHTML } from "../../utils/weeklyPrintGenerator.js";
 import { readWeeklySheetEdits, writeWeeklySheetEdits } from "../../utils/storage.js";
-import { deriveCourseKeysFromTemplate } from "../../utils/menuLayoutProfiles.js";
+import { deriveCourseKeysFromTemplate, resolveTableTemplate, specialOnlyCourseKeys, tableLayoutOverride, profileBadge } from "../../utils/menuLayoutProfiles.js";
 import { blankTable, makeSeats } from "../../utils/tableHelpers.js";
 import { getCourseMod, applyModOverride } from "../../utils/menuUtils.js";
 import { groupRestrictionsByGuest } from "../../utils/restrictionGroups.js";
@@ -44,6 +44,42 @@ function resolveShortCourseKeys(profiles, assignments) {
   }
   return null;
 }
+// Which menu a reservation is on, for the allergy sheet: the label printed
+// under its name, and — for a short menu or a special layout (four-hands
+// dinner) — the course keys it is served, so every other course row greys
+// out in its column. Long reservations on the live menu keep keys null: their
+// column shows every row, as it always has.
+function reservationLayout(r, profiles, assignments) {
+  const d = r?.data || {};
+  const override = tableLayoutOverride(d, profiles, assignments);
+  const isShort = String(d.menuType || "").trim().toLowerCase() === "short";
+  let keys = null;
+  if (override || isShort) {
+    const k = deriveCourseKeysFromTemplate(resolveTableTemplate(d, profiles, assignments));
+    keys = k.length ? new Set(k) : null;
+  }
+  const menuLabel = override
+    ? `${profileBadge(override).toUpperCase()}${isShort ? " · SHORT" : ""}`
+    : (isShort ? "SHORT MENU" : "LONG MENU");
+  return { keys, menuLabel, override };
+}
+
+// Course rows for the allergy sheet: a dish that only exists on a special
+// layout (a guest chef's course) is listed only when a reservation in view is
+// actually booked on a layout serving it.
+function allergyCoursesFor(menuCourses, weekResv, profiles, assignments) {
+  const special = specialOnlyCourseKeys(profiles, assignments);
+  const served = new Set();
+  (weekResv || []).forEach(r => {
+    const L = reservationLayout(r, profiles, assignments);
+    if (L.override && L.keys) L.keys.forEach(k => served.add(k));
+  });
+  return (menuCourses || [])
+    .filter(c => !c.is_snack)
+    .filter(c => !special.has(c.course_key) || served.has(c.course_key))
+    .sort((a, b) => (a.position ?? 999) - (b.position ?? 999));
+}
+
 const baseInp = { ...baseInput };
 const fieldLabel = { ...fieldLabelMixin };
 const circBtnSm = { ...circleButton };
@@ -177,7 +213,7 @@ function allergyBaseCell(course, resv) {
 
 const ALLERGY_ROBOTO = `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">`;
 
-function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdits, restrictionDefs, shortCourseKeySet = null) {
+function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdits, restrictionDefs, shortCourseKeySet = null, layoutFor = () => ({ keys: null, menuLabel: "" })) {
   const resvCount = weekResv.length;
   if (!resvCount) return `<!DOCTYPE html><html><body style="font-family:monospace;padding:40pt;text-align:center;">No restrictions or edits this week</body></html>`;
   const escH = s => String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
@@ -201,7 +237,7 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
   body += `</tr><tr><td style="padding-left:6pt;font-weight:700;">Allergies/Restrictions</td>`;
   weekResv.forEach(r => {
     const d = r.data || {};
-    const mt = d.menuType === "short" ? "SHORT MENU" : "LONG MENU";
+    const mt = layoutFor(r).menuLabel || (d.menuType === "short" ? "SHORT MENU" : "LONG MENU");
     const rc = {};
     const rd = {};
     (d.restrictions || []).forEach(rs => {
@@ -227,9 +263,10 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
     const baseSub = course.menu?.sub || "";
     body += `<tr${isOpt ? ` class="opt-row"` : ""}><td style="padding-left:6pt;"><span class="course-name">${escH(baseName)}${isOpt ? ` <span style="font-weight:400;font-size:smaller;color:#999;">(opt)</span>` : ""}${courseOnShort ? ` <span style="font-weight:400;font-size:smaller;color:#3d6b4f;">[S]</span>` : ""}</span>${baseSub ? `<br><span class="course-sub">${escH(baseSub)}</span>` : ""}</td>`;
     weekResv.forEach(r => {
-      const isShortResv = String(r.data?.menuType || "").trim().toLowerCase() === "short";
-      // Grey out courses not on the short menu for short-menu reservations
-      if (isShortResv && !courseOnShort) {
+      // Grey out courses this reservation isn't served — the short menu's
+      // missing courses, or everything outside its special layout.
+      const resvKeys = layoutFor(r).keys;
+      if (resvKeys && !resvKeys.has(key)) {
         body += `<td class="resv-cell" style="background:#f0f0f0;color:#bbb;text-align:center;font-size:7pt;">—</td>`;
         return;
       }
@@ -247,6 +284,10 @@ function generateAllergyHTMLWithEdits(weekResv, allergyTableCourses, allergyEdit
 export default function ReservationManager({ reservations, menuCourses, tables, onUpsert, onDelete, onUpdReservation, onSwapReservations, onExit, serviceDate, activeServiceSession = "dinner", onSetServiceDate, onOpenArchive, courseQuickNotes = {}, profiles = [], assignments = {}, resolveTableFlag = null, hotelGuestsEnabled = false, roomOptions = [] }) {
   const tableLabel = (tableId) => (tables || []).find((table) => Number(table.id) === Number(tableId))?.displayLabel
     || `T${String(tableId).padStart(2, "0")}`;
+  const menuLayouts = useMemo(
+    () => (Array.isArray(profiles) ? profiles : []).filter(p => (p.target || "guest_menu") === "guest_menu"),
+    [profiles],
+  );
   const [weekOffset,  setWeekOffset]  = useState(0);
   const [search, setSearch] = useState("");
   const searchResults = useMemo(() => {
@@ -369,14 +410,11 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
       id: ticketResv.table_id,
       seats: makeSeats(ticketResv.data?.guests || 2, ticketResv.data?.seats || []),
     } : null;
-    // Resolve course visibility from the guest menu profile (same source as print tickets),
-    // not the kitchen profile — so the preview matches what gets printed.
-    const isShortTicket = String(ticketVirtualTable?.menuType || "").toLowerCase() === "short";
-    const ticketGuestProfile = profiles.find(p => p.id === assignments?.longMenuProfileId);
-    const ticketGuestTemplate = ticketGuestProfile
-      ? (isShortTicket
-          ? (ticketGuestProfile.shortMenuTemplate || ticketGuestProfile.menuTemplate)
-          : ticketGuestProfile.menuTemplate)
+    // Resolve course visibility from the party's guest menu layout (its own
+    // layout when booked on one, else the live one) — the same source as the
+    // printed tickets and the live kitchen board.
+    const ticketGuestTemplate = ticketVirtualTable
+      ? resolveTableTemplate(ticketVirtualTable, profiles, assignments)
       : null;
 
     const updForTicket = (tid, field, value) => {
@@ -457,6 +495,8 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 excludeId={null}
                 hotelGuestsEnabled={hotelGuestsEnabled}
                 roomOptions={roomOptions}
+                menuLayouts={menuLayouts}
+                liveLayoutId={assignments?.longMenuProfileId || null}
                 onSave={async (row) => { const r = await onUpsert(row); if (r?.ok) { setEditingId(null); setDraftFromReservation(null); } return r; }}
                 onCancel={() => { setEditingId(null); setDraftFromReservation(null); }}
                 onResolveConflict={async (resvId, newTableId) => {
@@ -519,6 +559,12 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                       {d.resTime && <span>{d.resTime}</span>}
                       <span>{d.guests || 2} guests</span>
                       {d.service_session && <span style={{ color: d.service_session === "lunch" ? tokens.ink[2] : tokens.ink[3], textTransform: "uppercase", letterSpacing: "0.10em", fontSize: "8px", fontWeight: 600 }}>{d.service_session}</span>}
+                      {(() => {
+                        const layout = tableLayoutOverride(d, profiles, assignments);
+                        return layout ? (
+                          <span title={`Menu layout: ${layout.name}`} style={{ background: tokens.charcoal.default, color: tokens.neutral[0], textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, padding: "1px 5px" }}>{profileBadge(layout)}</span>
+                        ) : null;
+                      })()}
                       {d.menuType && <span style={{ color: tokens.ink[2], textTransform: "uppercase", letterSpacing: "0.08em" }}>{d.menuType}</span>}
                       {d.lang === "si" && <span style={{ color: tokens.ink[3] }}>SLO</span>}
                       {d.birthday && <span>🎂{d.cakeNote ? ` ${d.cakeNote}` : ""}</span>}
@@ -576,6 +622,8 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                       excludeId={r.id}
                       hotelGuestsEnabled={hotelGuestsEnabled}
                       roomOptions={roomOptions}
+                      menuLayouts={menuLayouts}
+                      liveLayoutId={assignments?.longMenuProfileId || null}
                       onSave={async (row) => { const r = await onUpsert(row); if (r?.ok) { setEditingId(null); setDraftFromReservation(null); } return r; }}
                       onCancel={() => { setEditingId(null); setDraftFromReservation(null); }}
                       onResolveConflict={async (resvId, newTableId) => {
@@ -597,7 +645,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                 {showTicket && ticketVirtualTable && (
                   <CenteredModal onClose={() => setTicketId(null)} label={`[TICKET PREVIEW · ${tLabel}]`}>
                     <div style={{ border: `1px solid ${tokens.ink[4]}`, borderRadius: 0, overflow: "hidden", background: tokens.neutral[0] }}>
-                      <KitchenTicket table={ticketVirtualTable} menuCourses={menuCourses} upd={updForTicket} editable quickNotes={courseQuickNotes} kitchenTemplate={ticketGuestTemplate} />
+                      <KitchenTicket table={ticketVirtualTable} menuCourses={menuCourses} upd={updForTicket} editable quickNotes={courseQuickNotes} kitchenTemplate={ticketGuestTemplate} profiles={profiles} assignments={assignments} />
                     </div>
                     <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 10 }}>
                       <button onClick={() => printTickets([r])}
@@ -688,8 +736,9 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
           : null;
         const shortCourseKeys = !isResv ? resolveShortCourseKeys(profiles, assignments) : null;
         const shortCourseKeySet = shortCourseKeys ? new Set(shortCourseKeys) : null;
+        const layoutFor = (r) => reservationLayout(r, profiles, assignments);
         const allergyTableCourses = !isResv
-          ? menuCourses.filter(c => !c.is_snack).sort((a, b) => (a.position ?? 999) - (b.position ?? 999))
+          ? allergyCoursesFor(menuCourses, allergyWeekResv, profiles, assignments)
           : null;
 
         const COL_WIDTHS = ["11%","9%","9%","16%","8%","22%","25%"];
@@ -723,7 +772,7 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
         const onPrint = () => {
           const printHtml = isResv
             ? weeklyRowsToHTML(weeklyData.rows, weeklyEdits, weeklyData.totalGuests, weeklyData.dateRange)
-            : generateAllergyHTMLWithEdits(allergyWeekResv, allergyTableCourses, allergyEdits, RESTRICTIONS, shortCourseKeySet);
+            : generateAllergyHTMLWithEdits(allergyWeekResv, allergyTableCourses, allergyEdits, RESTRICTIONS, shortCourseKeySet, layoutFor);
           const w = window.open("", "_blank", "width=900,height=700");
           if (!w) { alert("Pop-up blocked"); return; }
           w.document.write(printHtml);
@@ -913,8 +962,8 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                       <tr>
                         <td style={{ ...cColSt, fontWeight: 700 }}>Allergies/Restrictions</td>
                         {allergyWeekResv.map(r => {
+                          const mt = layoutFor(r).menuLabel;
                           const d = r.data || {};
-                          const mt = d.menuType === "short" ? "SHORT MENU" : "LONG MENU";
                           const rc = {};
                           const rd = {};
                           (d.restrictions || []).forEach(rs => {
@@ -951,8 +1000,8 @@ export default function ReservationManager({ reservations, menuCourses, tables, 
                               {baseSub && <><br /><span style={{ fontWeight: 400, fontSize: "6.5pt", color: "#555" }}>{baseSub}</span></>}
                             </td>
                             {allergyWeekResv.map(r => {
-                              const isShortResv = String(r.data?.menuType || "").trim().toLowerCase() === "short";
-                              if (isShortResv && !courseOnShort) {
+                              const resvKeys = layoutFor(r).keys;
+                              if (resvKeys && !resvKeys.has(key)) {
                                 return (
                                   <td key={r.id} style={{ ...rColSt, background: "#f0f0f0", color: "#bbb", textAlign: "center", fontSize: "7pt" }}>—</td>
                                 );

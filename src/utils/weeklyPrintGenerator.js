@@ -4,7 +4,7 @@
  */
 import { getCourseMod, applyModOverride } from "./menuUtils.js";
 import { groupRestrictionsByGuest } from "./restrictionGroups.js";
-import { deriveCourseKeysFromTemplate } from "./menuLayoutProfiles.js";
+import { deriveCourseKeysFromTemplate, resolveTableTemplate, tableLayoutOverride, profileBadge, specialOnlyCourseKeys } from "./menuLayoutProfiles.js";
 
 const esc = s => String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -107,6 +107,15 @@ function resolveLongCourseKeys(profiles, assignments) {
   if (!p?.menuTemplate) return null;
   const keys = deriveCourseKeysFromTemplate(p.menuTemplate);
   return keys && keys.length > 0 ? keys : null;
+}
+
+// A reservation booked on a special layout (four-hands dinner, event menu):
+// that profile and the ordered course keys it serves. null on the live menu.
+function reservationOverride(d, profiles, assignments) {
+  const profile = tableLayoutOverride(d, profiles, assignments);
+  if (!profile) return null;
+  const keys = deriveCourseKeysFromTemplate(resolveTableTemplate(d, profiles, assignments));
+  return { profile, keys: keys.length ? keys : null, keySet: keys.length ? new Set(keys) : null };
 }
 
 // ── PDF 1: Weekly Reservations Sheet ──────────────────────────────────────────────────────
@@ -259,8 +268,17 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
   // Courses: all non-snack courses, sorted by long template order (profile canonical order).
   // Courses not in the long template appear appended by position. Courses only in shortMenuTemplate
   // are included (they may appear for short reservations) but sorted last if not in long template.
+  // A dish that exists only on a special layout (a guest chef's course) is
+  // listed only when a reservation this week is booked on a layout serving it.
+  const specialOnly = specialOnlyCourseKeys(profiles, assignments);
+  const servedSpecial = new Set();
+  weekResv.forEach(r => {
+    const o = reservationOverride(r.data || {}, profiles, assignments);
+    if (o?.keys) o.keys.forEach(k => servedSpecial.add(k));
+  });
   const allCoursesSorted = menuCourses
     .filter(c => !c.is_snack)
+    .filter(c => !specialOnly.has(c.course_key) || servedSpecial.has(c.course_key))
     .sort((a, b) => {
       const refKeys = longCourseKeys || shortCourseKeys;
       if (refKeys) {
@@ -310,7 +328,10 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
   body += `<td style="padding-left:6pt;font-weight:700;">Allergies/Restrictions</td>`;
   weekResv.forEach(r => {
     const d = r.data || {};
-    const mt = d.menuType === "short" ? "SHORT MENU" : "LONG MENU";
+    const o = reservationOverride(d, profiles, assignments);
+    const mt = o
+      ? `${profileBadge(o.profile).toUpperCase()}${d.menuType === "short" ? " · SHORT" : ""}`
+      : (d.menuType === "short" ? "SHORT MENU" : "LONG MENU");
     const restrCounts = {};
     const restrDetails = {};
     (d.restrictions || []).forEach(rs => {
@@ -345,9 +366,13 @@ export function generateWeeklyAllergyHTML(reservations, menuCourses, weekDays, r
       const d = r.data || {};
       const isShortResv = String(d.menuType || "").trim().toLowerCase() === "short";
       const courseOnShort = shortCourseKeySet ? shortCourseKeySet.has(key) : true;
+      const override = reservationOverride(d, profiles, assignments);
+      const offMenu = override?.keySet
+        ? !override.keySet.has(key)
+        : (isShortResv && !courseOnShort);
 
       // Grey out courses not on this reservation's menu
-      if (isShortResv && !courseOnShort) {
+      if (offMenu) {
         body += `<td class="resv-cell" style="background:#f0f0f0;color:#bbb;text-align:center;font-size:7pt;">—</td>`;
         return;
       }
@@ -457,9 +482,11 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
 
       const allCourses = menuCourses || [];
 
-      // Courses for this ticket — visibility driven entirely by the menu layout template.
-      const courseKeys = isShort ? shortCourseKeys : longCourseKeys;
-      const courseKeySet = isShort ? shortCourseKeySet : longCourseKeySet;
+      // Courses for this ticket — visibility driven entirely by the menu layout
+      // template: the party's own layout when booked on one, else the live one.
+      const override = reservationOverride(d, profiles, assignments);
+      const courseKeys = override?.keys || (isShort ? shortCourseKeys : longCourseKeys);
+      const courseKeySet = override?.keySet || (isShort ? shortCourseKeySet : longCourseKeySet);
       const courses = allCourses
         .filter(c => {
           if (c.is_snack) return false;
@@ -520,8 +547,11 @@ export function generateKitchenTicketsHTML(reservations, menuCourses, restrictio
       html += `<div class="hcol"><span class="hlbl">GUESTS:</span> <span class="hval">${guests}</span></div>`;
       html += `<div class="hcol"><span class="hlbl">LANG:</span> <span class="hval">${d.lang === "si" ? "SI" : "ENG"}</span></div>`;
       html += `<div class="hcol"><span class="hlbl">TIME:</span> <span class="hval">${esc(d.resTime || "")}</span></div>`;
-      if (d.menuType) {
-        html += `<div class="hfull"><span class="hlbl">MENU:</span> <span class="hval">${isShort ? "SHORT" : "LONG"}</span></div>`;
+      if (override || d.menuType) {
+        const menuLabel = override
+          ? `${profileBadge(override.profile).toUpperCase()}${isShort ? " · SHORT" : ""}`
+          : (isShort ? "SHORT" : "LONG");
+        html += `<div class="hfull"><span class="hlbl">MENU:</span> <span class="hval">${esc(menuLabel)}</span></div>`;
       }
       html += `</div>`; // .hdr
 
