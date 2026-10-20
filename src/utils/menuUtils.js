@@ -480,14 +480,25 @@ export const resolveSeatRestrictionKeys = (tableRestrictions, seatId) =>
  * on purpose — an unassigned "table has a vegetarian" must still vary every
  * seat's menu until a chair is chosen. This helper is kitchen-ticket only.
  *
+ * `servedSeatIds` (optional): the seats actually getting this course — for an
+ * optional or celebration dish, the chairs that ordered it. Assigned
+ * restrictions of every other seat are left out.
+ *
  * Returns { [mod]: count } or null when nothing is modified.
  */
-export function courseRestrictionModCounts(course, seats, restrictions) {
+export function courseRestrictionModCounts(course, seats, restrictions, servedSeatIds = null) {
   const counts = {};
   const bump = (mod) => { if (mod) counts[mod] = (counts[mod] || 0) + 1; };
   // Assigned dietaries: one guest per seat, all that seat's keys together.
   const seatIds = new Set((seats || []).map((s) => s.id));
+  // A dish only some guests are having (an optional course, a cake ordered
+  // by one chair): only THEIR restrictions apply. A pescetarian at P2 must not
+  // put "1× PESCETARIAN" on the cheese P1 alone ordered — that plate goes out
+  // as normal. Restrictions not yet pinned to a chair stay on (below): the
+  // pass can't know whose they are, so they keep showing until assigned.
+  const served = servedSeatIds ? new Set([...servedSeatIds].map(Number)) : null;
   for (const seat of seats || []) {
+    if (served && !served.has(Number(seat.id))) continue;
     const keys = (restrictions || [])
       .filter(r => r && r.note && r.pos === seat.id)
       .map(r => r.note);

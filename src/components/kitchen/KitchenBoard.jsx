@@ -438,6 +438,17 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
     return orderedOptionalSeatsByKey[key] || [];
   };
   const optionalKeyForCourse = (course) => normFlag(course?.optional_flag || "");
+  // Seats a course is served to, for restriction counting: null = everyone
+  // (a regular course); for an optional/celebration dish, the chairs that
+  // ordered it (all of them for a birthday cake).
+  const servedSeatIdsForCourse = (course) => {
+    const key = optionalKeyForCourse(course);
+    if (!key || normCategory(course) === "main") return null;
+    const ordered = orderedOptionalSeatsByKey[key] || [];
+    // Nobody has it yet (the editor previews unordered dishes so restrictions
+    // can be set in advance): keep everyone's restrictions in view.
+    return ordered.length ? ordered.map(s => s.id) : null;
+  };
   const optionalSeatMap = orderedOptionalSeatsByKey;
 
   // Optional add-on courses (beetroot, cheese, pear…) offered in the quick
@@ -1050,8 +1061,10 @@ export function KitchenTicket({ table, menuCourses, upd, dragHandleRef, dragList
               // Per-ticket text overrides (edited in the ticket editor, saved
               // on the reservation) rewrite the derived label for THIS table
               // only — admin course config stays the source for everyone else.
+              // An optional/celebration dish only carries the restrictions of
+              // the guests actually having it.
               const restrCounts = overrideModCounts(
-                courseRestrictionModCounts(course, seats, restrictions), kcNotePreview);
+                courseRestrictionModCounts(course, seats, restrictions, servedSeatIdsForCourse(course)), kcNotePreview);
               if (restrCounts) Object.assign(counts, restrCounts);
             }
             // Per-course quick-note presets are applied in reservations mode
