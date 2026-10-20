@@ -219,3 +219,21 @@ describe("second logo on the menu header", () => {
     expect(render("https://evil.example/x.png\" onerror=\"x").includes("logo-second")).toBe(false);
   });
 });
+
+describe("logo size precedence", () => {
+  const tpl = (logo) => ({ version: 2, rows: [
+    { id: "h", left: { type: "title" }, right: { type: "logo", ...logo }, widthPreset: "55/45" },
+    { id: "c", left: { type: "course", courseKey: "bread" }, right: null, widthPreset: "55/45" },
+  ] });
+  const render = async (logo, layoutStyles) => {
+    const { generateMenuHTML } = await import("../utils/menuGenerator.js");
+    return generateMenuHTML({ seat: { id: 1 }, table: {}, menuCourses, menuTemplate: tpl(logo), layoutStyles, _logo: "data:image/png;base64,AAAA" });
+  };
+  it("the block's own size wins over the legacy layout style", async () => {
+    expect(await render({ size: 30 }, { logoSize: 21.7 })).toContain("#logo img{width:30mm;");
+  });
+  it("a block without a size falls back to the legacy style, then 10.5mm", async () => {
+    expect(await render({}, { logoSize: 21.7 })).toContain("#logo img{width:21.7mm;");
+    expect(await render({}, {})).toContain("#logo img{width:10.5mm;");
+  });
+});
